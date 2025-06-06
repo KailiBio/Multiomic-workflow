@@ -1,0 +1,99 @@
+#!/usr/bin/env python3
+
+"""
+Author: Kaili Fan
+Final clustering, doublet removal, and QC figure/statistics for snATAC-seq samples.
+
+Usage:
+    python scripts/downstream_processing.py config/ATAC_config.yaml runtag
+"""
+
+import os
+import argparse
+import numpy as np
+import pandas as pd
+import matplotlib.pyplot as plt
+import seaborn as sns
+from matplotlib.backends.backend_pdf import PdfPages
+import anndata as ad
+import snapatac2 as snap
+
+from atac_qc.utils import load_config, standardize_tissue_name
+from atac_qc.atac_plots import cell_count_post_filter_hist, plot_per_sample_umap_clusters
+
+def main(config_path, runtag):
+    config = load_config(config_path)
+    workdir = config['paths']['workdir']
+    h5ad_dir = config['paths']['output_h5ad_dir']
+    fig_dir = os.path.join(config['paths']['output_figures_dir'], runtag)
+    os.makedirs(fig_dir, exist_ok=True)
+    os.chdir(workdir)
+
+    tissue = config['params']['tissue']
+    tissue2 = standardize_tissue_name(tissue)
+    n_threads = config['params'].get('n_threads', 16)
+
+    # Load sample info and cutoffs
+    df = pd.read_csv(config['paths']['sample_metadata'], sep='\t', header=None,
+                     names=["rnaID", "atacID", "species", "donorID", "ageGroup", "gender", "tissue"])
+    working_df = df[df["tissue"] == tissue]
+    sample_list = working_df['atacID'].unique().tolist()
+
+    df_cutoff_all = pd.read_excel(config['qc']['qc_cutoff_table'], 
+                                  sheet_name=config['qc']['sheet_name'], engine='openpyxl')
+    df_cutoff = df_cutoff_all[df_cutoff_all['Tissue'] == tissue]
+    df_cutoff.set_index('atacID', inplace=True)
+
+    # Remove doublets, embedding, clustering, and save back to disk
+    for i, fileID in enumerate(sample_list, 1):
+        print(f"[{i}/{len(sample_list)}] Processing {fileID}...")
+        h5ad_path = os.path.join(h5ad_dir, f'{fileID}.processed.{runtag}.h5ad')
+
+        if not os.path.exists(h5ad_path):
+            print(f"  [SKIP] {fileID}: {h5ad_path} not found.")
+            continue
+
+        adata = ad.read_h5ad(h5ad_path)
+
+        # Remove doublets
+        doublet_cutoff = df_cutoff.loc[fileID, 'doublet_cutoff']
+        if str(df_cutoff.loc[fileID, 'use_double_probability_filter']) == 'Yes':
+            print(f'  using double probability filter: {doublet_cutoff}')
+            snap.pp.filter_doublets(adata, n_jobs=n_threads, probability_threshold=doublet_cutoff)
+        else:
+            print(f'  using double score filter: {doublet_cutoff}')
+            snap.pp.filter_doublets(adata, n_jobs=n_threads, 
+                                    score_threshold=doublet_cutoff, probability_threshold=None)
+
+        # Dimension reduction and clustering
+        snap.tl.spectral(adata)
+        snap.tl.umap(adata)
+        snap.pp.knn(adata)
+        snap.tl.leiden(adata)
+
+        # Save updated AnnData
+        adata.write(h5ad_path, compression="gzip")
+
+    # Summarize and plot cell stats
+    numCells = []
+    for fileID in sample_list:
+        h5ad_path = os.path.join(h5ad_dir, f'{fileID}.processed.{runtag}.h5ad')
+        if not os.path.exists(h5ad_path):
+            continue
+        adata = ad.read_h5ad(h5ad_path)
+        numCells.append((fileID, len(adata.obs_names)))
+
+    df_num_cells = pd.DataFrame(numCells, columns=["fileID", "numCells"])
+    df_num_cells.to_csv(os.path.join(fig_dir, f"ATAC_NumCell.{runtag}.{tissue2}.tsv"), sep="\t", index=False)
+
+    cell_count_post_filter_hist(df_num_cells, tissue2, runtag, fig_dir)
+
+    plot_per_sample_umap_clusters(sample_ids=sample_list, h5ad_dir=h5ad_dir,run_tag=runtag,
+                                  tissue_name=tissue2, output_dir=fig_dir)
+
+if __name__ == "__main__":
+    parser = argparse.ArgumentParser(description="ATAC downstream processing: doublet removal, clustering & statistics.")
+    parser.add_argument("config", help="YAML config file")
+    parser.add_argument("runtag", help="Tag for this run (e.g. round3 or v1)")
+    args = parser.parse_args()
+    main(args.config, args.runtag)

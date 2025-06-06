@@ -1,0 +1,22 @@
+paths:
+  workdir: /data/fankaili/project/dgtex/QC/20250414/Kidney/
+  fragment_dir: /data/fankaili/project/dgtex/data/fragment_files/
+  output_h5ad_dir: /data/fankaili/project/dgtex/QC/20250414/Kidney/atac_h5ad/
+  output_figures_dir: /data/fankaili/project/dgtex/QC/20250414/Kidney/atac_figures/
+  sample_metadata: /data/fankaili/project/dgtex/data/data_metatable_20250414.txt
+
+references:
+  barcode_whitelist: /data/fankaili/ref/10x_barcode/10XMultiOmic_737K_arc-v1.txt
+  gencode_gtf: /data/fankaili/ref/GENCODE/gencode.v47.primary_assembly.annotation.gtf
+
+params:
+  tissue: Kidney
+  n_threads: 32
+  min_fragments: 100
+
+qc:
+    atac_qc_cutoff_table: /data/fankaili/project/dgtex/QC/dGTEx_snATAC_QC_cutoffs.xlsx
+    sheet_name: 20250414
+
+process:
+    n_features: 250000
