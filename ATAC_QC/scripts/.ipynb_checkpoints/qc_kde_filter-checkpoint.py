@@ -61,8 +61,8 @@ def main(config_path, runtag):
                 adata = ad.read_h5ad(h5ad_path)
                 
                 initial_cell_str = f"Initial cell barcodes: {len(adata.obs_names)}"
-                x_cutoff = df_cutoff.get(fileID, {}).get("num_fragment", 1000)
-                y_cutoff = df_cutoff.get(fileID, {}).get("TSS_enrichment_score", 7)
+                x_cutoff = df_cutoff.loc[fileID, "num_fragment"]
+                y_cutoff = df_cutoff.loc[fileID, "TSS_enrichment_score"]
                 cutoff_str = f"QC cutoffs: n_fragment > {x_cutoff}, TSS_enrichment > {y_cutoff}"
                 passed_mask = snap.pp.filter_cells(
                     adata, min_tsse=y_cutoff, min_counts=x_cutoff,

@@ -25,10 +25,14 @@ def load_config(config_path):
 
 def standardize_tissue_name(tissue):
     """
-    Remove parentheses but keep words inside, replace hyphens and whitespace with underscores
+    Standardize tissue names:
+    - Remove parentheses (but keep words inside)
+    - Replace hyphens and whitespace with underscores
+    - Collapse multiple underscores into one
+    - Strip leading/trailing underscores
     """
-    tissue = re.sub(r'\((.*?)\)', r'_\1', tissue)
-    tissue = tissue.replace('-', '_')
-    tissue = re.sub(r'\s+', '_', tissue)
-    tissue = tissue.replace('__', '_')
+    tissue = re.sub(r'[()]', '', tissue)                # Remove ( and )
+    tissue = tissue.replace('-', '_')                   # Hyphens to underscores
+    tissue = re.sub(r'\s+', '_', tissue)                # Spaces to underscores
+    tissue = re.sub(r'_+', '_', tissue)                 # Remove double/multi underscores
     return tissue.strip('_')
