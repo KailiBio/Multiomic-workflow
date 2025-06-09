@@ -23,7 +23,7 @@ process:
     n_features: 250000
 
 color:
-    sample_color: 
+    sample_colors: 
         "Kidney": "#a32015"
         "Liver - Left Lobe": "#AABB66"
         "Lung - Left Cranial Lobe": "#99FF00"
@@ -32,7 +32,7 @@ color:
         "Thyroid": "#006600"
         "Adrenal Gland": "#33DD33"
         "Adipose - Subcutaneous": "#1d8c46"
-    donor_color:
+    donor_colors:
         DGTEX002: "#E73A2F"
         DGTEX031: "#65c4ff"
         DGTEX008: "#FBB30B"
