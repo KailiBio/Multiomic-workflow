@@ -9,6 +9,7 @@ Usage:
 """
 
 import os
+import sys
 import argparse
 import numpy as np
 import pandas as pd
@@ -18,9 +19,38 @@ from matplotlib.backends.backend_pdf import PdfPages
 import anndata as ad
 import snapatac2 as snap
 
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 from atac_qc.utils import load_config, standardize_tissue_name
 from atac_qc.atac_plots import cell_count_post_filter_hist, plot_per_sample_umap_clusters
 
+def summarize_and_plot_cell_counts(sample_list, h5ad_dir, fig_dir, runtag, tissue2):
+    """
+    Summarize cell counts and plot histogram for a set of h5ad files.
+
+    Args:
+        sample_list (list): List of sample IDs / fileIDs.
+        h5ad_dir (str): Directory containing processed h5ad files.
+        fig_dir (str): Output directory for figure and table.
+        runtag (str): Tag used in h5ad and output file names.
+        tissue2 (str): Standardized tissue name (for output naming).
+    Returns:
+        df_num_cells (pd.DataFrame): DataFrame of sampleID and cell count.
+    """
+    numCells = []
+    for fileID in sample_list:
+        h5ad_path = os.path.join(h5ad_dir, f'{fileID}.final.{runtag}.h5ad')
+
+        if not os.path.exists(h5ad_path):
+            continue
+        adata = ad.read_h5ad(h5ad_path)
+
+        numCells.append((fileID, len(adata.obs_names)))
+        
+    df_num_cells = pd.DataFrame(numCells, columns=["fileID", "numCells"])
+    df_num_cells.to_csv(os.path.join(fig_dir, f"ATAC_NumCell.{runtag}.{tissue2}.tsv"), sep="\t", index=False)
+
+    cell_count_post_filter_hist(df_num_cells, tissue2, runtag, fig_dir)
+    
 def main(config_path, runtag):
     config = load_config(config_path)
     workdir = config['paths']['workdir']
@@ -39,7 +69,7 @@ def main(config_path, runtag):
     working_df = df[df["tissue"] == tissue]
     sample_list = working_df['atacID'].unique().tolist()
 
-    df_cutoff_all = pd.read_excel(config['qc']['qc_cutoff_table'], 
+    df_cutoff_all = pd.read_excel(config['qc']['atac_qc_cutoff_table'], 
                                   sheet_name=config['qc']['sheet_name'], engine='openpyxl')
     df_cutoff = df_cutoff_all[df_cutoff_all['Tissue'] == tissue]
     df_cutoff.set_index('atacID', inplace=True)
@@ -72,23 +102,15 @@ def main(config_path, runtag):
         snap.tl.leiden(adata)
 
         # Save updated AnnData
-        adata.write(h5ad_path, compression="gzip")
+        h5ad_out_path = os.path.join(h5ad_dir, f'{fileID}.final.{runtag}.h5ad')
+        adata.write(h5ad_out_path, compression="gzip")
 
     # Summarize and plot cell stats
-    numCells = []
-    for fileID in sample_list:
-        h5ad_path = os.path.join(h5ad_dir, f'{fileID}.processed.{runtag}.h5ad')
-        if not os.path.exists(h5ad_path):
-            continue
-        adata = ad.read_h5ad(h5ad_path)
-        numCells.append((fileID, len(adata.obs_names)))
+    print("Generating summary table and histogram for filtered cell counts per sample...")
+    summarize_and_plot_cell_counts(sample_list, h5ad_dir, fig_dir, runtag, tissue2)
 
-    df_num_cells = pd.DataFrame(numCells, columns=["fileID", "numCells"])
-    df_num_cells.to_csv(os.path.join(fig_dir, f"ATAC_NumCell.{runtag}.{tissue2}.tsv"), sep="\t", index=False)
-
-    cell_count_post_filter_hist(df_num_cells, tissue2, runtag, fig_dir)
-
-    plot_per_sample_umap_clusters(sample_ids=sample_list, h5ad_dir=h5ad_dir,run_tag=runtag,
+    print("Generating per-sample UMAP cluster plots...")
+    plot_per_sample_umap_clusters(sample_ids=sample_list, h5ad_dir=h5ad_dir, run_tag=runtag,
                                   tissue_name=tissue2, output_dir=fig_dir)
 
 if __name__ == "__main__":

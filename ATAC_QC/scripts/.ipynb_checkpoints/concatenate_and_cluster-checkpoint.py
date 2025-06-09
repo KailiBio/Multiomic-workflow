@@ -6,10 +6,13 @@ Concatenate per-sample AnnData, run joint embedding, clustering, and produce sum
 """
 
 import os
+import sys
 import argparse
 import numpy as np
 import pandas as pd
 import snapatac2 as snap
+
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 from atac_qc.utils import load_config, standardize_tissue_name
 from atac_qc.atac_plots import (
     plot_umap_by_sample, plot_umap_by_donor, plot_umap_by_samplepanel, assign_colors
@@ -18,7 +21,7 @@ from atac_qc.atac_plots import (
 def collect_input_adatas(sample_list, h5ad_dir, runtag):
     """Get AnnData file paths and read them into memory."""
     h5ad_paths = [
-        os.path.join(h5ad_dir, f"{sid}.processed.{runtag}.h5ad") for sid in sample_list
+        os.path.join(h5ad_dir, f"{sid}.final.{runtag}.h5ad") for sid in sample_list
     ]
     input_adatas = []
     sample_ids = []
@@ -93,7 +96,7 @@ def main(config_path, runtag):
     # ---- 2. Make joint AnnDataSet, update metrics, and embed
     adataset = create_joint_anndataset(sample_ids, adatas_list, tissue2, runtag, workdir)
     update_dataset_metrics(adataset, gencode_gtf, n_threads)
-    print(f'Joint AnnDataSet created: cells={adataset.n_obs} samples={len(adataset.adatas)}')
+    print(f'Joint AnnDataSet created: cells={adataset.n_obs} samples={len(adatas_list)}')
     snap.pp.select_features(adataset, n_features=n_features_merge)
     snap.tl.spectral(adataset)
     snap.tl.umap(adataset)
@@ -104,8 +107,8 @@ def main(config_path, runtag):
     # Assign colors automatically if none provided
     samples = list(sorted(set(adata_merged.obs['sample'])))
     donors = list(sorted(set(adata_merged.obs['donorID'])))
-    sample_colors = config.get("sample_colors") or assign_colors(samples, palette="tab10")
-    donor_colors = config.get("donor_colors") or assign_colors(donors, palette="tab20")
+    sample_colors = config['color'].get("sample_colors") or assign_colors(samples, palette="tab20")
+    donor_colors = config['color'].get("donor_colors") or assign_colors(donors, palette="tab10")
     print("Sample colors assigned:", sample_colors)
     print("Donor colors assigned:", donor_colors)
 

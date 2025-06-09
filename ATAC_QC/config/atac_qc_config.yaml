@@ -1,22 +1,41 @@
 paths:
-  workdir: /data/fankaili/project/dgtex/QC/20250414/Kidney/
-  fragment_dir: /data/fankaili/project/dgtex/data/fragment_files/
-  output_h5ad_dir: /data/fankaili/project/dgtex/QC/20250414/Kidney/atac_h5ad/
-  output_figures_dir: /data/fankaili/project/dgtex/QC/20250414/Kidney/atac_figures/
-  sample_metadata: /data/fankaili/project/dgtex/data/data_metatable_20250414.txt
+  workdir: /data/fankaili/scripts/multi-Omic_workflow/ATAC_QC/test_output/
+  fragment_dir: /data/fankaili/scripts/multi-Omic_workflow/ATAC_QC/test_data/fragmemt_files/
+  output_h5ad_dir: /data/fankaili/scripts/multi-Omic_workflow/ATAC_QC/test_output/atac_h5ad/
+  output_figures_dir: /data/fankaili/scripts/multi-Omic_workflow/ATAC_QC/test_output/atac_figures/
+  sample_metadata: /data/fankaili/scripts/multi-Omic_workflow/ATAC_QC/test_data/test_metatable.txt
 
 references:
-  barcode_whitelist: /data/fankaili/ref/10x_barcode/10XMultiOmic_737K_arc-v1.txt
-  gencode_gtf: /data/fankaili/ref/GENCODE/gencode.v47.primary_assembly.annotation.gtf
+  barcode_whitelist: /data/fankaili/scripts/multi-Omic_workflow/ATAC_QC/ref/10XMultiOmic_737K_arc-v1.txt
+  gencode_gtf: /data/fankaili/scripts/multi-Omic_workflow/ATAC_QC/ref/gencode.v47.primary_assembly.annotation.gtf
 
 params:
-  tissue: Kidney
-  n_threads: 32
+  tissue: Muscle - Quadriceps
+  n_threads: 16
   min_fragments: 100
+  genomic_bin_size: 500
 
 qc:
-    atac_qc_cutoff_table: /data/fankaili/project/dgtex/QC/dGTEx_snATAC_QC_cutoffs.xlsx
-    sheet_name: 20250414
+    atac_qc_cutoff_table: /data/fankaili/scripts/multi-Omic_workflow/ATAC_QC/test_data/test_QC_cutoffs.xlsx
+    sheet_name: test
 
 process:
     n_features: 250000
+
+color:
+    sample_color: 
+        "Kidney": "#a32015"
+        "Liver - Left Lobe": "#AABB66"
+        "Lung - Left Cranial Lobe": "#99FF00"
+        "Muscle - Gastrocnemius": "#9191ff"
+        "Muscle - Quadriceps": "#5e5eff"
+        "Thyroid": "#006600"
+        "Adrenal Gland": "#33DD33"
+        "Adipose - Subcutaneous": "#1d8c46"
+    donor_color:
+        DGTEX002: "#E73A2F"
+        DGTEX031: "#65c4ff"
+        DGTEX008: "#FBB30B"
+        DGTEX047: "#2E9E49"
+        DGTEX001: "#397AF2"
+        DGTEX027: "#8e02da"

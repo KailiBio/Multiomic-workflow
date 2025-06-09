@@ -19,19 +19,19 @@ def remove_pcr_chimeric_reads(input_file, output_file):
         df = pd.read_csv(f, sep='\t', comment='#', header=None)
         df.columns = ['chrom', 'start', 'end', 'barcode', 'count']
         
-        initial_fragments = len(df)
+        initial_unique_reads = len(df)
         initial_total_reads = df['count'].sum()
 
         # For each fragment (chrom, start, end, barcode), keep row with highest count
-        idx = df.groupby(['chrom', 'start', 'end', 'barcode'])['count'].idxmax()
+        idx = df.groupby(['chrom', 'start', 'end'])['count'].idxmax()
         filtered_df = df.loc[idx]
 
-        filtered_fragments = len(filtered_df)
+        filtered_unique_reads = len(filtered_df)
         filtered_total_reads = filtered_df['count'].sum()
 
         filtered_df.to_csv(output_file, sep='\t', index=False, header=False, compression='gzip')
 
-    return initial_fragments, filtered_fragments, initial_total_reads, filtered_total_reads
+    return initial_unique_reads, filtered_unique_reads, initial_total_reads, filtered_total_reads
 
 
 def main():
@@ -56,13 +56,13 @@ def main():
         print(f"Output file {args.output_file} exists, skipping (use --force to overwrite).")
         sys.exit(0)
     try:
-        initial_frags, filtered_frags, initial_reads, filtered_reads = remove_pcr_chimeric_reads(
+        initial_uniq_reads, filtered_uniq_reads, initial_reads, filtered_reads = remove_pcr_chimeric_reads(
             args.input_file, args.output_file
         )
         # Write stats
         with open(args.stats_file, 'w') as f:
-            f.write(f"Initial unique fragments:\t{initial_frags}\n")
-            f.write(f"Filtered unique fragments:\t{filtered_frags}\n")
+            f.write(f"Initial unique reads:\t{initial_uniq_reads}\n")
+            f.write(f"Filtered unique reads:\t{filtered_uniq_reads}\n")
             f.write(f"Initial total reads:\t{initial_reads}\n")
             f.write(f"Filtered total reads:\t{filtered_reads}\n")
         print(
@@ -70,8 +70,8 @@ def main():
             f"  Input:    {args.input_file}\n"
             f"  Output:   {args.output_file}\n"
             f"  Stats:    {args.stats_file}\n"
-            f"  Initial unique fragments: {initial_frags}\n"
-            f"  Filtered unique fragments: {filtered_frags}\n"
+            f"  Initial unique reads: {initial_uniq_reads}\n"
+            f"  Filtered unique reads: {filtered_uniq_reads}\n"
             f"  Initial total reads: {initial_reads}\n"
             f"  Filtered total reads: {filtered_reads}\n"
         )

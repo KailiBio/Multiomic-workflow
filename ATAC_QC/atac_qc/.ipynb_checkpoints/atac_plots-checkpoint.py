@@ -94,11 +94,13 @@ def plot_doublet_score_probability(
     probability_midpoint,
     tissue,
     fileID,
-    outdir,
-    runtag
+    outdir=None,
+    runtag=None,
+    show=False
 ):
     """
-    Generate and save histograms of doublet scores/probabilities, colored by doublet classification.
+    Generate histograms of doublet scores/probabilities, colored by doublet classification.
+    If show=True, displays with plt.show(); if outdir and runtag are given, saves png.
     """
     doublet_mask = doublet_probabilities > probability_midpoint
     bins = np.histogram_bin_edges(doublet_scores, bins=50)
@@ -131,8 +133,13 @@ def plot_doublet_score_probability(
 
     fig.suptitle(f'Distribution of doublet scores and probability on {tissue}, {fileID}', fontsize=14)
     plt.tight_layout()
-    outpath = os.path.join(outdir, f"ATAC_QC_doubletHist.{runtag}.{tissue}-{fileID}.png")
-    plt.savefig(outpath, dpi=300, bbox_inches='tight')
+
+    # Save figure only if outdir and runtag are given
+    if outdir is not None and runtag is not None:
+        outpath = os.path.join(outdir, f"ATAC_QC_doubletHist.{runtag}.{tissue}-{fileID}.png")
+        plt.savefig(outpath, dpi=300, bbox_inches='tight')
+    if show:
+        plt.show()
     plt.close(fig)
 
 
@@ -186,7 +193,7 @@ def plot_per_sample_umap_clusters(
     pdf_path = os.path.join(output_dir, f'ATAC_post_filter_clusters.{tissue_name}.pdf')
     with PdfPages(pdf_path) as pdf:
         for sample_id in sample_ids:
-            h5ad_path = os.path.join(h5ad_dir, f'{sample_id}.processed.{run_tag}.h5ad')
+            h5ad_path = os.path.join(h5ad_dir, f'{sample_id}.final.{run_tag}.h5ad')
             if not os.path.exists(h5ad_path):
                 print(f"  [SKIP] Missing {h5ad_path}")
                 continue
@@ -238,14 +245,6 @@ def plot_per_sample_umap_clusters(
 def plot_umap_by_sample(adata, tissue2, runtag, outdir, sample_colors=None, suffix="bySample"):
     """
     Plot UMAP for all cells, colored by sample.
-
-    Args:
-        adata: merged AnnData object
-        tissue2: standardized tissue name (str)
-        runtag: str, batch/run tag
-        outdir: output directory (str)
-        sample_colors: Optional[dict], color mapping
-        suffix: str: output PNG suffix after tissue name
     """
     samples = adata.obs['sample']
     samplelist = sorted(set(samples))
@@ -254,8 +253,8 @@ def plot_umap_by_sample(adata, tissue2, runtag, outdir, sample_colors=None, suff
     for sample in samplelist:
         idx = np.where(np.array(samples) == sample)[0]
         color = sample_colors[sample] if (sample_colors and sample in sample_colors) else None
-        ax.scatter(adata.obsm['X_umap'][idx,0], adata.obsm['X_umap'][idx,1], 
-                   c=color, label=sample, s=0.8, alpha=0.3)
+        ax.scatter(adata.obsm['X_umap'][idx,0], adata.obsm['X_umap'][idx,1],
+                   color=color, label=sample, s=0.8, alpha=0.3)  # <--- ONLY THIS CHANGED
     ax.legend(bbox_to_anchor=(1.8, 1), loc="upper right", title="Sample", frameon=False)
     ax.set_xlabel('UMAP-1', fontsize=12)
     ax.set_ylabel('UMAP-2', fontsize=12)
@@ -270,14 +269,6 @@ def plot_umap_by_sample(adata, tissue2, runtag, outdir, sample_colors=None, suff
 def plot_umap_by_donor(adata, tissue2, runtag, outdir, donor_colors=None, suffix="byDonor"):
     """
     Plot UMAP for all cells, colored by donor.
-
-    Args:
-        adata: merged AnnData object
-        tissue2: standardized tissue name (str)
-        runtag: str, batch/run tag
-        outdir: output directory (str)
-        donor_colors: Optional[dict], color mapping
-        suffix: str: output PNG suffix after tissue name
     """
     donors = adata.obs['donorID']
     donorlist = sorted(set(donors))
@@ -286,8 +277,8 @@ def plot_umap_by_donor(adata, tissue2, runtag, outdir, donor_colors=None, suffix
     for donor in donorlist:
         idx = np.where(np.array(donors) == donor)[0]
         color = donor_colors[donor] if (donor_colors and donor in donor_colors) else None
-        ax.scatter(adata.obsm['X_umap'][idx,0], adata.obsm['X_umap'][idx,1], 
-                   c=color, label=donor, s=0.8, alpha=0.3)
+        ax.scatter(adata.obsm['X_umap'][idx,0], adata.obsm['X_umap'][idx,1],
+                   color=color, label=donor, s=0.8, alpha=0.3)  # <-- changed here
     ax.legend(bbox_to_anchor=(1.8, 1), loc="upper right", title="Donor", frameon=False)
     ax.set_xlabel('UMAP-1', fontsize=12)
     ax.set_ylabel('UMAP-2', fontsize=12)
@@ -302,14 +293,6 @@ def plot_umap_by_donor(adata, tissue2, runtag, outdir, donor_colors=None, suffix
 def plot_umap_by_samplepanel(adata, tissue2, runtag, outdir, sample_colors=None, ncol=4):
     """
     Plot one UMAP panel per sample (multi-panel plot), output as a single PNG.
-
-    Args:
-        adata: merged AnnData object
-        tissue2: standardized tissue name (str)
-        runtag: str, batch/run tag
-        outdir: output directory (str)
-        sample_colors: Optional[dict], color mapping
-        ncol: number of columns in the grid (int)
     """
     samples = adata.obs['sample']
     samplelist = sorted(set(samples))
@@ -319,12 +302,12 @@ def plot_umap_by_samplepanel(adata, tissue2, runtag, outdir, sample_colors=None,
     axes = axes.flatten()
     plt.style.use("ggplot")
     for ax in axes:
-        ax.scatter(adata.obsm['X_umap'][:, 0], adata.obsm['X_umap'][:, 1], c="white", s=0.8, alpha=0.3)
+        ax.scatter(adata.obsm['X_umap'][:, 0], adata.obsm['X_umap'][:, 1], color="white", s=0.8, alpha=0.3)
     for i, sample in enumerate(samplelist):
         idx = np.where(np.array(samples) == sample)[0]
         color = sample_colors[sample] if (sample_colors and sample in sample_colors) else None
-        axes[i].scatter(adata.obsm['X_umap'][idx,0], adata.obsm['X_umap'][idx,1], 
-                        c=color, label=sample, s=0.8, alpha=0.3)
+        axes[i].scatter(adata.obsm['X_umap'][idx,0], adata.obsm['X_umap'][idx,1],
+                        color=color, label=sample, s=0.8, alpha=0.3)        # <-- changed here
         # legend
         legend_entries = [plt.Line2D([0], [0], marker='o', color=color, markerfacecolor=color, markersize=8, label=sample)]
         axes[i].legend(handles=legend_entries, loc="lower left", frameon=False)
@@ -340,6 +323,7 @@ def assign_colors(keys, palette="tab10"):
     Assign colors from a matplotlib palette to an iterable of keys (sample/donor IDs).
     Returns a dict: {key: color}
     """
+    import matplotlib.pyplot as plt
     keys = sorted(keys)
     if isinstance(palette, str):
         colors = plt.get_cmap(palette).colors

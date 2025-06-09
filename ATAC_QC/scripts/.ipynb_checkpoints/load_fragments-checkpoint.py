@@ -14,7 +14,8 @@ import re
 import pandas as pd
 import snapatac2 as snap
 
-from utils import load_config, standardize_tissue_name, print_elapsed_time
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
+from atac_qc.utils import load_config, standardize_tissue_name, print_elapsed_time
 
 def load_barcode_dicts(barcode_whitelist):
     """Load RNA/ATAC barcode mapping from file."""

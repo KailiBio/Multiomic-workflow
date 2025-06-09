@@ -9,6 +9,7 @@ Usage:
 """
 
 import os
+import sys
 import argparse
 import numpy as np
 import pandas as pd
@@ -16,6 +17,7 @@ from matplotlib.backends.backend_pdf import PdfPages
 import anndata as ad
 import snapatac2 as snap
 
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 from atac_qc.utils import load_config, standardize_tissue_name
 from atac_qc.atac_plots import plot_kde_filter
 
@@ -39,7 +41,7 @@ def main(config_path, runtag):
     working_df = df[df["tissue"] == tissue]
     sample_list = working_df['atacID'].unique().tolist()
 
-    df_cutoff_all = pd.read_excel(config['qc']['qc_cutoff_table'],
+    df_cutoff_all = pd.read_excel(config['qc']['atac_qc_cutoff_table'],
                                   sheet_name=config['qc']['sheet_name'], engine='openpyxl')
     df_cutoff = df_cutoff_all[df_cutoff_all['Tissue'] == tissue]
     df_cutoff.set_index('atacID', inplace=True)
@@ -55,10 +57,12 @@ def main(config_path, runtag):
                 if not os.path.exists(h5ad_path):
                     print(f"  [SKIP] {fileID}: {h5ad_path} not found.")
                     continue
+                    
                 adata = ad.read_h5ad(h5ad_path)
+                
                 initial_cell_str = f"Initial cell barcodes: {len(adata.obs_names)}"
-                x_cutoff = df_cutoff.loc[fileID, "num_fragment"]
-                y_cutoff = df_cutoff.loc[fileID, "TSS_enrichment_score"]
+                x_cutoff = df_cutoff.get(fileID, {}).get("num_fragment", 1000)
+                y_cutoff = df_cutoff.get(fileID, {}).get("TSS_enrichment_score", 7)
                 cutoff_str = f"QC cutoffs: n_fragment > {x_cutoff}, TSS_enrichment > {y_cutoff}"
                 passed_mask = snap.pp.filter_cells(
                     adata, min_tsse=y_cutoff, min_counts=x_cutoff,
@@ -74,8 +78,7 @@ def main(config_path, runtag):
                     initial_cell_str, cutoff_str, passed_cells_str, pdf_before, show_cutoff_line=True
                 )
 
-
-                # True filter & post-filter plot
+                # filter & post-filter plot
                 snap.pp.filter_cells(adata, min_tsse=y_cutoff, min_counts=x_cutoff,
                                      max_counts=100000, inplace=True, n_jobs=n_threads)
                 plot_kde_filter(
@@ -87,6 +90,7 @@ def main(config_path, runtag):
                                        f'{fileID}.filtered.{runtag}.h5ad')
                 adata.write(out_path, compression="gzip")
                 print(f"  [OK] wrote {os.path.relpath(out_path)} with {adata.n_obs} cells\n")
+                
             except Exception as e:
                 print(f"  [ERROR] {fileID}: {e}")
 
