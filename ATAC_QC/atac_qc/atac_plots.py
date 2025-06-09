@@ -292,7 +292,7 @@ def plot_umap_by_donor(adata, tissue2, runtag, outdir, donor_colors=None, suffix
 
 def plot_umap_by_samplepanel(adata, tissue2, runtag, outdir, sample_colors=None, ncol=4):
     """
-    Plot one UMAP panel per sample (multi-panel plot), output as a single PNG.
+    Plot one UMAP panel per sample (multi-panel plot), each with gray background.
     """
     samples = adata.obs['sample']
     samplelist = sorted(set(samples))
@@ -301,15 +301,22 @@ def plot_umap_by_samplepanel(adata, tissue2, runtag, outdir, sample_colors=None,
     fig, axes = plt.subplots(nrow, ncol, figsize=(8*ncol, 9*nrow))
     axes = axes.flatten()
     plt.style.use("ggplot")
+    # First, gray background in each panel
     for ax in axes:
-        ax.scatter(adata.obsm['X_umap'][:, 0], adata.obsm['X_umap'][:, 1], color="white", s=0.8, alpha=0.3)
+        ax.scatter(
+            adata.obsm['X_umap'][:, 0], adata.obsm['X_umap'][:, 1], 
+            color="#DDDDDD", s=0.8, alpha=0.55, rasterized=True, zorder=1
+        )
+    # Then, overlay points for each sample
     for i, sample in enumerate(samplelist):
         idx = np.where(np.array(samples) == sample)[0]
         color = sample_colors[sample] if (sample_colors and sample in sample_colors) else None
-        axes[i].scatter(adata.obsm['X_umap'][idx,0], adata.obsm['X_umap'][idx,1],
-                        color=color, label=sample, s=0.8, alpha=0.3)        # <-- changed here
-        # legend
-        legend_entries = [plt.Line2D([0], [0], marker='o', color=color, markerfacecolor=color, markersize=8, label=sample)]
+        axes[i].scatter(
+            adata.obsm['X_umap'][idx,0], adata.obsm['X_umap'][idx,1],
+            color=color, label=sample, s=0.8, alpha=0.85, zorder=2
+        )
+        legend_entries = [plt.Line2D([0], [0], marker='o', color=color, markerfacecolor=color, 
+                                     markersize=8, label=sample)]
         axes[i].legend(handles=legend_entries, loc="lower left", frameon=False)
         axes[i].set_xlabel('UMAP-1', fontsize=10)
         axes[i].set_ylabel('UMAP-2', fontsize=10)
