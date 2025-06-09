@@ -1,3 +1,4 @@
 ATAC_QC/test_output/atac_h5ad/*.h5ad
 ATAC_QC/test_data/fragmemt_files/*/fragments.*tsv.gz
 ATAC_QC/ref/gencode.v47.primary_assembly.annotation.gtf
+ATAC_QC/test_output/dGTEx_ATAC.Muscle__Quadriceps.demo_run.h5ads
