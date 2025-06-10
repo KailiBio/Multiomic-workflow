@@ -97,7 +97,7 @@ def main(config_path, runtag):
 
         # Dimension reduction and clustering
         snap.tl.spectral(adata)
-        snap.tl.umap(adata)
+        snap.tl.umap(adata, random_state=0)
         snap.pp.knn(adata)
         snap.tl.leiden(adata)
 

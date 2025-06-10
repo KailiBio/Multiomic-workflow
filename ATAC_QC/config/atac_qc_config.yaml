@@ -23,7 +23,7 @@ process:
     n_features: 250000
 
 color:
-    sample_colors: 
+    tissue_colors: 
         "Kidney": "#a32015"
         "Liver - Left Lobe": "#AABB66"
         "Lung - Left Cranial Lobe": "#99FF00"

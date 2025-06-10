@@ -15,7 +15,7 @@ import snapatac2 as snap
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 from atac_qc.utils import load_config, standardize_tissue_name
 from atac_qc.atac_plots import (
-    plot_umap_by_sample, plot_umap_by_donor, plot_umap_by_samplepanel, assign_colors
+    plot_umap_by_sample, plot_umap_by_donor, plot_umap_by_sample_by_side, plot_umap_with_QC, assign_colors
 )
 
 def collect_input_adatas(sample_list, h5ad_dir, runtag):
@@ -99,22 +99,30 @@ def main(config_path, runtag):
     print(f'Joint AnnDataSet created: cells={adataset.n_obs} samples={len(adatas_list)}')
     snap.pp.select_features(adataset, n_features=n_features_merge)
     snap.tl.spectral(adataset)
-    snap.tl.umap(adataset)
+    snap.tl.umap(adataset, random_state=0)
 
     # ---- 3. Save merged AnnData and plot UMAPs
     adata_merged = save_merged_anndata(adataset, h5ad_dir, tissue2, runtag)
 
-    # Assign colors automatically if none provided
-    samples = list(sorted(set(adata_merged.obs['sample'])))
-    donors = list(sorted(set(adata_merged.obs['donorID'])))
-    sample_colors = config['color'].get("sample_colors") or assign_colors(samples, palette="tab20")
-    donor_colors = config['color'].get("donor_colors") or assign_colors(donors, palette="tab10")
+    samples = sorted(set(adata_merged.obs['sample']))
+    palette_s = "Set1" if len(samples) < 10 else "tab20"
+    sample_colors = assign_colors(samples, palette=palette_s)
     print("Sample colors assigned:", sample_colors)
+
+    donors = sorted(set(adata_merged.obs['donorID']))
+    config_donor_colors = config['color'].get("donor_color")
+    palette_d = "Set1" if len(donors) < 10 else "tab20"
+    palette_donor_colors = assign_colors(donors, palette=palette_d)
+    if config_donor_colors:
+        donor_colors = {d: config_donor_colors.get(d, palette_donor_colors[d]) for d in donors}
+    else:
+        donor_colors = palette_donor_colors
     print("Donor colors assigned:", donor_colors)
 
     plot_umap_by_sample(adata_merged, tissue2, runtag, fig_dir, sample_colors=sample_colors)
     plot_umap_by_donor(adata_merged, tissue2, runtag, fig_dir, donor_colors=donor_colors)
-    plot_umap_by_samplepanel(adata_merged, tissue2, runtag, fig_dir, sample_colors=sample_colors, ncol=4)
+    plot_umap_by_sample_by_side(adata_merged, tissue2, runtag, fig_dir, sample_colors=sample_colors, ncol=min(len(samples), 4))
+    plot_umap_with_QC(adata_merged, tissue2, runtag, fig_dir, sample_colors=sample_colors)
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Concatenate AnnData, embed, and plot joint ATAC UMAPs.")

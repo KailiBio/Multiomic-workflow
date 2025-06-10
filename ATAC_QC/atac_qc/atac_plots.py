@@ -10,9 +10,11 @@ import numpy as np
 import matplotlib as mpl
 mpl.rcParams['pdf.fonttype'] = 42
 import matplotlib.pyplot as plt
+import matplotlib.colors as mcolors
 from matplotlib.backends.backend_pdf import PdfPages
 from matplotlib.cm import ScalarMappable
 import seaborn as sns
+import math
 
 import anndata as ad
 
@@ -248,7 +250,7 @@ def plot_umap_by_sample(adata, tissue2, runtag, outdir, sample_colors=None, suff
     """
     samples = adata.obs['sample']
     samplelist = sorted(set(samples))
-    fig, ax = plt.subplots(figsize=(8, 5))
+    fig, ax = plt.subplots(figsize=(7, 4))
     plt.style.use("default")
     for sample in samplelist:
         idx = np.where(np.array(samples) == sample)[0]
@@ -262,7 +264,7 @@ def plot_umap_by_sample(adata, tissue2, runtag, outdir, sample_colors=None, suff
     ax.spines.top.set_visible(False)
     ax.set_title(f"dGTEx {tissue2}\n", fontsize=14)
     plt.subplots_adjust(right=0.7)
-    outpng = os.path.join(outdir, f'dGTEx_ATAC_UMAP.{tissue2}_{suffix}.{runtag}.png')
+    outpng = os.path.join(outdir, f'dGTEx_ATAC_UMAP_{suffix}.{tissue2}.{runtag}.png')
     plt.savefig(outpng, bbox_inches='tight', dpi=800)
     plt.close(fig)
 
@@ -272,7 +274,7 @@ def plot_umap_by_donor(adata, tissue2, runtag, outdir, donor_colors=None, suffix
     """
     donors = adata.obs['donorID']
     donorlist = sorted(set(donors))
-    fig, ax = plt.subplots(figsize=(6, 5))
+    fig, ax = plt.subplots(figsize=(7, 4))
     plt.style.use("default")
     for donor in donorlist:
         idx = np.where(np.array(donors) == donor)[0]
@@ -286,56 +288,135 @@ def plot_umap_by_donor(adata, tissue2, runtag, outdir, donor_colors=None, suffix
     ax.spines.top.set_visible(False)
     ax.set_title(f"dGTEx {tissue2}\n", fontsize=14)
     plt.subplots_adjust(right=0.7)
-    outpng = os.path.join(outdir, f'dGTEx_ATAC_UMAP.{tissue2}_{suffix}.{runtag}.png')
+    outpng = os.path.join(outdir, f'dGTEx_ATAC_UMAP_{suffix}.{tissue2}.{runtag}.png')
     plt.savefig(outpng, bbox_inches='tight', dpi=800)
     plt.close(fig)
 
-def plot_umap_by_samplepanel(adata, tissue2, runtag, outdir, sample_colors=None, ncol=4):
+def plot_umap_by_sample_by_side(adata, tissue2, runtag, outdir, sample_colors=None, ncol=4):
     """
-    Plot one UMAP panel per sample (multi-panel plot), each with gray background.
+    Plot one UMAP panel per sample (multi-panel plot), each with all cells as gray background,
+    and focal sample colored as in sample_colors.
     """
+
     samples = adata.obs['sample']
     samplelist = sorted(set(samples))
-    import math
-    nrow = math.ceil(len(samplelist)/ncol)
-    fig, axes = plt.subplots(nrow, ncol, figsize=(8*ncol, 9*nrow))
+    nrow = math.ceil(len(samplelist) / ncol)
+    fig, axes = plt.subplots(nrow, ncol, figsize=(5 * ncol, 4 * nrow))
     axes = axes.flatten()
     plt.style.use("ggplot")
-    # First, gray background in each panel
-    for ax in axes:
-        ax.scatter(
-            adata.obsm['X_umap'][:, 0], adata.obsm['X_umap'][:, 1], 
-            color="#DDDDDD", s=0.8, alpha=0.55, rasterized=True, zorder=1
-        )
-    # Then, overlay points for each sample
+
+    # For each sample panel: plot all points as gray, then sample points as color
     for i, sample in enumerate(samplelist):
+        ax = axes[i]
         idx = np.where(np.array(samples) == sample)[0]
-        color = sample_colors[sample] if (sample_colors and sample in sample_colors) else None
-        axes[i].scatter(
-            adata.obsm['X_umap'][idx,0], adata.obsm['X_umap'][idx,1],
-            color=color, label=sample, s=0.8, alpha=0.85, zorder=2
+        color = sample_colors[sample] if (sample_colors and sample in sample_colors) else "#1f77b4"
+        # Gray background (all cells)
+        ax.scatter(
+            adata.obsm['X_umap'][:, 0], adata.obsm['X_umap'][:, 1],
+            color="#EEEEEE", s=0.8, alpha=0.3, rasterized=True, zorder=1
         )
-        legend_entries = [plt.Line2D([0], [0], marker='o', color=color, markerfacecolor=color, 
+        # Highlight this sample
+        ax.scatter(
+            adata.obsm['X_umap'][idx, 0], adata.obsm['X_umap'][idx, 1],
+            color=color, label=sample, s=0.8, alpha=0.8, rasterized=True, zorder=2
+        )
+        # Legend for this sample only
+        legend_entries = [plt.Line2D([0], [0], marker='o', color=color, markerfacecolor=color,
                                      markersize=8, label=sample)]
-        axes[i].legend(handles=legend_entries, loc="lower left", frameon=False)
-        axes[i].set_xlabel('UMAP-1', fontsize=10)
-        axes[i].set_ylabel('UMAP-2', fontsize=10)
-        axes[i].set_title(f"{tissue2}\n{sample}\nN={len(idx)}\n", fontsize=12)
-    outpng = os.path.join(outdir, f'dGTEx_ATAC_UMAP.{tissue2}_sampleBySide.{runtag}.png')
+        ax.legend(handles=legend_entries, loc="lower left", frameon=False)
+        ax.set_xlabel('UMAP-1', fontsize=10)
+        ax.set_ylabel('UMAP-2', fontsize=10)
+        ax.set_title(f"{sample}\n{tissue2}\nN={len(idx)}", fontsize=12)
+    # Hide unused axes if any
+    #for j in range(len(samplelist), len(axes)):
+    #    axes[j].axis('off')
+
+    outpng = os.path.join(outdir, f'dGTEx_ATAC_UMAP_sampleBySide.{tissue2}.{runtag}.png')
     plt.savefig(outpng, bbox_inches='tight', dpi=800)
+    plt.show()
     plt.close(fig)
+
+def plot_umap_with_QC(adata, tissue2, runtag, outdir, sample_colors=None,
+                               tss_bounds=[7,10,12,15,20,30,100],
+                               frag_bounds=[1000,2000,3000,4000,5000,10000,100000]):
+    """
+    For each sample in adata.obs['sample'], plot a 1x3 panel UMAP:
+    - sample highlight on gray, 
+    - TSS enrichment score coloring,
+    - n_fragment coloring.
+    Save each as a PNG in outdir.
+    """
+    
+    samples = adata.obs['sample']
+    samplelist = sorted(set(samples))
+    
+    for fileID in samplelist:
+        print(f"Plotting for sample: {fileID}")
+        fig, (ax1, ax2, ax3) = plt.subplots(1, 3, figsize=(18, 5))
+        plt.style.use("ggplot")
+        
+        # Draw all other samples as white/gray background
+        for file in samplelist:
+            if file != fileID:
+                idx = np.where(np.array(samples) == file)[0]
+                ax1.scatter(adata.obsm['X_umap'][idx, 0], adata.obsm['X_umap'][idx, 1], 
+                            color="#EEEEEE", s=0.8, alpha=0.3)
+                ax2.scatter(adata.obsm['X_umap'][idx, 0], adata.obsm['X_umap'][idx, 1], 
+                            color="#EEEEEE", s=0.8, alpha=0.3)
+                ax3.scatter(adata.obsm['X_umap'][idx, 0], adata.obsm['X_umap'][idx, 1], 
+                            color="#EEEEEE", s=0.8, alpha=0.3)
+        idx = np.where(np.array(samples) == fileID)[0]
+        
+        # ax1: main highlight color
+        color = sample_colors[fileID] if (sample_colors and fileID in sample_colors) else "#1f77b4"
+        ax1.scatter(adata.obsm['X_umap'][idx, 0], adata.obsm['X_umap'][idx, 1],
+                    color=color, label=fileID, s=0.8, alpha=0.7)
+        legend_entries = [plt.Line2D([0], [0], marker='o', color=color, markerfacecolor=color, markersize=8, label=fileID)]
+        ax1.legend(handles=legend_entries, loc="lower left", frameon=False)
+        ax1.set_xlabel('UMAP-1', fontsize=10)
+        ax1.set_ylabel('UMAP-2', fontsize=10)
+        ax1.set_title(f"{tissue2}\n{fileID}\nN={len(idx)}", fontsize=12)
+        
+        # ax2: TSS enrichment color
+        cmap2 = mpl.cm.YlGnBu
+        norm2 = mpl.colors.BoundaryNorm(tss_bounds, cmap2.N, extend='both')
+        values2 = adata.obs['tsse'].iloc[idx]
+        ax2.scatter(adata.obsm['X_umap'][idx, 0], adata.obsm['X_umap'][idx, 1],
+                    c=values2, cmap=cmap2, norm=norm2, s=0.8)
+        cbar2 = plt.colorbar(ScalarMappable(norm=norm2, cmap=cmap2), ax=ax2, orientation='vertical', 
+                             label='TSS enrichment score')
+        ax2.set_xlabel('UMAP-1', fontsize=10)
+        ax2.set_ylabel('UMAP-2', fontsize=10)
+        ax2.set_title("Color by TSS enrichment score", fontsize=10)
+        
+        # ax3: n_fragments color
+        cmap3 = mpl.cm.YlGnBu
+        norm3 = mpl.colors.BoundaryNorm(frag_bounds, cmap3.N, extend='both')
+        values3 = adata.obs['n_fragment'].iloc[idx]
+        ax3.scatter(adata.obsm['X_umap'][idx, 0], adata.obsm['X_umap'][idx, 1],
+                    c=values3, cmap=cmap3, norm=norm3, s=0.8)
+        cbar3 = plt.colorbar(ScalarMappable(norm=norm3, cmap=cmap3), ax=ax3, orientation='vertical', 
+                             label='# fragment')
+        ax3.set_xlabel('UMAP-1', fontsize=10)
+        ax3.set_ylabel('UMAP-2', fontsize=10)
+        ax3.set_title("Color by # fragment", fontsize=10)
+        
+        # Save/show
+        outpng = os.path.join(outdir, f'dGTEx_ATAC_UMAP_withQC.{tissue2}.{fileID}.{runtag}.png')
+        plt.savefig(outpng, bbox_inches='tight', dpi=800)
+        plt.close(fig)
 
 def assign_colors(keys, palette="tab10"):
     """
-    Assign colors from a matplotlib palette to an iterable of keys (sample/donor IDs).
-    Returns a dict: {key: color}
+    Assign hex color codes from a matplotlib palette to an iterable of keys (sample/donor IDs).
+    Returns a dict: {key: hex_color}
     """
-    import matplotlib.pyplot as plt
     keys = sorted(keys)
     if isinstance(palette, str):
         colors = plt.get_cmap(palette).colors
     else:
         colors = palette
+    hex_colors = [mcolors.to_hex(c) for c in colors]
     # Repeat palette if too few colors
-    out = {k: colors[i % len(colors)] for i, k in enumerate(keys)}
+    out = {k: hex_colors[i % len(hex_colors)] for i, k in enumerate(keys)}
     return out
