@@ -46,8 +46,8 @@ def main(config_path, runtag):
     df_cutoff = df_cutoff_all[df_cutoff_all['Tissue'] == tissue]
     df_cutoff.set_index('atacID', inplace=True)
 
-    before_pdf = os.path.join(figdir, f'dGTEx_ATAC_beforeFilter_kde.{tissue2}.{runtag}.pdf')
-    after_pdf = os.path.join(figdir, f'dGTEx_ATAC_postFilter_kde.{tissue2}.{runtag}.pdf')
+    before_pdf = os.path.join(figdir, f'ATAC_beforeFilter_kde.{tissue2}.{runtag}.pdf')
+    after_pdf = os.path.join(figdir, f'ATAC_postFilter_kde.{tissue2}.{runtag}.pdf')
 
     with PdfPages(before_pdf) as pdf_before, PdfPages(after_pdf) as pdf_after:
         for i, fileID in enumerate(sample_list, 1):

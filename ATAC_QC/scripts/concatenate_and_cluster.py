@@ -37,7 +37,7 @@ def create_joint_anndataset(sample_ids, adatas_list, tissue2, runtag, workdir):
     """Create a snap AnnDataSet and return the handle."""
     anndataset = snap.AnnDataSet(
         adatas=[(sid, adata) for sid, adata in zip(sample_ids, adatas_list)],
-        filename=os.path.join(workdir, f"dGTEx_ATAC.{tissue2}.{runtag}.h5ads"),
+        filename=os.path.join(workdir, f"ATAC.{tissue2}.{runtag}.h5ads"),
     )
     return anndataset
 

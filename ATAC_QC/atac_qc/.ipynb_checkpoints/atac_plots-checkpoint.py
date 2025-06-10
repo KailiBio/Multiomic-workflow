@@ -262,9 +262,9 @@ def plot_umap_by_sample(adata, tissue2, runtag, outdir, sample_colors=None, suff
     ax.set_ylabel('UMAP-2', fontsize=12)
     ax.spines.right.set_visible(False)
     ax.spines.top.set_visible(False)
-    ax.set_title(f"dGTEx {tissue2}\n", fontsize=14)
+    ax.set_title(f"{tissue2}\n", fontsize=14)
     plt.subplots_adjust(right=0.7)
-    outpng = os.path.join(outdir, f'dGTEx_ATAC_UMAP_{suffix}.{tissue2}.{runtag}.png')
+    outpng = os.path.join(outdir, f'ATAC_UMAP_{suffix}.{tissue2}.{runtag}.png')
     plt.savefig(outpng, bbox_inches='tight', dpi=800)
     plt.close(fig)
 
@@ -286,9 +286,9 @@ def plot_umap_by_donor(adata, tissue2, runtag, outdir, donor_colors=None, suffix
     ax.set_ylabel('UMAP-2', fontsize=12)
     ax.spines.right.set_visible(False)
     ax.spines.top.set_visible(False)
-    ax.set_title(f"dGTEx {tissue2}\n", fontsize=14)
+    ax.set_title(f"{tissue2}\n", fontsize=14)
     plt.subplots_adjust(right=0.7)
-    outpng = os.path.join(outdir, f'dGTEx_ATAC_UMAP_{suffix}.{tissue2}.{runtag}.png')
+    outpng = os.path.join(outdir, f'ATAC_UMAP_{suffix}.{tissue2}.{runtag}.png')
     plt.savefig(outpng, bbox_inches='tight', dpi=800)
     plt.close(fig)
 
@@ -331,7 +331,7 @@ def plot_umap_by_sample_by_side(adata, tissue2, runtag, outdir, sample_colors=No
     #for j in range(len(samplelist), len(axes)):
     #    axes[j].axis('off')
 
-    outpng = os.path.join(outdir, f'dGTEx_ATAC_UMAP_sampleBySide.{tissue2}.{runtag}.png')
+    outpng = os.path.join(outdir, f'ATAC_UMAP_sampleBySide.{tissue2}.{runtag}.png')
     plt.savefig(outpng, bbox_inches='tight', dpi=800)
     plt.show()
     plt.close(fig)
@@ -402,7 +402,7 @@ def plot_umap_with_QC(adata, tissue2, runtag, outdir, sample_colors=None,
         ax3.set_title("Color by # fragment", fontsize=10)
         
         # Save/show
-        outpng = os.path.join(outdir, f'dGTEx_ATAC_UMAP_withQC.{tissue2}.{fileID}.{runtag}.png')
+        outpng = os.path.join(outdir, f'ATAC_UMAP_withQC.{tissue2}.{fileID}.{runtag}.png')
         plt.savefig(outpng, bbox_inches='tight', dpi=800)
         plt.close(fig)
 
