@@ -75,7 +75,6 @@ def main(config_path, runtag):
 
     n_threads = config['params'].get('n_threads', 16)
     tissue = config['params']['tissue']
-    #tissue2 = standardize_tissue_name(tissue)
     suffix = config['params']['suffix']
     
     n_features_merge = config.get('merge', {}).get('n_features', 50000)

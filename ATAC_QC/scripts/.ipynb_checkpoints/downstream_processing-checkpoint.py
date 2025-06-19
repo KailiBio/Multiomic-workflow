@@ -60,7 +60,6 @@ def main(config_path, runtag):
     os.chdir(workdir)
 
     tissue = config['params']['tissue']
-    #tissue2 = standardize_tissue_name(tissue)
     suffix = config['params']['suffix']
     n_threads = config['params'].get('n_threads', 16)
 
@@ -86,7 +85,8 @@ def main(config_path, runtag):
     # Remove doublets, embedding, clustering, and save back to disk
     for i, fileID in enumerate(sample_list, 1):
         print(f"[{i}/{len(sample_list)}] Processing {fileID}...")
-        tissue2 = standardize_tissue_name(sample_tissue_dict[fileID])
+        
+        tissue_std = standardize_tissue_name(sample_tissue_dict[fileID])
         h5ad_path = os.path.join(h5ad_dir, f'{fileID}.processed.{runtag}.h5ad')
 
         if not os.path.exists(h5ad_path):
@@ -108,7 +108,8 @@ def main(config_path, runtag):
             snap.pp.filter_doublets(adata, n_jobs=n_threads, 
                                     score_threshold=doublet_cutoff, probability_threshold=None)
             
-        df.to_csv(f'ATAC_doublet_results.{fileID}.tsv', sep='\t', index=True, header=True, index_label="cell_barcode")
+        df_doublet.to_csv(f'ATAC_doublet_results.{fileID}.tsv', sep='\t', index=True, header=True, 
+                          index_label="cell_barcode")
 
         # Dimension reduction and clustering
         snap.tl.spectral(adata)
@@ -126,7 +127,7 @@ def main(config_path, runtag):
 
     print("Generating per-sample UMAP cluster plots...")
     plot_per_sample_umap_clusters(sample_ids=sample_list, h5ad_dir=h5ad_dir, run_tag=runtag,
-                                  tissue_name=tissue2, output_dir=fig_dir)
+                                  suffix=suffix, output_dir=fig_dir)
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="ATAC downstream processing: doublet removal, clustering & statistics.")

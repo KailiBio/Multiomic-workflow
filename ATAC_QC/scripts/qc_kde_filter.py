@@ -30,7 +30,6 @@ def main(config_path, runtag):
     os.makedirs(figdir, exist_ok=True)
 
     tissue = config['params']['tissue']
-    #tissue2 = standardize_tissue_name(tissue)
     suffix = config['params']['suffix']
 
     n_threads = config['params'].get('n_threads', 16)
@@ -60,7 +59,7 @@ def main(config_path, runtag):
     with PdfPages(before_pdf) as pdf_before, PdfPages(after_pdf) as pdf_after:
         for i, fileID in enumerate(sample_list, 1):
             print(f'[{i}/{len(sample_list)}] Filtering {fileID}...')
-            tissue2 = standardize_tissue_name(sample_tissue_dict[fileID])
+            tissue_std = standardize_tissue_name(sample_tissue_dict[fileID])
             
             try:
                 h5ad_path = os.path.join(workdir, "atac_h5ad", f'{fileID}.raw.h5ad')
@@ -84,7 +83,7 @@ def main(config_path, runtag):
                 snap.pp.filter_cells(adata, min_tsse=3, min_counts=100, max_counts=100000,
                                      inplace=True, n_jobs=n_threads)
                 plot_kde_filter(
-                    adata, x_cutoff, y_cutoff, f'{tissue2}: {fileID}', 
+                    adata, x_cutoff, y_cutoff, f'{tissue_std}: {fileID}', 
                     initial_cell_str, cutoff_str, passed_cells_str, pdf_before, show_cutoff_line=True
                 )
 
@@ -92,7 +91,7 @@ def main(config_path, runtag):
                 snap.pp.filter_cells(adata, min_tsse=y_cutoff, min_counts=x_cutoff,
                                      max_counts=100000, inplace=True, n_jobs=n_threads)
                 plot_kde_filter(
-                    adata, x_cutoff, y_cutoff, f'{tissue2}: {fileID}', 
+                    adata, x_cutoff, y_cutoff, f'{tissue_std}: {fileID}', 
                     initial_cell_str, cutoff_str, passed_cells_str, pdf_after, show_cutoff_line=False
                 )
 

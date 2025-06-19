@@ -35,7 +35,7 @@ cut -f2 "$metatable" | xargs -n 1 -P "$nthread" -I{} \
     --force
 
 printf "\nStep 2: Convert fragments to h5ad\n"
-python scripts/load_fragments.py "$config" "$runtag"
+python scripts/load_fragments.py "$config"
 
 printf "\nStep 3: QC filtering and visualization\n"
 python scripts/qc_kde_filter.py "$config" "$runtag"

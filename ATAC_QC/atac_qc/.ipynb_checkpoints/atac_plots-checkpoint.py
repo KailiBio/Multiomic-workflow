@@ -177,7 +177,7 @@ def plot_per_sample_umap_clusters(
     sample_ids,
     h5ad_dir,
     run_tag,
-    tissue_name,
+    suffix,
     output_dir,
     doublet_rate_key="doublet_rate"
 ):
@@ -360,11 +360,11 @@ def plot_umap_with_QC(adata, tissue2, runtag, outdir, sample_colors=None,
             if file != fileID:
                 idx = np.where(np.array(samples) == file)[0]
                 ax1.scatter(adata.obsm['X_umap'][idx, 0], adata.obsm['X_umap'][idx, 1], 
-                            color="#bcbcbc", s=0.8, alpha=0.3)
+                            color="#EEEEEE", s=0.8, alpha=0.3)
                 ax2.scatter(adata.obsm['X_umap'][idx, 0], adata.obsm['X_umap'][idx, 1], 
-                            color="#bcbcbc", s=0.8, alpha=0.3)
+                            color="#EEEEEE", s=0.8, alpha=0.3)
                 ax3.scatter(adata.obsm['X_umap'][idx, 0], adata.obsm['X_umap'][idx, 1], 
-                            color="#bcbcbc", s=0.8, alpha=0.3)
+                            color="#EEEEEE", s=0.8, alpha=0.3)
         idx = np.where(np.array(samples) == fileID)[0]
         
         # ax1: main highlight color

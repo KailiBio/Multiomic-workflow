@@ -36,7 +36,6 @@ def main(config_path, runtag):
     os.makedirs(out_fig_dir, exist_ok=True)
 
     tissue = config['params']['tissue']
-    #tissue2 = standardize_tissue_name(tissue)
     suffix = config['params']['suffix']
     n_threads = config['params'].get('n_threads', 16)
 
@@ -56,7 +55,7 @@ def main(config_path, runtag):
 
     for i, fileID in enumerate(sample_list, 1):
         print(f"[{i}/{len(sample_list)}] Processing {fileID}...")
-        tissue2 = standardize_tissue_name(sample_tissue_dict[fileID])
+        tissue_std = standardize_tissue_name(sample_tissue_dict[fileID])
 
         h5ad_path = os.path.join(h5ad_dir, f'{fileID}.filtered.{runtag}.h5ad')
         if not os.path.exists(h5ad_path):
@@ -80,7 +79,7 @@ def main(config_path, runtag):
         probability_midpoint = ((doublet_probability.max() + doublet_probability.min()) / 2).round(1)
         plot_doublet_score_probability(
             adata.obs['doublet_score'], doublet_probability, probability_midpoint,
-            tissue2, fileID, outdir=out_fig_dir, runtag=runtag, show=False
+            tissue_std, fileID, outdir=out_fig_dir, runtag=runtag, show=False
         )
         print(f"Default doublet probability cutoff is {probability_midpoint}")
         

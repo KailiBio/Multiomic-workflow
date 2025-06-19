@@ -9,7 +9,6 @@ import os
 import sys
 import time
 import argparse
-import yaml
 import re
 import pandas as pd
 import snapatac2 as snap
@@ -100,12 +99,15 @@ def main(config_path, overwrite=False):
 
     tissue = config['params']['tissue']
     suffix = config['params']['suffix']
+
+    barcode_dic_rna, _ = load_barcode_dicts(config['references']['barcode_whitelist'])
+    
+    df = pd.read_csv(config['paths']['sample_metadata'], sep='\t', header=None,
+                         names=["rnaID", "atacID", "species", "donorID", "ageGroup", "gender", "tissue"])
+    
     if tissue == "---":
         working_df = df
     else:
-        barcode_dic_rna, _ = load_barcode_dicts(config['references']['barcode_whitelist'])
-        df = pd.read_csv(config['paths']['sample_metadata'], sep='\t', header=None,
-                         names=["rnaID", "atacID", "species", "donorID", "ageGroup", "gender", "tissue"])
         working_df = df[df["tissue"] == tissue]
         
     sample_list = working_df['atacID'].unique()
