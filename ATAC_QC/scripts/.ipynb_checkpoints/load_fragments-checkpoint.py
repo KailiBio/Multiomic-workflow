@@ -99,13 +99,19 @@ def main(config_path, overwrite=False):
         os.makedirs(path, exist_ok=True)
 
     tissue = config['params']['tissue']
-    print(f"Working tissue: {tissue}")
-    barcode_dic_rna, _ = load_barcode_dicts(config['references']['barcode_whitelist'])
-    df = pd.read_csv(config['paths']['sample_metadata'], sep='\t', header=None,
-                     names=["rnaID", "atacID", "species", "donorID", "ageGroup", "gender", "tissue"])
-    working_df = df[df["tissue"] == tissue]
+    suffix = config['params']['suffix']
+    if tissue == "---":
+        working_df = df
+    else:
+        barcode_dic_rna, _ = load_barcode_dicts(config['references']['barcode_whitelist'])
+        df = pd.read_csv(config['paths']['sample_metadata'], sep='\t', header=None,
+                         names=["rnaID", "atacID", "species", "donorID", "ageGroup", "gender", "tissue"])
+        working_df = df[df["tissue"] == tissue]
+        
     sample_list = working_df['atacID'].unique()
     print(f"Samples: {list(sample_list)}")
+    tissues = sorted(working_df["tissue"].unique())
+    print(f"Working tissue: {', '.join(tissues)}")
 
     start_time = time.time()
     for i, (_, row) in enumerate(working_df.iterrows(), 1):

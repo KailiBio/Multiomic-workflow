@@ -138,7 +138,7 @@ def plot_doublet_score_probability(
 
     # Save figure only if outdir and runtag are given
     if outdir is not None and runtag is not None:
-        outpath = os.path.join(outdir, f"ATAC_QC_doubletHist.{runtag}.{tissue}-{fileID}.png")
+        outpath = os.path.join(outdir, f"ATAC_QC_doubletHist.{tissue}.{fileID}.{runtag}.png")
         plt.savefig(outpath, dpi=300, bbox_inches='tight')
     if show:
         plt.show()
@@ -147,7 +147,7 @@ def plot_doublet_score_probability(
 
 def cell_count_post_filter_hist(
     df_num_cells,
-    tissue2,
+    suffix,
     runtag,
     out_dir
 ):
@@ -156,12 +156,12 @@ def cell_count_post_filter_hist(
 
     Args:
         df_num_cells: DataFrame with columns ["fileID", "numCells"]
-        tissue2: Standardized tissue name.
+        suffix: Suffix for naming.
         runtag: QC/processing tag.
         out_dir: Output dir for the plot and stats file.
     """
-    tsv_path = os.path.join(out_dir, f"ATAC_NumCell.{runtag}.{tissue2}.tsv")
-    png_path = os.path.join(out_dir, f'ATAC_NumCell.{tissue2}.png')
+    tsv_path = os.path.join(out_dir, f"ATAC_NumCell.{runtag}.{suffix}.tsv")
+    png_path = os.path.join(out_dir, f'ATAC_NumCell.{suffix}.png')
     df_num_cells.to_csv(tsv_path, sep="\t", index=False)
 
     total_cells = df_num_cells["numCells"].sum()
@@ -169,7 +169,7 @@ def cell_count_post_filter_hist(
     fig, ax = plt.subplots()
     sns.histplot(df_num_cells['numCells'], binwidth=100, ax=ax)
     ax.set_xlabel("Number of Cells past QC")
-    ax.set_title(f"{tissue2} ({total_cells:,} cells)\n{runtag}")
+    ax.set_title(f"{suffix} ({total_cells:,} cells)\n{runtag}")
     fig.savefig(png_path)
     plt.close(fig)
 
@@ -188,11 +188,11 @@ def plot_per_sample_umap_clusters(
         sample_ids (list of str): List of sample IDs (fileID)
         h5ad_dir (str): Directory containing processed h5ad files.
         run_tag (str): QC/processing tag (e.g. round1, round3, etc.).
-        tissue_name (str): Standardized tissue name (for output file naming).
+        suffix (str): Suffix for output file naming.
         output_dir (str): Directory to save the output PDF.
         doublet_rate_key (str): Key in .uns for doublet rate (default: "doublet_rate")
     """
-    pdf_path = os.path.join(output_dir, f'ATAC_post_filter_clusters.{tissue_name}.pdf')
+    pdf_path = os.path.join(output_dir, f'ATAC_post_filter_clusters.{suffix}.pdf')
     with PdfPages(pdf_path) as pdf:
         for sample_id in sample_ids:
             h5ad_path = os.path.join(h5ad_dir, f'{sample_id}.final.{run_tag}.h5ad')
@@ -232,7 +232,7 @@ def plot_per_sample_umap_clusters(
             else:
                 dbl_line = ""
             ax.set_title(
-                f'{tissue_name}: {sample_id}\n'
+                f'{suffix}: {sample_id}\n'
                 f'Median TSS enrichment: {median_tss:.2f}\n'
                 f'Median # fragments: {median_frags:.0f}\n'
                 f'{dbl_line}',
@@ -256,7 +256,7 @@ def plot_umap_by_sample(adata, tissue2, runtag, outdir, sample_colors=None, suff
         idx = np.where(np.array(samples) == sample)[0]
         color = sample_colors[sample] if (sample_colors and sample in sample_colors) else None
         ax.scatter(adata.obsm['X_umap'][idx,0], adata.obsm['X_umap'][idx,1],
-                   color=color, label=sample, s=0.8, alpha=0.3)  # <--- ONLY THIS CHANGED
+                   color=color, label=sample, s=0.8, alpha=0.3)
     ax.legend(bbox_to_anchor=(1.8, 1), loc="upper right", title="Sample", frameon=False)
     ax.set_xlabel('UMAP-1', fontsize=12)
     ax.set_ylabel('UMAP-2', fontsize=12)
@@ -280,7 +280,7 @@ def plot_umap_by_donor(adata, tissue2, runtag, outdir, donor_colors=None, suffix
         idx = np.where(np.array(donors) == donor)[0]
         color = donor_colors[donor] if (donor_colors and donor in donor_colors) else None
         ax.scatter(adata.obsm['X_umap'][idx,0], adata.obsm['X_umap'][idx,1],
-                   color=color, label=donor, s=0.8, alpha=0.3)  # <-- changed here
+                   color=color, label=donor, s=0.8, alpha=0.3) 
     ax.legend(bbox_to_anchor=(1.8, 1), loc="upper right", title="Donor", frameon=False)
     ax.set_xlabel('UMAP-1', fontsize=12)
     ax.set_ylabel('UMAP-2', fontsize=12)
@@ -313,7 +313,7 @@ def plot_umap_by_sample_by_side(adata, tissue2, runtag, outdir, sample_colors=No
         # Gray background (all cells)
         ax.scatter(
             adata.obsm['X_umap'][:, 0], adata.obsm['X_umap'][:, 1],
-            color="#EEEEEE", s=0.8, alpha=0.3, rasterized=True, zorder=1
+            color="#bcbcbc", s=0.8, alpha=0.3, rasterized=True, zorder=1
         )
         # Highlight this sample
         ax.scatter(
@@ -360,11 +360,11 @@ def plot_umap_with_QC(adata, tissue2, runtag, outdir, sample_colors=None,
             if file != fileID:
                 idx = np.where(np.array(samples) == file)[0]
                 ax1.scatter(adata.obsm['X_umap'][idx, 0], adata.obsm['X_umap'][idx, 1], 
-                            color="#EEEEEE", s=0.8, alpha=0.3)
+                            color="#bcbcbc", s=0.8, alpha=0.3)
                 ax2.scatter(adata.obsm['X_umap'][idx, 0], adata.obsm['X_umap'][idx, 1], 
-                            color="#EEEEEE", s=0.8, alpha=0.3)
+                            color="#bcbcbc", s=0.8, alpha=0.3)
                 ax3.scatter(adata.obsm['X_umap'][idx, 0], adata.obsm['X_umap'][idx, 1], 
-                            color="#EEEEEE", s=0.8, alpha=0.3)
+                            color="#bcbcbc", s=0.8, alpha=0.3)
         idx = np.where(np.array(samples) == fileID)[0]
         
         # ax1: main highlight color

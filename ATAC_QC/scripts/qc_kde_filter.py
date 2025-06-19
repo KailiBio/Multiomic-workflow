@@ -30,28 +30,38 @@ def main(config_path, runtag):
     os.makedirs(figdir, exist_ok=True)
 
     tissue = config['params']['tissue']
-    tissue2 = standardize_tissue_name(tissue)
-    print(f"Working tissue: {tissue}")
+    #tissue2 = standardize_tissue_name(tissue)
+    suffix = config['params']['suffix']
 
     n_threads = config['params'].get('n_threads', 16)
 
     # Load sample info and QC cutoffs
     df = pd.read_csv(config['paths']['sample_metadata'], sep='\t', header=None,
                      names=["rnaID", "atacID", "species", "donorID", "ageGroup", "gender", "tissue"])
-    working_df = df[df["tissue"] == tissue]
-    sample_list = working_df['atacID'].unique().tolist()
-
     df_cutoff_all = pd.read_excel(config['qc']['atac_qc_cutoff_table'],
                                   sheet_name=config['qc']['sheet_name'], engine='openpyxl')
-    df_cutoff = df_cutoff_all[df_cutoff_all['Tissue'] == tissue]
-    df_cutoff.set_index('atacID', inplace=True)
+    
+    if tissue == "---":
+        working_df = df
+        df_cutoff = df_cutoff_all 
+    else:
+        working_df = df[df["tissue"] == tissue]
+        df_cutoff = df_cutoff_all[df_cutoff_all['Tissue'] == tissue]
 
-    before_pdf = os.path.join(figdir, f'ATAC_beforeFilter_kde.{tissue2}.{runtag}.pdf')
-    after_pdf = os.path.join(figdir, f'ATAC_postFilter_kde.{tissue2}.{runtag}.pdf')
+    tissues = sorted(working_df["tissue"].unique())
+    print(f"Working tissue: {', '.join(tissues)}")
+    sample_list = working_df['atacID'].unique().tolist()
+    df_cutoff.set_index('atacID', inplace=True)
+    sample_tissue_dict = dict(zip(working_df['atacID'], working_df['tissue']))
+
+    before_pdf = os.path.join(figdir, f'ATAC_beforeFilter_kde.{suffix}.{runtag}.pdf')
+    after_pdf = os.path.join(figdir, f'ATAC_postFilter_kde.{suffix}.{runtag}.pdf')
 
     with PdfPages(before_pdf) as pdf_before, PdfPages(after_pdf) as pdf_after:
         for i, fileID in enumerate(sample_list, 1):
             print(f'[{i}/{len(sample_list)}] Filtering {fileID}...')
+            tissue2 = standardize_tissue_name(sample_tissue_dict[fileID])
+            
             try:
                 h5ad_path = os.path.join(workdir, "atac_h5ad", f'{fileID}.raw.h5ad')
                 if not os.path.exists(h5ad_path):

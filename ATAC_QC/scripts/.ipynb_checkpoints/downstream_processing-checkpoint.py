@@ -23,7 +23,7 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')
 from atac_qc.utils import load_config, standardize_tissue_name
 from atac_qc.atac_plots import cell_count_post_filter_hist, plot_per_sample_umap_clusters
 
-def summarize_and_plot_cell_counts(sample_list, h5ad_dir, fig_dir, runtag, tissue2):
+def summarize_and_plot_cell_counts(sample_list, h5ad_dir, fig_dir, runtag, suffix):
     """
     Summarize cell counts and plot histogram for a set of h5ad files.
 
@@ -32,7 +32,7 @@ def summarize_and_plot_cell_counts(sample_list, h5ad_dir, fig_dir, runtag, tissu
         h5ad_dir (str): Directory containing processed h5ad files.
         fig_dir (str): Output directory for figure and table.
         runtag (str): Tag used in h5ad and output file names.
-        tissue2 (str): Standardized tissue name (for output naming).
+        suffix (str): Suffix for output naming).
     Returns:
         df_num_cells (pd.DataFrame): DataFrame of sampleID and cell count.
     """
@@ -47,9 +47,9 @@ def summarize_and_plot_cell_counts(sample_list, h5ad_dir, fig_dir, runtag, tissu
         numCells.append((fileID, len(adata.obs_names)))
         
     df_num_cells = pd.DataFrame(numCells, columns=["fileID", "numCells"])
-    df_num_cells.to_csv(os.path.join(fig_dir, f"ATAC_NumCell.{runtag}.{tissue2}.tsv"), sep="\t", index=False)
+    df_num_cells.to_csv(os.path.join(fig_dir, f"ATAC_NumCell.{runtag}.{suffix}.tsv"), sep="\t", index=False)
 
-    cell_count_post_filter_hist(df_num_cells, tissue2, runtag, fig_dir)
+    cell_count_post_filter_hist(df_num_cells, suffix, runtag, fig_dir)
     
 def main(config_path, runtag):
     config = load_config(config_path)
@@ -60,23 +60,33 @@ def main(config_path, runtag):
     os.chdir(workdir)
 
     tissue = config['params']['tissue']
-    tissue2 = standardize_tissue_name(tissue)
+    #tissue2 = standardize_tissue_name(tissue)
+    suffix = config['params']['suffix']
     n_threads = config['params'].get('n_threads', 16)
 
     # Load sample info and cutoffs
     df = pd.read_csv(config['paths']['sample_metadata'], sep='\t', header=None,
                      names=["rnaID", "atacID", "species", "donorID", "ageGroup", "gender", "tissue"])
-    working_df = df[df["tissue"] == tissue]
-    sample_list = working_df['atacID'].unique().tolist()
-
     df_cutoff_all = pd.read_excel(config['qc']['atac_qc_cutoff_table'], 
                                   sheet_name=config['qc']['sheet_name'], engine='openpyxl')
-    df_cutoff = df_cutoff_all[df_cutoff_all['Tissue'] == tissue]
+    
+    if tissue == "---":
+        working_df = df
+        df_cutoff = df_cutoff_all
+    else:
+        working_df = df[df["tissue"] == tissue]
+        df_cutoff = df_cutoff_all[df_cutoff_all['Tissue'] == tissue]
+        
+    sample_list = working_df['atacID'].unique().tolist()
+    sample_tissue_dict = dict(zip(working_df['atacID'], working_df['tissue']))
     df_cutoff.set_index('atacID', inplace=True)
+    tissues = sorted(working_df["tissue"].unique())
+    print(f"Working tissue: {', '.join(tissues)}")
 
     # Remove doublets, embedding, clustering, and save back to disk
     for i, fileID in enumerate(sample_list, 1):
         print(f"[{i}/{len(sample_list)}] Processing {fileID}...")
+        tissue2 = standardize_tissue_name(sample_tissue_dict[fileID])
         h5ad_path = os.path.join(h5ad_dir, f'{fileID}.processed.{runtag}.h5ad')
 
         if not os.path.exists(h5ad_path):
@@ -87,13 +97,18 @@ def main(config_path, runtag):
 
         # Remove doublets
         doublet_cutoff = df_cutoff.loc[fileID, 'doublet_cutoff']
+        df_doublet = adata.obs[['doublet_score', 'doublet_probability']].copy()
         if str(df_cutoff.loc[fileID, 'use_double_probability_filter']) == 'Yes':
             print(f'  using double probability filter: {doublet_cutoff}')
+            df_doublet['doublet_call'] = df_doublet['doublet_probability'].apply(lambda x: 'yes' if x > doublet_cutoff else 'no')
             snap.pp.filter_doublets(adata, n_jobs=n_threads, probability_threshold=doublet_cutoff)
         else:
             print(f'  using double score filter: {doublet_cutoff}')
+            df_doublet['doublet_call'] = df_doublet['doublet_score'].apply(lambda x: 'yes' if x > doublet_cutoff else 'no')
             snap.pp.filter_doublets(adata, n_jobs=n_threads, 
                                     score_threshold=doublet_cutoff, probability_threshold=None)
+            
+        df.to_csv(f'ATAC_doublet_results.{fileID}.tsv', sep='\t', index=True, header=True, index_label="cell_barcode")
 
         # Dimension reduction and clustering
         snap.tl.spectral(adata)
@@ -107,7 +122,7 @@ def main(config_path, runtag):
 
     # Summarize and plot cell stats
     print("Generating summary table and histogram for filtered cell counts per sample...")
-    summarize_and_plot_cell_counts(sample_list, h5ad_dir, fig_dir, runtag, tissue2)
+    summarize_and_plot_cell_counts(sample_list, h5ad_dir, fig_dir, runtag, suffix)
 
     print("Generating per-sample UMAP cluster plots...")
     plot_per_sample_umap_clusters(sample_ids=sample_list, h5ad_dir=h5ad_dir, run_tag=runtag,

@@ -11,6 +11,7 @@ references:
 
 params:
   tissue: Muscle - Quadriceps
+  suffix: Muscle_Quadriceps
   n_threads: 16
   min_fragments: 100
   genomic_bin_size: 500
@@ -39,3 +40,25 @@ color:
         DGTEX047: "#2E9E49"
         DGTEX001: "#397AF2"
         DGTEX027: "#8e02da"
+
+my_color_palette:
+  - "#c50909"
+  - "#ffa806"
+  - "#fbe95d"
+  - "#16b900"
+  - "#65c4ff"
+  - "#0e3aa9"
+  - "#8e02da"
+  - "#795548"
+  - "#9E9E9E"
+  - "#ff5b13"
+  - "#154f11"
+  - "#8bc34a"
+  - "#ff37a6"
+  - "#0062ff"
+  - "#00bfae"
+  - "#ea9c28"
+  - "#6e7f27"
+  - "#43e8e6"
+  - "#a4ff5a"
+  - "#e72c80"

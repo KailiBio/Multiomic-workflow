@@ -36,17 +36,27 @@ def main(config_path, runtag):
     os.makedirs(out_fig_dir, exist_ok=True)
 
     tissue = config['params']['tissue']
-    tissue2 = standardize_tissue_name(tissue)
+    #tissue2 = standardize_tissue_name(tissue)
+    suffix = config['params']['suffix']
     n_threads = config['params'].get('n_threads', 16)
 
     # Read sample/metadata table
     df = pd.read_csv(config['paths']['sample_metadata'], sep='\t', header=None,
                      names=["rnaID", "atacID", "species", "donorID", "ageGroup", "gender", "tissue"])
-    working_df = df[df["tissue"] == tissue]
+    
+    if tissue == "---":
+        working_df = df
+    else:
+        working_df = df[df["tissue"] == tissue]
+        
     sample_list = working_df['atacID'].unique().tolist()
+    sample_tissue_dict = dict(zip(working_df['atacID'], working_df['tissue']))
+    tissues = sorted(working_df["tissue"].unique())
+    print(f"Working tissue: {', '.join(tissues)}")
 
     for i, fileID in enumerate(sample_list, 1):
         print(f"[{i}/{len(sample_list)}] Processing {fileID}...")
+        tissue2 = standardize_tissue_name(sample_tissue_dict[fileID])
 
         h5ad_path = os.path.join(h5ad_dir, f'{fileID}.filtered.{runtag}.h5ad')
         if not os.path.exists(h5ad_path):
