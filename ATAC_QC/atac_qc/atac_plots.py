@@ -18,6 +18,10 @@ import math
 
 import anndata as ad
 
+import sys
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
+from atac_qc.utils import standardize_tissue_name
+
 def plot_kde_filter(
     adata,
     x_cutoff,
@@ -37,7 +41,7 @@ def plot_kde_filter(
     Args:
         adata             : AnnData object (must have 'n_fragment' and 'tsse' in .obs)
         x_cutoff, y_cutoff: QC cutoff values (fragment, TSS enrichment)
-        sample_info       : Sample string (e.g. "{tissue2}: {fileID}")
+        sample_info       : Sample string (e.g. "{suffix}: {fileID}")
         initial_cell_str  : e.g. "Initial cell barcodes: 23432"
         cutoff_str        : e.g. "QC cutoffs: n_fragment > 1000, TSS_enrichment > 7"
         passed_cells_str  : e.g. "Cells passing QC: 19324"
@@ -173,14 +177,8 @@ def cell_count_post_filter_hist(
     fig.savefig(png_path)
     plt.close(fig)
 
-def plot_per_sample_umap_clusters(
-    sample_ids,
-    h5ad_dir,
-    run_tag,
-    suffix,
-    output_dir,
-    doublet_rate_key="doublet_rate"
-):
+def plot_per_sample_umap_clusters(sample_ids, h5ad_dir, run_tag, suffix, 
+                                  output_dir, doublet_rate_key="doublet_rate"):
     """
     Plot UMAP clusters for each sample and save all plots to a single PDF file.
 
@@ -207,21 +205,16 @@ def plot_per_sample_umap_clusters(
             colors = plt.cm.tab10(np.linspace(0, 1, len(unique_clusters)))
 
             fig, ax = plt.subplots()
+            # Shrink plot to make space for the legend
+            box = ax.get_position()
+            ax.set_position([box.x0, box.y0, box.width * 0.70, box.height])
+
             for i, cluster in enumerate(unique_clusters):
                 idx = np.where(np.array(clusters) == cluster)[0]
-                ax.scatter(
-                    adata.obsm['X_umap'][idx, 0],
-                    adata.obsm['X_umap'][idx, 1],
-                    c=[colors[i]],
-                    label=cluster,
-                    s=1
-                )
-            ax.legend(
-                bbox_to_anchor=(1.18, 1),
-                loc="upper right",
-                title="Leiden Cluster",
-                frameon=False
-            )
+                ax.scatter(adata.obsm['X_umap'][idx, 0], adata.obsm['X_umap'][idx, 1],
+                    c=[colors[i]], label=cluster, s=1)
+            ax.legend(bbox_to_anchor=(1.05, 1), loc="upper right", title="Leiden Cluster", frameon=False,
+                      borderaxespad=0.)
             ax.set_xlabel('UMAP-1')
             ax.set_ylabel('UMAP-2')
             median_tss = np.median(adata.obs["tsse"])
@@ -236,19 +229,19 @@ def plot_per_sample_umap_clusters(
                 f'Median TSS enrichment: {median_tss:.2f}\n'
                 f'Median # fragments: {median_frags:.0f}\n'
                 f'{dbl_line}',
-                loc='center',
-                fontsize=10
+                loc='center', fontsize=10
             )
             plt.subplots_adjust(top=0.7, right=0.7)
+            plt.tight_layout(rect=[0, 0, 0.8, 1])
             pdf.savefig(fig)
             plt.close(fig)
 
 
-def plot_umap_by_sample(adata, tissue2, runtag, outdir, sample_colors=None, suffix="bySample"):
+def plot_umap_by_sample(adata, suffix, runtag, outdir, sample_colors=None, key="sampleID"):
     """
     Plot UMAP for all cells, colored by sample.
     """
-    samples = adata.obs['sample']
+    samples = adata.obs[key]
     samplelist = sorted(set(samples))
     fig, ax = plt.subplots(figsize=(7, 4))
     plt.style.use("default")
@@ -256,87 +249,121 @@ def plot_umap_by_sample(adata, tissue2, runtag, outdir, sample_colors=None, suff
         idx = np.where(np.array(samples) == sample)[0]
         color = sample_colors[sample] if (sample_colors and sample in sample_colors) else None
         ax.scatter(adata.obsm['X_umap'][idx,0], adata.obsm['X_umap'][idx,1],
-                   color=color, label=sample, s=0.8, alpha=0.3)
-    ax.legend(bbox_to_anchor=(1.8, 1), loc="upper right", title="Sample", frameon=False)
+                   color=color, label=sample, s=2, alpha=0.3)
+    ax.legend(bbox_to_anchor=(1.8, 1), loc="upper right", title=key, frameon=False)
     ax.set_xlabel('UMAP-1', fontsize=12)
     ax.set_ylabel('UMAP-2', fontsize=12)
     ax.spines.right.set_visible(False)
     ax.spines.top.set_visible(False)
-    ax.set_title(f"{tissue2}\n", fontsize=14)
+    ax.set_title(f"{suffix}\n", fontsize=14)
     plt.subplots_adjust(right=0.7)
-    outpng = os.path.join(outdir, f'ATAC_UMAP_{suffix}.{tissue2}.{runtag}.png')
+    outpng = os.path.join(outdir, f'ATAC_UMAP_bySample.{suffix}.{runtag}.png')
     plt.savefig(outpng, bbox_inches='tight', dpi=800)
+    outpdf = os.path.join(outdir, f'ATAC_UMAP_bySample.{suffix}.{runtag}.pdf')
+    plt.savefig(outpdf, bbox_inches='tight')
     plt.close(fig)
 
-def plot_umap_by_donor(adata, tissue2, runtag, outdir, donor_colors=None, suffix="byDonor"):
+def plot_umap_by_donor(adata, suffix, runtag, outdir, donor_colors=None, key='donorID'):
     """
     Plot UMAP for all cells, colored by donor.
     """
-    donors = adata.obs['donorID']
+    donors = adata.obs[key]
     donorlist = sorted(set(donors))
     fig, ax = plt.subplots(figsize=(7, 4))
     plt.style.use("default")
+    
     for donor in donorlist:
         idx = np.where(np.array(donors) == donor)[0]
         color = donor_colors[donor] if (donor_colors and donor in donor_colors) else None
         ax.scatter(adata.obsm['X_umap'][idx,0], adata.obsm['X_umap'][idx,1],
-                   color=color, label=donor, s=0.8, alpha=0.3) 
-    ax.legend(bbox_to_anchor=(1.8, 1), loc="upper right", title="Donor", frameon=False)
+                   color=color, label=donor, s=2, alpha=0.3) 
+    ax.legend(bbox_to_anchor=(1.8, 1), loc="upper right", title=key, frameon=False)
     ax.set_xlabel('UMAP-1', fontsize=12)
     ax.set_ylabel('UMAP-2', fontsize=12)
     ax.spines.right.set_visible(False)
     ax.spines.top.set_visible(False)
-    ax.set_title(f"{tissue2}\n", fontsize=14)
+    ax.set_title(f"{suffix}\n", fontsize=14)
     plt.subplots_adjust(right=0.7)
-    outpng = os.path.join(outdir, f'ATAC_UMAP_{suffix}.{tissue2}.{runtag}.png')
+    outpng = os.path.join(outdir, f'ATAC_UMAP_byDonor.{suffix}.{runtag}.png')
     plt.savefig(outpng, bbox_inches='tight', dpi=800)
+    outpdf = os.path.join(outdir, f'ATAC_UMAP_byDonor.{suffix}.{runtag}.pdf')
+    plt.savefig(outpdf, bbox_inches='tight')
     plt.close(fig)
 
-def plot_umap_by_sample_by_side(adata, tissue2, runtag, outdir, sample_colors=None, ncol=4):
+    
+def plot_umap_single_tissue_sample_by_side(adata, tissue, suffix, runtag, outdir, sample_colors=None, 
+                                           tissue_key='tissue', sample_key="sampleID", ncol=4):
     """
-    Plot one UMAP panel per sample (multi-panel plot), each with all cells as gray background,
-    and focal sample colored as in sample_colors.
+    For a given tissue, plot a multi-panel UMAP: one panel per sample (of that tissue),
+    all cells as white background, sample's cells in color.
     """
 
-    samples = adata.obs['sample']
-    samplelist = sorted(set(samples))
+    # Get samples for this tissue
+    sel = adata.obs[tissue_key] == tissue
+    samples = adata.obs.loc[sel, sample_key]
+    samplelist = sorted(samples.unique())
     nrow = math.ceil(len(samplelist) / ncol)
-    fig, axes = plt.subplots(nrow, ncol, figsize=(5 * ncol, 4 * nrow))
-    axes = axes.flatten()
-    plt.style.use("ggplot")
 
-    # For each sample panel: plot all points as gray, then sample points as color
+    plt.style.use("ggplot")
+    fig, axes = plt.subplots(nrow, ncol, figsize=(5 * ncol, 5 * nrow))
+    axes = axes.flatten()
+    
+
+    # Set up colors
+    if sample_colors is None and 'sample_colors' in adata.uns:
+        sample_colors = adata.uns['sample_colors']
+        
     for i, sample in enumerate(samplelist):
         ax = axes[i]
-        idx = np.where(np.array(samples) == sample)[0]
-        color = sample_colors[sample] if (sample_colors and sample in sample_colors) else "#1f77b4"
-        # Gray background (all cells)
+        
+        # All cells in white
+        
         ax.scatter(
             adata.obsm['X_umap'][:, 0], adata.obsm['X_umap'][:, 1],
-            color="#bcbcbc", s=0.8, alpha=0.3, rasterized=True, zorder=1
-        )
-        # Highlight this sample
+            color="white", s=0.8, alpha=0.3, rasterized=True, zorder=1)
+
+        # Highlight cells of this tissue in each sample
+        idx = np.where((adata.obs[tissue_key] == tissue) & (adata.obs[sample_key] == sample))[0]
+        color = sample_colors[sample] if (sample_colors and sample in sample_colors) else "#1f77b4"
         ax.scatter(
             adata.obsm['X_umap'][idx, 0], adata.obsm['X_umap'][idx, 1],
             color=color, label=sample, s=0.8, alpha=0.8, rasterized=True, zorder=2
         )
-        # Legend for this sample only
-        legend_entries = [plt.Line2D([0], [0], marker='o', color=color, markerfacecolor=color,
-                                     markersize=8, label=sample)]
-        ax.legend(handles=legend_entries, loc="lower left", frameon=False)
+        
+        ax.legend(
+            handles=[plt.Line2D([0], [0], marker='o', color=color, markerfacecolor=color, 
+                                markersize=8, label=sample)],
+            loc="lower left", frameon=False)
         ax.set_xlabel('UMAP-1', fontsize=10)
         ax.set_ylabel('UMAP-2', fontsize=10)
-        ax.set_title(f"{sample}\n{tissue2}\nN={len(idx)}", fontsize=12)
-    # Hide unused axes if any
-    #for j in range(len(samplelist), len(axes)):
-    #    axes[j].axis('off')
+        ax.set_title(f"{sample}\nN={len(idx)}", fontsize=12)
+        
+    # Hide unused axes
+    for j in range(len(samplelist), len(axes)):
+        axes[j].axis('off')
+    plt.suptitle(f"{suffix}:{tissue}", fontsize=16)
+    plt.tight_layout(rect=(0,0,1,0.97))
 
-    outpng = os.path.join(outdir, f'ATAC_UMAP_sampleBySide.{tissue2}.{runtag}.png')
+    outpng = os.path.join(outdir, f'ATAC_UMAP_sampleBySide.{suffix}.{standardize_tissue_name(tissue)}.{runtag}.png')
     plt.savefig(outpng, bbox_inches='tight', dpi=800)
     plt.show()
     plt.close(fig)
+    print(f"Wrote: {outpng}")
 
-def plot_umap_with_QC(adata, tissue2, runtag, outdir, sample_colors=None,
+        
+def plot_umap_per_tissue_by_sample_all(adata, suffix, runtag, outdir, sample_colors=None,
+                                       tissue_key="tissue", sample_key="sampleID", ncol=4):
+    """
+    For each tissue in AnnData, call plot_umap_single_tissue_sample_by_side.
+    """
+    tissues = sorted(adata.obs[tissue_key].unique())
+    for tissue in tissues:
+        plot_umap_single_tissue_sample_by_side(adata, tissue, suffix, runtag, outdir, 
+                                               sample_colors=sample_colors, 
+                                               tissue_key=tissue_key, sample_key=sample_key, ncol=ncol)
+        
+        
+def plot_umap_with_QC(adata, suffix, runtag, outdir, sample_colors=None,
                                tss_bounds=[7,10,12,15,20,30,100],
                                frag_bounds=[1000,2000,3000,4000,5000,10000,100000]):
     """
@@ -352,37 +379,37 @@ def plot_umap_with_QC(adata, tissue2, runtag, outdir, sample_colors=None,
     
     for fileID in samplelist:
         print(f"Plotting for sample: {fileID}")
-        fig, (ax1, ax2, ax3) = plt.subplots(1, 3, figsize=(18, 5))
         plt.style.use("ggplot")
+        fig, (ax1, ax2, ax3) = plt.subplots(1, 3, figsize=(18, 5))
         
         # Draw all other samples as white/gray background
         for file in samplelist:
             if file != fileID:
                 idx = np.where(np.array(samples) == file)[0]
                 ax1.scatter(adata.obsm['X_umap'][idx, 0], adata.obsm['X_umap'][idx, 1], 
-                            color="#EEEEEE", s=0.8, alpha=0.3)
+                            color="white", s=1, alpha=0.3)
                 ax2.scatter(adata.obsm['X_umap'][idx, 0], adata.obsm['X_umap'][idx, 1], 
-                            color="#EEEEEE", s=0.8, alpha=0.3)
+                            color="white", s=1, alpha=0.3)
                 ax3.scatter(adata.obsm['X_umap'][idx, 0], adata.obsm['X_umap'][idx, 1], 
-                            color="#EEEEEE", s=0.8, alpha=0.3)
+                            color="white", s=1, alpha=0.3)
         idx = np.where(np.array(samples) == fileID)[0]
         
         # ax1: main highlight color
         color = sample_colors[fileID] if (sample_colors and fileID in sample_colors) else "#1f77b4"
         ax1.scatter(adata.obsm['X_umap'][idx, 0], adata.obsm['X_umap'][idx, 1],
-                    color=color, label=fileID, s=0.8, alpha=0.7)
+                    color=color, label=fileID, s=1, alpha=0.7)
         legend_entries = [plt.Line2D([0], [0], marker='o', color=color, markerfacecolor=color, markersize=8, label=fileID)]
         ax1.legend(handles=legend_entries, loc="lower left", frameon=False)
         ax1.set_xlabel('UMAP-1', fontsize=10)
         ax1.set_ylabel('UMAP-2', fontsize=10)
-        ax1.set_title(f"{tissue2}\n{fileID}\nN={len(idx)}", fontsize=12)
+        ax1.set_title(f"{suffix}\n{fileID}\nN={len(idx)}", fontsize=12)
         
         # ax2: TSS enrichment color
         cmap2 = mpl.cm.YlGnBu
         norm2 = mpl.colors.BoundaryNorm(tss_bounds, cmap2.N, extend='both')
         values2 = adata.obs['tsse'].iloc[idx]
         ax2.scatter(adata.obsm['X_umap'][idx, 0], adata.obsm['X_umap'][idx, 1],
-                    c=values2, cmap=cmap2, norm=norm2, s=0.8)
+                    c=values2, cmap=cmap2, norm=norm2, s=1)
         cbar2 = plt.colorbar(ScalarMappable(norm=norm2, cmap=cmap2), ax=ax2, orientation='vertical', 
                              label='TSS enrichment score')
         ax2.set_xlabel('UMAP-1', fontsize=10)
@@ -394,7 +421,7 @@ def plot_umap_with_QC(adata, tissue2, runtag, outdir, sample_colors=None,
         norm3 = mpl.colors.BoundaryNorm(frag_bounds, cmap3.N, extend='both')
         values3 = adata.obs['n_fragment'].iloc[idx]
         ax3.scatter(adata.obsm['X_umap'][idx, 0], adata.obsm['X_umap'][idx, 1],
-                    c=values3, cmap=cmap3, norm=norm3, s=0.8)
+                    c=values3, cmap=cmap3, norm=norm3, s=1)
         cbar3 = plt.colorbar(ScalarMappable(norm=norm3, cmap=cmap3), ax=ax3, orientation='vertical', 
                              label='# fragment')
         ax3.set_xlabel('UMAP-1', fontsize=10)
@@ -402,7 +429,7 @@ def plot_umap_with_QC(adata, tissue2, runtag, outdir, sample_colors=None,
         ax3.set_title("Color by # fragment", fontsize=10)
         
         # Save/show
-        outpng = os.path.join(outdir, f'ATAC_UMAP_withQC.{tissue2}.{fileID}.{runtag}.png')
+        outpng = os.path.join(outdir, f'ATAC_UMAP_withQC.{suffix}.{fileID}.{runtag}.png')
         plt.savefig(outpng, bbox_inches='tight', dpi=800)
         plt.close(fig)
 
@@ -416,7 +443,96 @@ def assign_colors(keys, palette="tab10"):
         colors = plt.get_cmap(palette).colors
     else:
         colors = palette
-    hex_colors = [mcolors.to_hex(c) for c in colors]
-    # Repeat palette if too few colors
+
+    def as_hex(c):
+        # If already a hex string, just return
+        if isinstance(c, str):
+            if c.startswith("#") and (len(c) == 7 or len(c) == 9): 
+                return c
+        return mcolors.to_hex(c)
+
+    hex_colors = [as_hex(c) for c in colors]
+
     out = {k: hex_colors[i % len(hex_colors)] for i, k in enumerate(keys)}
     return out
+
+def plot_cells_per_tissue_by_donor(adata, suffix, runtag, outdir, tissue_key="tissue", donor_key="donorID"):
+    df = adata.obs.groupby([tissue_key, donor_key], observed=True).size().reset_index(name='n_cells')
+    df_pivot = df.pivot(index=tissue_key, columns=donor_key, values='n_cells').fillna(0)
+    # Order tissues by total cell count
+    df_pivot = df_pivot.loc[df_pivot.sum(axis=1).sort_values(ascending=False).index]
+
+    n_tissue = df_pivot.shape[0]
+    n_donor = df_pivot.shape[1]
+    fig_height = max(3, min(0.5*n_tissue, 20))
+    fig_width  = max(8, min(1.2 + 0.8*n_donor, 20))
+    
+    # Get color list for donors, matching the donorID column order in the pivot
+    donor_ids = df_pivot.columns.tolist()
+    donor_colors = adata.uns[donor_key + '_colors']
+    if isinstance(donor_colors, dict):
+        donor_colors = [donor_colors[did] for did in donor_ids]
+
+    ax = df_pivot.plot(
+        kind='barh',
+        stacked=True,
+        figsize=(fig_width, fig_height),
+        color=donor_colors,
+        edgecolor='none'
+    )
+    plt.xlabel('Number of Cells')
+    plt.ylabel('')
+    plt.title('Number of Cells per Tissue (colored by Donor)')
+    plt.legend(
+        title="Donor",
+        bbox_to_anchor=(1.05, 1),
+        loc='upper left',
+        labels=donor_ids
+    )
+    plt.tight_layout(rect=[0, 0, 0.85, 1])
+    outpng = os.path.join(outdir, f'ATAC_cellCount_perTissueByDonor.{suffix}.{runtag}.png')
+    plt.savefig(outpng, dpi=300)
+    outpdf = os.path.join(outdir, f'ATAC_cellCount_perTissueByDonor.{suffix}.{runtag}.pdf')
+    plt.savefig(outpdf)
+    plt.close()
+    print(f"Figure saved as:\n  {outpng}\n  {outpdf}")
+
+def plot_cells_per_donor_per_tissue(adata, suffix, runtag, outdir, tissue_key="tissue", donor_key="donorID"):
+    df = adata.obs.groupby([tissue_key, donor_key], observed=True).size().reset_index(name='n_cells')
+    # Pivot so index is tissue, columns are donor, values are counts
+    df_pivot = df.pivot(index=tissue_key, columns=donor_key, values='n_cells').fillna(0)
+    df_pivot = df_pivot.loc[df_pivot.sum(axis=1).sort_values(ascending=False).index]
+
+    n_tissue = df_pivot.shape[0]
+    n_donor = df_pivot.shape[1]
+    fig_height = max(3, min(0.5*n_tissue, 20))   # At least 3, at most 20
+    fig_width  = max(8, min(1.2 + 0.8*n_donor, 20))  # At least 6, at most 20
+    
+    donor_ids = df_pivot.columns.tolist()
+    donor_colors = adata.uns[donor_key + '_colors']
+    if isinstance(donor_colors, dict):
+        donor_colors = [donor_colors[did] for did in donor_ids]
+
+    ax = df_pivot.plot(
+        kind='barh', 
+        figsize=(fig_width, fig_height),
+        color=donor_colors,
+        edgecolor='none'
+    )
+    plt.xlabel('Number of Cells')
+    plt.ylabel('')
+    plt.title('Number of Cells per Donor in Each Tissue')
+    plt.legend(
+        title=donor_key,
+        bbox_to_anchor=(1.05, 1),
+        loc='upper left',
+        labels=donor_ids
+    )
+    
+    plt.tight_layout(rect=[0, 0, 0.85, 1])
+    outpng = os.path.join(outdir, f'ATAC_cellCount_perDonorPerTissue.{suffix}.{runtag}.png')
+    plt.savefig(outpng, dpi=300)
+    outpdf = os.path.join(outdir, f'ATAC_cellCount_perDonorPerTissue.{suffix}.{runtag}.pdf')
+    plt.savefig(outpdf)
+    plt.close()
+    print(f"Figure saved as:\n  {outpng}\n  {outpdf}")
