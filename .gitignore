@@ -7,4 +7,4 @@ ATAC_QC/test_output/ATAC.Muscle_Quadriceps.demo_run.h5ads
 *.tsv.gz
 *.gtf
 multi-Omic_workflow/ATAC_QC/test_data/fragmemt_files/*/fragments.*tsv.gz
-
+*test*.ipynb
