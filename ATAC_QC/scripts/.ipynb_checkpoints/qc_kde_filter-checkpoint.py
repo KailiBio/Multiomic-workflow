@@ -2,7 +2,8 @@
 
 """
 Author: Kaili Fan
-Cell filtering and KDE plots for snATAC-seq samples.
+Description:
+    Cell filtering and KDE plots for snATAC-seq samples.
 
 Usage:
     python scripts/run_atac_qc_step1_filter_and_kde.py config/ATAC_config.yaml runtag
@@ -37,8 +38,14 @@ def main(config_path, runtag):
     # Load sample info and QC cutoffs
     df = pd.read_csv(config['paths']['sample_metadata'], sep='\t', header=None,
                      names=["rnaID", "atacID", "species", "donorID", "ageGroup", "gender", "tissue"])
-    df_cutoff_all = pd.read_excel(config['qc']['atac_qc_cutoff_table'],
-                                  sheet_name=config['qc']['sheet_name'], engine='openpyxl')
+
+    # Load qc cutoff table
+    if config['qc']['atac_qc_cutoff_table'].endswith('.xlsx') or config['qc']['atac_qc_cutoff_table'].endswith('.xls'):
+        df_cutoff_all = pd.read_excel(config['qc']['atac_qc_cutoff_table'],
+                                      sheet_name=config['qc']['sheet_name'], engine='openpyxl')
+    else:
+        df_cutoff_all = pd.read_csv(config['qc']['atac_qc_cutoff_table'], sep='\t')
+
     
     if tissue == "---":
         working_df = df

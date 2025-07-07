@@ -2,7 +2,8 @@
 
 """
 Author: Kaili Fan
-Process ATAC fragment files and save as h5ad (with QC and figures).
+Description:
+    Process ATAC fragment files and save as h5ad (with QC and figures).
 """
 
 import os

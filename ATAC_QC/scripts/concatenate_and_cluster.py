@@ -2,7 +2,8 @@
 
 """
 Author: Kaili Fan
-Concatenate per-sample AnnData, run joint embedding, clustering, and produce summary UMAPs.
+Description:
+    Concatenate per-sample AnnData, run joint embedding, clustering, and produce summary UMAPs.
 """
 
 import os

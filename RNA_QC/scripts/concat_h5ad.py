@@ -1,0 +1,151 @@
+#!/usr/bin/env python3
+
+"""
+Author: Kaili Fan
+Description:
+    Concatenate single-cell h5ad files for a given tissue, integrating sample- and Scrinvex-based information,
+    and return a unified h5ad file.
+"""
+
+import os
+import sys
+import argparse
+import pandas as pd
+import scanpy as sc
+import anndata as ad
+import re
+
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
+from rna_qc.utils import load_config, standardize_tissue_name
+from rna_qc.rna_plots import assign_donor_colors
+
+def load_cellranger_h5(input_dir, sampleID):
+    """Load filtered CellRanger h5 (10X Genomics) for a sample."""
+    adata_path = os.path.join(input_dir, sampleID, 'filtered_feature_bc_matrix.h5')
+    if not os.path.isfile(adata_path):
+        raise FileNotFoundError(f"[ERROR] CellRanger file not found: {adata_path}")
+    adata = sc.read_10x_h5(adata_path)
+    adata.var_names_make_unique()
+    return adata
+
+def add_scrinvex_info(scrinvex_dir, sampleID, adata):
+    """Add 'pct_exon_reads' to adata.obs from Scrinvex output if available."""
+    scrinvex_file = os.path.join(scrinvex_dir, sampleID, f'{sampleID}.scrinvex.tsv')
+    if not os.path.isfile(scrinvex_file):
+        print(f"[WARNING] Scrinvex file not found for sample {sampleID}. Skipping exon% info.")
+        return adata
+
+    scrinvex_all = pd.read_csv(scrinvex_file, sep='\t')
+    scrinvex_count = scrinvex_all.groupby("barcode").sum(numeric_only=True)
+    denom = scrinvex_count[['introns', 'junctions', 'exons']].sum(axis=1).replace(0, pd.NA)
+    scrinvex_count['pct_exon_reads'] = (scrinvex_count['exons'] / denom * 100).round(2)
+    adata.obs['pct_exon_reads'] = scrinvex_count['pct_exon_reads'].reindex(adata.obs.index)
+    return adata
+
+def extract_batch_number(sampleID):
+    """Extract batch number from sampleID with pattern 'EXP<digits>'; returns 'unknown' if not found."""
+    match = re.search(r'EXP(\d+)', str(sampleID))
+    return match.group(1) if match else "unknown"
+    
+def reindex_obs_names(adata, donorID, batch_number):
+    """Update cell barcodes for global uniqueness as donorID_batch_cellbarcode."""
+    adata.obs['donorID'] = donorID
+    adata.obs['cellbarcode'] = adata.obs_names
+    adata.obs_names = [f"{donorID}_{batch_number}_{bc}" for bc in adata.obs_names]
+
+def run_per_tissue(working_df, tissue, input_dir, scrinvex_dir, output_h5ad_dir, donor_colors, tissue_color):
+    """Process all samples for a single tissue and concatenate h5ad files."""
+    tissue_std = standardize_tissue_name(tissue)
+    anndata_list = []
+    tissue_rows = working_df[working_df['tissue'] == tissue]
+
+    # addign all colors
+    all_donor_colors = assign_donor_colors(tissue_rows, donor_colors, key='donorID')
+
+    for _, row in tissue_rows.iterrows():
+        donorID = row["donorID"]
+        sampleID = row["rnaID"]
+        batch_number = extract_batch_number(sampleID)
+
+        print(f"[INFO] Processing sample: {sampleID} (donor: {donorID}, batch: {batch_number})")
+        try:
+            adata = load_cellranger_h5(input_dir, sampleID)
+        except Exception as e:
+            print(f"[ERROR] Failed to load 10X data for {sampleID}: {e}")
+            continue
+
+        if scrinvex_dir:
+            adata = add_scrinvex_info(scrinvex_dir, sampleID, adata)
+        else:
+            print("[WARNING] No Scrinvex directory provided. Skipping exon% info.")
+
+        reindex_obs_names(adata, donorID, batch_number)
+
+        # add color
+        adata.uns['donorID_colors'] = all_donor_colors[donorID]
+        adata.uns['tissue_colors'] = tissue_color
+        print(f"donor color for {donorID} is {all_donor_colors[donorID]}")
+        print(f"tissue color for {tissue} is {tissue_color}")
+        
+        anndata_list.append(adata)
+
+    if not anndata_list:
+        print(f"[ERROR] No AnnData objects for tissue '{tissue_std}'. Skipping concatenation.")
+        return
+
+    print(f"[INFO] Concatenating AnnData objects for tissue {tissue_std}...")
+    concatenated_adata = ad.concat(anndata_list, join='inner', label=None, index_unique=None)
+    concatenated_adata.obs['tissue'] = tissue
+    concatenated_adata.var = anndata_list[0].var.copy()
+
+    out_dir = os.path.join(output_h5ad_dir, tissue_std)
+    os.makedirs(out_dir, exist_ok=True)
+    out_path = os.path.join(out_dir, f'{tissue_std}_GEX.raw.h5ad')
+    print(f"[INFO] Saving concatenated AnnData to: {out_path}")
+    concatenated_adata.write_h5ad(out_path)
+    
+    print("[INFO] Tissue-level concatenation complete.\n")
+
+def main(config_path):
+    config = load_config(config_path)
+
+    input_dir = config['paths']['input_dir']
+    scrinvex_dir = config['paths'].get('scrinvex_dir', None)
+    output_h5ad_dir = config['paths']['output_h5ad_dir']
+    sample_metadata = config['paths']['sample_metadata']
+
+    tissue = config['params']['tissue']
+
+    donor_colors = config['color'].get("donor_colors")
+    tissue_colors = config['color'].get("tissue_colors")
+
+
+    df = pd.read_csv(sample_metadata, sep='\t', header=None,
+                     names=["rnaID", "atacID", "species", "donorID", "ageGroup", "gender", "tissue"])
+
+    if tissue == "---":  # Multiple tissues mode
+        tissues = sorted(df["tissue"].unique())
+        print(f"[INFO] Running analysis for MULTIPLE tissues: {tissues}")
+
+        for idx, tissue_name in enumerate(tissues, 1):
+            print(f"\n============== Processing tissue: {tissue_name} ({idx}/{len(tissues)}) ==============")
+            tissue_col = tissue_colors.get(tissue_name, "#bdbdbd") if tissue_colors else "#bdbdbd"
+            try:
+                run_per_tissue(df, tissue_name, input_dir, scrinvex_dir, output_h5ad_dir, donor_colors, tissue_col)
+            except Exception as e:
+                print(f"[ERROR] Encountered error for tissue {tissue_name}: {e}")
+    else:
+        print(f"\n============== Processing tissue: {tissue} ==============")
+        tissue_col = tissue_colors.get(tissue, "#bdbdbd") if tissue_colors else "#bdbdbd"
+        try:
+            run_per_tissue(df, tissue, input_dir, scrinvex_dir, output_h5ad_dir, donor_colors, tissue_col)
+        except Exception as e:
+            print(f"[ERROR] Encountered error for tissue {tissue}: {e}")
+
+if __name__ == "__main__":
+    parser = argparse.ArgumentParser(
+        description="Concatenate h5ad files across donors/samples for one tissue."
+    )
+    parser.add_argument("config", help="YAML config file")
+    args = parser.parse_args()
+    main(args.config)

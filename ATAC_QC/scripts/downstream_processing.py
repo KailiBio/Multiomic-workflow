@@ -2,7 +2,8 @@
 
 """
 Author: Kaili Fan
-Final clustering, doublet removal, and QC figure/statistics for snATAC-seq samples.
+Description:
+    Final clustering, doublet removal, and QC figure/statistics for snATAC-seq samples.
 
 Usage:
     python scripts/downstream_processing.py config/ATAC_config.yaml runtag

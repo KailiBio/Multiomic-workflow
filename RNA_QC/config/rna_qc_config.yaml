@@ -1,27 +1,18 @@
 paths:
-  workdir: /data/fankaili/scripts/multi-Omic_workflow/ATAC_QC/test_output/
-  fragment_dir: /data/fankaili/scripts/multi-Omic_workflow/ATAC_QC/test_data/fragmemt_files/
-  output_h5ad_dir: /data/fankaili/scripts/multi-Omic_workflow/ATAC_QC/test_output/atac_h5ad/
-  output_figures_dir: /data/fankaili/scripts/multi-Omic_workflow/ATAC_QC/test_output/atac_figures/
+  workdir: /data/fankaili/scripts/multi-Omic_workflow/RNA_QC/test_output/
+  input_dir: /data/fankaili/scripts/multi-Omic_workflow/RNA_QC/test_data/cellranger/
+  scrinvex_dir: /data/fankaili/scripts/multi-Omic_workflow/RNA_QC/test_data/scrinvex/
+  output_h5ad_dir: /data/fankaili/scripts/multi-Omic_workflow/RNA_QC/test_output/rna_h5ad/
+  output_figures_dir: /data/fankaili/scripts/multi-Omic_workflow/RNA_QC/test_output/rna_figures/
   sample_metadata: /data/fankaili/scripts/multi-Omic_workflow/ATAC_QC/test_data/test_metatable.txt
-
-references:
-  barcode_whitelist: /data/fankaili/scripts/multi-Omic_workflow/ATAC_QC/ref/10XMultiOmic_737K_arc-v1.txt
-  gencode_gtf: /data/fankaili/scripts/multi-Omic_workflow/ATAC_QC/ref/gencode.v47.primary_assembly.annotation.gtf
-
+  
 params:
   tissue: Muscle - Quadriceps
   suffix: Muscle_Quadriceps
-  n_threads: 16
-  min_fragments: 100
-  genomic_bin_size: 500
 
 qc:
-    atac_qc_cutoff_table: /data/fankaili/scripts/multi-Omic_workflow/ATAC_QC/test_data/test_QC_cutoffs.xlsx
+    rna_qc_cutoff_table: /data/fankaili/scripts/multi-Omic_workflow/RNA_QC/test_data/test_QC_cutoffs.xlsx
     sheet_name: test
-
-process:
-    n_features: 250000
 
 color:
     tissue_colors: 

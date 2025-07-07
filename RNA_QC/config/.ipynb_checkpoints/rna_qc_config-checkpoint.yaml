@@ -1,0 +1,60 @@
+paths:
+  workdir: /data/fankaili/scripts/multi-Omic_workflow/RNA_QC/test_output/
+  input_dir: /data/fankaili/scripts/multi-Omic_workflow/RNA_QC/test_data/cellranger/
+  scrinvex_dir: /data/fankaili/scripts/multi-Omic_workflow/RNA_QC/test_data/scrinvex/
+  output_h5ad_dir: /data/fankaili/scripts/multi-Omic_workflow/RNA_QC/test_output/rna_h5ad/
+  output_figures_dir: /data/fankaili/scripts/multi-Omic_workflow/RNA_QC/test_output/rna_figures/
+  sample_metadata: /data/fankaili/scripts/multi-Omic_workflow/ATAC_QC/test_data/test_metatable.txt
+  
+params:
+  tissue: Muscle - Quadriceps
+  suffix: Muscle_Quadriceps
+  n_threads: 16
+
+qc:
+    rna_qc_cutoff_table: /data/fankaili/scripts/multi-Omic_workflow/RNA_QC/test_data/test_QC_cutoffs.xlsx
+    sheet_name: test
+
+annotation:
+    marker_gene_file: /data/fankaili/scripts/multi-Omic_workflow/RNA_QC/test_data/test_marker_gene.xlsx
+    sheet_name: test
+
+color:
+    tissue_colors: 
+        "Kidney": "#a32015"
+        "Liver - Left Lobe": "#AABB66"
+        "Lung - Left Cranial Lobe": "#99FF00"
+        "Muscle - Gastrocnemius": "#9191ff"
+        "Muscle - Quadriceps": "#5e5eff"
+        "Thyroid": "#006600"
+        "Adrenal Gland": "#33DD33"
+        "Adipose - Subcutaneous": "#1d8c46"
+    donor_colors:
+        DGTEX002: "#E73A2F"
+        DGTEX031: "#65c4ff"
+        DGTEX008: "#FBB30B"
+        DGTEX047: "#2E9E49"
+        DGTEX001: "#397AF2"
+        DGTEX027: "#8e02da"
+
+my_color_palette:
+  - "#c50909"
+  - "#ffa806"
+  - "#fbe95d"
+  - "#16b900"
+  - "#65c4ff"
+  - "#0e3aa9"
+  - "#8e02da"
+  - "#795548"
+  - "#9E9E9E"
+  - "#ff5b13"
+  - "#154f11"
+  - "#8bc34a"
+  - "#ff37a6"
+  - "#0062ff"
+  - "#00bfae"
+  - "#ea9c28"
+  - "#6e7f27"
+  - "#43e8e6"
+  - "#a4ff5a"
+  - "#e72c80"

@@ -2,7 +2,8 @@
 
 """
 Author: Kaili Fan
-Script to perform doublet detection for snATAC-seq samples, with summary plots.
+Description:
+    Script to perform doublet detection for snATAC-seq samples, with summary plots.
 
 Usage:
     python scripts/processing_doublet_detection.py config/ATAC_config.yaml runtag

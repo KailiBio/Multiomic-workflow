@@ -1,0 +1,14 @@
+paths:
+  workdir: /data/fankaili/scripts/multi-Omic_workflow/cell_annotation/test_output/
+  input_h5ad_dir: /data/fankaili/scripts/multi-Omic_workflow/RNA_QC/test_output/rna_h5ad/Muscle_Quadriceps/Muscle_Quadriceps_GEX.filtered.processed.demo_run.h5ad
+  output_h5ad_dir: /data/fankaili/scripts/multi-Omic_workflow/cell_annotation/test_output/h5ad/
+  output_figures_dir: /data/fankaili/scripts/multi-Omic_workflow/cell_annotation/test_output/figures/
+  sample_metadata: /data/fankaili/scripts/multi-Omic_workflow/ATAC_QC/test_data/test_metatable.txt
+  
+params:
+  tissue: Muscle - Quadriceps
+  suffix: Muscle_Quadriceps
+
+annotation:
+    marker_gene_file: /data/fankaili/scripts/multi-Omic_workflow/cell_annotation/test_data/test_marker_gene.xlsx
+    sheet_name: test

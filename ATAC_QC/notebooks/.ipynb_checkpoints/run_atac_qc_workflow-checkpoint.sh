@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # Author: Kaili Fan
-# Description: Run the full ATAC_QC workflow, with parallel PCR chimera removal,
+# Description: Run the full ATAC QC workflow, with parallel PCR chimera removal,
 # followed by all sequential ATAC processing steps.
 #
 # Usage: bash run_atac_qc_workflow.sh [runtag] [nthread]
@@ -49,4 +49,4 @@ python scripts/downstream_processing.py "$config" "$runtag"
 printf "\nStep 6: Integrate samples and joint UMAP visualization\n"
 python scripts/concatenate_and_cluster.py "$config" "$runtag"
 
-printf "\nAll ATAC_QC workflow steps completed. Cheers!\n"
+printf "\nAll ATAC QC workflow steps completed. Cheers!\n"
