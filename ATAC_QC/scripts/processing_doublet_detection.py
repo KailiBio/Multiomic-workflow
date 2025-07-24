@@ -35,7 +35,6 @@ def main(config_path, runtag):
     os.chdir(workdir)
 
     tissue = config['params']['tissue']
-    suffix = config['params']['suffix']
     
     n_threads = config['params'].get('n_threads', 16)
 
@@ -88,14 +87,14 @@ def main(config_path, runtag):
         probability_midpoint = ((doublet_probability.max() + doublet_probability.min()) / 2).round(1)
         plot_doublet_score_probability(
             adata.obs['doublet_score'], doublet_probability, probability_midpoint,
-            tissue_std, fileID, outdir=out_fig_dir, runtag=runtag, show=False
+            tissue_std, fileID, outdir=outdir, runtag=runtag, show=False
         )
         print(f"Default doublet probability cutoff is {probability_midpoint}")
         
         # 5. save
-        proc_h5ad_path = os.path.join(output_h5ad_dir, f"{fileID}.processed.{runtag}.h5ad")
-        adata.write(proc_h5ad_path)
-        print(f"[DONE] wrote {os.path.relpath(proc_h5ad_path)}")
+        h5ad_out_path = os.path.join(output_h5ad_dir, f"{fileID}.processed.{runtag}.h5ad")
+        adata.write(h5ad_out_path)
+        print(f"[DONE] wrote {os.path.relpath(h5ad_out_path)}")
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="ATAC doublet detection and visualization.")

@@ -2,7 +2,7 @@
 
 """
 Author: Kaili Fan
-Annotate ATAC cells via GLUE integrating scRNA and scATAC data.
+Description: Annotate ATAC cells via GLUE integrating scRNA and scATAC data.
 """
 
 import os

@@ -45,7 +45,6 @@ def main(config_path, runtag):
                                       sheet_name=config['qc']['sheet_name'], engine='openpyxl')
     else:
         df_cutoff_all = pd.read_csv(qc_cutoff_table, sep='\t')
-
     
     if tissue == "---":
         working_df = df

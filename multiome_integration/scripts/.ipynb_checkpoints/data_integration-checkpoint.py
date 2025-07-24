@@ -2,7 +2,7 @@
 
 """
 Author: Kaili Fan
-Finalize MultiVI multiome integration; propagate metadata and layers, add imputed signal, split output.
+Description: Finalize MultiVI multiome integration; propagate metadata and layers, add imputed signal, split output.
 """
 
 import os

@@ -118,7 +118,7 @@ def save_merged_anndata(adataset, h5ad_dir, suffix, runtag, sample_tissue_dict,
     print(f"Wrote merged h5ad: {merged_h5ad_path}")
     return adata_merged, all_colors
 
-def run_per_tissue(tissue, working_df, output_h5ad_dir, runtag, outdir, gencode_gtf, n_threads, n_features_merge):
+def run_per_tissue(tissue, working_df, output_h5ad_dir, config, runtag, outdir, gencode_gtf, n_threads, n_features_merge):
     """
     Run joint AnnData analysis workflow for a single tissue.
     """
@@ -197,7 +197,7 @@ def main(config_path, runtag):
             
             try:
                 working_df = df[df["tissue"] == tissue_name]
-                run_per_tissue(tissue, working_df, output_h5ad_dir, runtag, outdir, gencode_gtf, n_threads, n_features_merge)
+                run_per_tissue(tissue, working_df, output_h5ad_dir, config, runtag, outdir, gencode_gtf, n_threads, n_features_merge)
             except Exception as e:
                 print(f"[ERROR] Concatenating & Clustering failed for {tissue_name}: {e}")
     else:
@@ -205,7 +205,7 @@ def main(config_path, runtag):
         
         try:
             working_df = df[df["tissue"] == tissue]
-            run_per_tissue(tissue, working_df, output_h5ad_dir, runtag, outdir, gencode_gtf, n_threads, n_features_merge)
+            run_per_tissue(tissue, working_df, output_h5ad_dir, config, runtag, outdir, gencode_gtf, n_threads, n_features_merge)
         except Exception as e:
             print(f"[ERROR] Concatenating & Clustering failed for {tissue}: {e}")
      

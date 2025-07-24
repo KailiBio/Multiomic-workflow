@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 Author: Kaili Fan
-Joint scRNA/scATAC imputation with MultiVI
+Description: Joint scRNA/scATAC imputation with MultiVI
 """
 
 import os

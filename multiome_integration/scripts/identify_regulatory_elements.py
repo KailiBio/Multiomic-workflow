@@ -2,7 +2,7 @@
 
 """
 Author: Kaili Fan
-Identify consensus ATAC peaks (regulatory elements) from scATAC-seq data by cell type, with summary plots.
+Description: Identify consensus ATAC peaks (regulatory elements) from scATAC-seq data by cell type, with summary plots.
 """
 
 import os

@@ -2,11 +2,7 @@
 
 """
 Author: Kaili Fan
-Description:
-    Final clustering, doublet removal, and QC figure/statistics for snATAC-seq samples.
-
-Usage:
-    python scripts/downstream_processing.py config/ATAC_config.yaml runtag
+Description: Final clustering, doublet removal, and QC figure/statistics for snATAC-seq samples.
 """
 
 import os
@@ -54,49 +50,62 @@ def summarize_and_plot_cell_counts(sample_list, h5ad_dir, fig_dir, runtag, suffi
     
 def main(config_path, runtag):
     config = load_config(config_path)
+    
     workdir = config['paths']['workdir']
-    h5ad_dir = config['paths']['output_h5ad_dir']
-    fig_dir = os.path.join(config['paths']['output_figures_dir'], runtag)
-    os.makedirs(fig_dir, exist_ok=True)
+    output_h5ad_dir = config['paths']['output_h5ad_dir']
+    outdir = os.path.join(workdir, f'doublet_filter_processing.{runtag}')
+    os.makedirs(outdir, exist_ok=True)
     os.chdir(workdir)
 
     tissue = config['params']['tissue']
     suffix = config['params']['suffix']
+
     n_threads = config['params'].get('n_threads', 16)
 
-    # Load sample info and cutoffs
-    df = pd.read_csv(config['paths']['sample_metadata'], sep='\t', header=None,
+    # Load sample info
+    sample_metadata = config['paths']['sample_metadata']
+    df = pd.read_csv(sample_metadata, sep='\t', header=None,
                      names=["rnaID", "atacID", "species", "donorID", "ageGroup", "gender", "tissue"])
-    df_cutoff_all = pd.read_excel(config['qc']['atac_qc_cutoff_table'], 
-                                  sheet_name=config['qc']['sheet_name'], engine='openpyxl')
+
+    # Load qc cutoff table
+    qc_cutoff_table = config['qc']['atac_qc_cutoff_table']
+    if qc_cutoff_table.endswith('.xlsx') or qc_cutoff_table.endswith('.xls'):
+        df_cutoff_all = pd.read_excel(qc_cutoff_table,
+                                      sheet_name=config['qc']['sheet_name'], engine='openpyxl')
+    else:
+        df_cutoff_all = pd.read_csv(qc_cutoff_table, sep='\t')
     
     if tissue == "---":
         working_df = df
-        df_cutoff = df_cutoff_all
+        df_cutoff = df_cutoff_all 
     else:
         working_df = df[df["tissue"] == tissue]
         df_cutoff = df_cutoff_all[df_cutoff_all['Tissue'] == tissue]
         
-    sample_list = working_df['atacID'].unique().tolist()
-    sample_tissue_dict = dict(zip(working_df['atacID'], working_df['tissue']))
-    df_cutoff.set_index('atacID', inplace=True)
     tissues = sorted(working_df["tissue"].unique())
     print(f"Working tissue: {', '.join(tissues)}")
+    sample_list = working_df['atacID'].unique()
+    print(f"Samples: {list(sample_list)}")
+
+    df_cutoff.set_index('atacID', inplace=True)
+    sample_tissue_dict = dict(zip(working_df['atacID'], working_df['tissue']))
 
     # Remove doublets, embedding, clustering, and save back to disk
     for i, fileID in enumerate(sample_list, 1):
-        print(f"[{i}/{len(sample_list)}] Processing {fileID}...")
+        print(f"\n========== Processing {fileID} ({i}/{len(sample_list)}) ==========")
         
         tissue_std = standardize_tissue_name(sample_tissue_dict[fileID])
-        h5ad_path = os.path.join(h5ad_dir, f'{fileID}.processed.{runtag}.h5ad')
-
+          
+        h5ad_path = os.path.join(output_h5ad_dir, f'{fileID}.processed.{runtag}.h5ad')
         if not os.path.exists(h5ad_path):
-            print(f"  [SKIP] {fileID}: {h5ad_path} not found.")
+            print(f"[ERROR] No h5ad for {fileID} at {h5ad_path}.")
             continue
 
+        print("[INFO] Loading anndata object...")
         adata = ad.read_h5ad(h5ad_path)
 
         # Remove doublets
+        print("[INFO] Filter doublet...")
         doublet_cutoff = df_cutoff.loc[fileID, 'doublet_cutoff']
         df_doublet = adata.obs[['doublet_score', 'doublet_probability']].copy()
         if str(df_cutoff.loc[fileID, 'use_double_probability_filter']) == 'Yes':
@@ -112,23 +121,26 @@ def main(config_path, runtag):
         df_doublet.to_csv(f'ATAC_doublet_results.{fileID}.tsv', sep='\t', index=True, header=True, 
                           index_label="cell_barcode")
 
+        
         # Dimension reduction and clustering
+        print("[INFO] Dimensional reduction and clustering...")
         snap.tl.spectral(adata)
         snap.tl.umap(adata, random_state=0)
         snap.pp.knn(adata)
         snap.tl.leiden(adata)
 
         # Save updated AnnData
-        h5ad_out_path = os.path.join(h5ad_dir, f'{fileID}.final.{runtag}.h5ad')
-        adata.write(h5ad_out_path, compression="gzip")
+        h5ad_out_path = os.path.join(output_h5ad_dir, f'{fileID}.final.{runtag}.h5ad')
+        adata.write(h5ad_out_path)
+        print(f"[DONE] wrote {os.path.relpath(h5ad_out_path)}")
 
     # Summarize and plot cell stats
-    print("Generating summary table and histogram for filtered cell counts per sample...")
-    summarize_and_plot_cell_counts(sample_list, h5ad_dir, fig_dir, runtag, suffix)
+    print("[INFO] Generating summary table and histogram for filtered cell counts per sample...")
+    summarize_and_plot_cell_counts(sample_list, output_h5ad_dir, outdir, runtag, suffix)
 
-    print("Generating per-sample UMAP cluster plots...")
-    plot_per_sample_umap_clusters(sample_ids=sample_list, h5ad_dir=h5ad_dir, run_tag=runtag,
-                                  suffix=suffix, output_dir=fig_dir)
+    print("[INFO] Generating per-sample UMAP cluster plots...")
+    plot_per_sample_umap_clusters(sample_ids=sample_list, h5ad_dir=output_h5ad_dir, run_tag=runtag,
+                                  suffix=suffix, output_dir=outdir)
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="ATAC downstream processing: doublet removal, clustering & statistics.")
