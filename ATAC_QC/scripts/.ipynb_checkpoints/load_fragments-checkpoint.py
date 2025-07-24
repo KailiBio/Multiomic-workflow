@@ -95,16 +95,11 @@ def process_fragments(row, config, barcode_dic_rna, overwrite=False):
     print("[INFO] Calculating TSS enrichment score...")
     snap.metrics.tsse(data, gene_anno=gencode_gtf, n_jobs = n_threads)
 
-    print(type(data.obs))
-    print(data.obs.shape)
-
     print(f"[INFO] Adding sampleID: {atacID} to anndata object")
-    print(atacID, type(atacID))
-    data.obs['sampleID'] = atacID
+    data.obs['sampleID'] = [str(atacID) for bc in data.obs_names]
     
     print(f"[INFO] Adding tissue: {tissue_std} to anndata object")
-    print(tissue_std, type(tissue_std))
-    data.obs['tissue'] = tissue_std
+    data.obs['sampleID'] = [tissue_std for bc in data.obs_names]
     
     data.close()
     print(f"Saved raw .h5ad to {output_h5ad}")

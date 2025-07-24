@@ -45,7 +45,7 @@ def Process_DEG(adata, tissue, tissue_std, valid_marker_genes, outdir):
     sc.tl.rank_genes_groups(adata, groupby="leiden", method="t-test")
     sc.pl.rank_genes_groups(adata, n_genes=25, sharey=False, show=False, save=f'.top25DEG.{tissue_std}.png')
     sc.pl.rank_genes_groups_dotplot(adata, groupby="leiden", standard_scale="var", n_genes=5,
-                                    show=False, save=f'.top5DEG.{tissue_std}.png')
+                                    show=False, save=f'top5DEG.{tissue_std}.png')
 
     # save top DEGs
     result = adata.uns['rank_genes_groups']

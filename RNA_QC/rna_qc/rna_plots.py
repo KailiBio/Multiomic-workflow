@@ -19,17 +19,22 @@ import scanpy as sc
 
 def assign_donor_colors(df, donor_col, key='donorID'):
     """
-    Ensures colors for every donor in the summary, filling in extras as needed.
+    Returns a {donor: color} dict for only donors in df[key].unique().
+    For donors not in donor_col, assigns extra colors from a colormap.
     """
-    donors_in_data = df[key].unique()
+    donors_in_data = list(df[key].unique())
+    color_map = dict(donor_col) 
     unknown_donors = [d for d in donors_in_data if d not in donor_col]
+
     if unknown_donors:
         colormap = plt.cm.get_cmap('tab20', len(unknown_donors))
         hex_colormap = [mcolors.rgb2hex(colormap(i)) for i in range(colormap.N)]
-        extra = {donor: hex_colormap[i] for i, donor in enumerate(unknown_donors)}
-        return {**donor_col, **extra}
-    return dict(donor_col)
+        for i, donor in enumerate(unknown_donors):
+            color_map[donor] = hex_colormap[i]
 
+    # Only keep donors present in df
+    return {donor: color_map[donor] for donor in donors_in_data}
+    
 def move_figures_to_newdir(output_figures_dir, old, new):
     old_path = os.path.join(output_figures_dir, old)
     new_path = os.path.join(output_figures_dir, new)
