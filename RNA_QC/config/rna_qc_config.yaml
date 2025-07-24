@@ -3,7 +3,6 @@ paths:
   input_dir: /data/fankaili/scripts/multi-Omic_workflow/RNA_QC/test_data/cellranger/
   scrinvex_dir: /data/fankaili/scripts/multi-Omic_workflow/RNA_QC/test_data/scrinvex/
   output_h5ad_dir: /data/fankaili/scripts/multi-Omic_workflow/RNA_QC/test_output/rna_h5ad/
-  output_figures_dir: /data/fankaili/scripts/multi-Omic_workflow/RNA_QC/test_output/rna_figures/
   sample_metadata: /data/fankaili/scripts/multi-Omic_workflow/ATAC_QC/test_data/test_metatable.txt
   
 params:

@@ -2,7 +2,6 @@ paths:
   workdir: /data/fankaili/scripts/multi-Omic_workflow/ATAC_QC/test_output/
   fragment_dir: /data/fankaili/scripts/multi-Omic_workflow/ATAC_QC/test_data/fragmemt_files/
   output_h5ad_dir: /data/fankaili/scripts/multi-Omic_workflow/ATAC_QC/test_output/atac_h5ad/
-  output_figures_dir: /data/fankaili/scripts/multi-Omic_workflow/ATAC_QC/test_output/atac_figures/
   sample_metadata: /data/fankaili/scripts/multi-Omic_workflow/ATAC_QC/test_data/test_metatable.txt
 
 references:

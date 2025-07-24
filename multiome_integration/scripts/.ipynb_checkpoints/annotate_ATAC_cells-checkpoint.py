@@ -20,7 +20,7 @@ import scglue
 import snapatac2 as snap
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
-from multiome_integration.utils import load_config, standardize_tissue_name
+from multiome_integration.utils import load_config, standardize_tissue_name, print_elapsed_time
 from multiome_integration.integration_plots import plot_multiome_celltype_count_bar
 
 def prepare_rna(rna, gtf, output_h5ad_dir, suffix, celltype_col):
@@ -50,7 +50,7 @@ def prepare_rna(rna, gtf, output_h5ad_dir, suffix, celltype_col):
         print(f"[INFO] Dropping artif_dupl column from var ...")
         rna.var.drop(columns=['artif_dupl'], inplace=True)
     out_path = os.path.join(output_h5ad_dir, f"RNA.beforeGLUE.{suffix}.h5ad")
-    rna.write(out_path, compression="gzip")
+    rna.write(out_path)
     print(f"[INFO] Wrote prepared RNA AnnData: {out_path}")
     return rna
 
@@ -75,7 +75,7 @@ def prepare_atac(atac_all, gtf, output_h5ad_dir, suffix, n_features=50000):
     atac.var["chromEnd"] = split.map(lambda x: x[2]).astype(int)
 
     out_path = os.path.join(output_h5ad_dir, f"ATAC.beforeGLUE.{suffix}.h5ad")
-    atac.write(out_path, compression="gzip")
+    atac.write(out_path)
     print(f"[INFO] Wrote prepared ATAC AnnData: {out_path}")
     return atac
 
@@ -147,7 +147,7 @@ def annotate_and_merge(rna, atac, glue, output_h5ad_dir, tissue_std):
     sc.tl.umap(rna)
     print("  [RNA] Saving UMAP and AnnData ...")
     sc.pl.umap(rna, color=["celltype_glue"], save=f"_GLUEembed.RNA.{tissue_std}.png")
-    rna.write(os.path.join(output_h5ad_dir, f'RNA.GLUE.{tissue_std}.h5ad'), compression="gzip")
+    rna.write(os.path.join(output_h5ad_dir, f'RNA.GLUE.{tissue_std}.h5ad'))
 
     # ATAC
     print("  [ATAC] Encoding data, running neighbors/UMAP/leiden ...")
@@ -164,7 +164,7 @@ def annotate_and_merge(rna, atac, glue, output_h5ad_dir, tissue_std):
     sc.tl.umap(atac)
     print("  [ATAC] Saving UMAP and AnnData ...")
     sc.pl.umap(atac, color=["celltype_glue"], save=f"_GLUEembed.ATAC.{tissue_std}.png")
-    atac.write(os.path.join(output_h5ad_dir, f'ATAC.GLUE.{tissue_std}.h5ad'), compression="gzip")
+    atac.write(os.path.join(output_h5ad_dir, f'ATAC.GLUE.{tissue_std}.h5ad'))
 
     # Merged AnnData
     print("  [MERGE] Concatenating and writing AnnData, embedding UMAP ...")
@@ -173,26 +173,21 @@ def annotate_and_merge(rna, atac, glue, output_h5ad_dir, tissue_std):
     sc.tl.umap(adata_glue)
     sc.pl.umap(adata_glue, color=["celltype_glue", "modality"], wspace=0.95, ncols=1, 
                save=f"_GLUEembed.merged.{tissue_std}.png")
-    adata_glue.write(os.path.join(output_h5ad_dir, f'Multiome_merged.GLUE.{tissue_std}.h5ad'), compression="gzip")
+    adata_glue.write(os.path.join(output_h5ad_dir, f'Multiome_merged.GLUE.{tissue_std}.h5ad'))
 
     print(f"[INFO] Annotation and merging completed for '{tissue_std}'.")
 
 def run_per_tissue(
-    tissue,
+    tissue_std, rna, atac,
     output_h5ad_dir,
     glue_output_dir,
     gtf,
     celltype_col,
     n_features=50000,
 ):
-    tissue_std = standardize_tissue_name(tissue)
-    print(f"\n============== [GLUE] Processing tissue: {tissue} ({tissue_std}) ==============")
+    print(f"\n============== [GLUE] Processing tissue: {tissue_std} ==============")
     # Load filtered AnnData for the current tissue
     print(f"[INFO] Loading RNA and ATAC for tissue: {tissue_std}")
-    rna_path = os.path.join(output_h5ad_dir, f'RNA_removeDoublet.{tissue_std}.h5ad')
-    atac_path = os.path.join(output_h5ad_dir, f'ATAC_removeDoublet.{tissue_std}.h5ad')
-    rna = ad.read_h5ad(rna_path)
-    atac = ad.read_h5ad(atac_path)
 
     # Prepare
     rna_prepared = prepare_rna(rna, gtf, output_h5ad_dir, tissue_std, celltype_col)
@@ -202,7 +197,7 @@ def run_per_tissue(
     glue = train_glue(rna_prepared, atac_prepared, glue_output_dir, tissue_std)
     annotate_and_merge(rna_prepared, atac_prepared, glue, output_h5ad_dir, tissue_std)
     plot_multiome_celltype_count_bar(rna_prepared, atac_prepared, os.path.join(glue_output_dir, 'figures'), tissue_std)
-    print(f"[INFO] Finished GLUE for tissue '{tissue}'.")
+    print(f"[INFO] Finished GLUE for tissue '{tissue_std}'.")
 
 def main(config_path):
     config = load_config(config_path)
@@ -223,20 +218,44 @@ def main(config_path):
         working_df = pd.read_csv(config['paths']['sample_metadata'], sep='\t', header=None,
                      names=["rnaID", "atacID", "species", "donorID", "ageGroup", "gender", "tissue"])
         tissues = sorted(working_df["tissue"].unique())
+        # for CZI
+        if "Skin - Not Sun Exposed (Suprapubic)" in tissues:
+            tissues.remove("Skin - Not Sun Exposed (Suprapubic)")
+            tissues.remove("Skin - Sun Exposed (Lower leg)")
+            tissues.append("Skin_merged")
+
         print(f"[INFO] Running analysis for MULTIPLE tissues: {tissues}")
+
+        suffix = config['params']['suffix']
+        rna_path = os.path.join(output_h5ad_dir, f'RNA_removeDoublet.{suffix}.h5ad')
+        rna = ad.read_h5ad(rna_path)
+        atac_path = os.path.join(output_h5ad_dir, f'ATAC_removeDoublet.{suffix}.h5ad')
+        atac = ad.read_h5ad(atac_path)
+    
         for idx, working_tissue in enumerate(tissues, 1):
             print(f"\n============== [Main] Processing tissue: {working_tissue} ({idx}/{len(tissues)}) ==============")
             try:
-                run_per_tissue(
-                    working_tissue, output_h5ad_dir, glue_output_dir, gtf, celltype_col, n_features=n_features
-                )
+                tissue_std = standardize_tissue_name(working_tissue)
+                
+                rna_sel = rna[rna.obs['tissue']==tissue_std,:].copy()
+                atac_sel = atac[atac.obs['tissue']==tissue_std,:].copy()
+
+                run_per_tissue(tissue_std, rna_sel, atac_sel, output_h5ad_dir, glue_output_dir, gtf, 
+                               celltype_col, n_features=n_features)
             except Exception as e:
                 print(f"[ERROR] Encountered error for tissue {working_tissue}: {str(e)}")
     else:
         print(f"\n============== [Main] Processing tissue: {tissue} ==============")
         try:
+            tissue_std = standardize_tissue_name(tissue)
+            
+            rna_path = os.path.join(output_h5ad_dir, f'RNA_removeDoublet.{tissue_std}.h5ad')
+            rna = ad.read_h5ad(rna_path)
+            atac_path = os.path.join(output_h5ad_dir, f'ATAC_removeDoublet.{tissue_std}.h5ad')
+            atac = ad.read_h5ad(atac_path)
+        
             run_per_tissue(
-                tissue, output_h5ad_dir, glue_output_dir, gtf, celltype_col, n_features=n_features
+                tissue_std, rna, atac, output_h5ad_dir, glue_output_dir, gtf, celltype_col, n_features=n_features
             )
         except Exception as e:
             print(f"[ERROR] Encountered error for tissue {tissue}: {str(e)}")

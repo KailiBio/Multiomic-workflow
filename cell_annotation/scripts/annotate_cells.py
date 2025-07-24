@@ -2,8 +2,7 @@
 
 """
 Author: Kaili Fan
-Description:
-    Identify DEG and generates dot plots, run automatic annotation with scType.
+Description: Identify DEG and generates dot plots, run automatic annotation with scType.
 """
 
 import os
@@ -16,18 +15,17 @@ import anndata as ad
 import matplotlib as mpl
 import matplotlib.pyplot as plt
 import urllib.request
-import shutil
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 from cell_annotation.utils import load_config, standardize_tissue_name, move_figures_to_newdir
 
-
 def load_marker_genes(config):
-    if config['annotation']['marker_gene_file'].endswith('.xlsx') or config['annotation']['marker_gene_file'].endswith('.xls'):
-        marker_gene_file = pd.read_excel(config['annotation']['marker_gene_file'],
+    marker_gene_table = config['annotation']['marker_gene_file']
+    if marker_gene_table.endswith('.xlsx') or marker_gene_table.endswith('.xls'):
+        marker_gene_file = pd.read_excel(marker_gene_table,
                                       sheet_name=config['annotation']['sheet_name'], engine='openpyxl')
     else:
-        marker_gene_file = pd.read_csv(config['annotation']['marker_gene_file'], sep='\t')
+        marker_gene_file = pd.read_csv(marker_gene_table, sep='\t')
         
     marker_gene_file["CellType"] = marker_gene_file["CellType"].str.rstrip()
     marker_gene_list = marker_gene_file.groupby("CellType")["Gene"].apply(list).to_dict()
@@ -43,7 +41,6 @@ def filter_marker_genes(marker_gene_list, var_names):
     
 
 def Process_DEG(adata, tissue, tissue_std, valid_marker_genes, outdir):
-    print("[INFO] Calculating DEGs")
     # rank and pick DEGs among clusters
     sc.tl.rank_genes_groups(adata, groupby="leiden", method="t-test")
     sc.pl.rank_genes_groups(adata, n_genes=25, sharey=False, show=False, save=f'.top25DEG.{tissue_std}.png')
@@ -84,7 +81,6 @@ def load_sctype():
     exec(script, globals())
 
 def run_sctype_annotation(adata, marker_gene_list):
-    print("[INFO] Running scType...")
     # Build gs2 (empty/non-immune as in ScType)
     marker_gene_list2 = {cell_type: [''] for cell_type in marker_gene_list}
     
@@ -118,35 +114,36 @@ def save_results(adata, out_dir, tissue_std):
     # Save AnnData
     os.makedirs(out_dir, exist_ok=True)
     out_h5ad = os.path.join(out_dir, f'{tissue_std}_GEX.filtered.processes.autoAnnotated.h5ad')
-    adata.write(out_h5ad, compression="gzip")
+    adata.write(out_h5ad)
     
     # Save Main annotation table
     auto_cellannotation_df = adata.obs[['leiden', 'sctype_annotation']].drop_duplicates()
     auto_cellannotation_df.to_csv(os.path.join(out_dir, f'{tissue_std}_GEX.autoAnnotation.tsv'), sep='\t', index=False)
 
 def run_per_tissue(workdir, input_h5ad_file, tissue, marker_gene_list):
+    
     tissue_std = standardize_tissue_name(tissue)
 
     # Load data
     adata_path = os.path.join(input_h5ad_file)
     if not os.path.exists(adata_path):
-        print(f"[WARN] No h5ad for tissue {tissue} at {adata_path}. Skipping.")
+        print(f"[ERROR] No h5ad for tissue {tissue} at {adata_path}.")
         return
+
+    print("[INFO] Loading anndata object...")
     adata = sc.read_h5ad(adata_path)
     
-    outdir = os.path.join(workdir, tissue_std)
-    os.makedirs(outdir, exist_ok=True)
-    
-    figdir = os.path.join(workdir, tissue_std, 'figures')
+    figdir = os.path.join(workdir, 'figures')
     os.makedirs(figdir, exist_ok=True)
-    os.chdir(os.path.join(workdir, tissue_std))
+    os.chdir(workdir)
 
     # check marker genes
     valid_marker_genes = filter_marker_genes(marker_gene_list, adata.var_names)
-    print(f"[INFO] {tissue}: {adata.shape[0]} cells, {adata.shape[1]} genes; {len(valid_marker_genes)} valid marker sets")
+    print(f"[INFO] Annotating {tissue}: {adata.shape[0]} cells, {adata.shape[1]} genes\nwith {len(valid_marker_genes)} valid marker sets")
 
     # 1. DEG and marker plots
-    Process_DEG(adata, tissue, tissue_std, valid_marker_genes, outdir)
+    print("[INFO] Calling DEGs...")
+    Process_DEG(adata, tissue, tissue_std, valid_marker_genes, figdir)
 
     # 2. Dotplot with input markers
     print("[INFO] Generate dotplot with marker genes...")
@@ -154,18 +151,19 @@ def run_per_tissue(workdir, input_h5ad_file, tissue, marker_gene_list):
                   show=False, save=f'markerGenes.{tissue_std}.png')
 
     # 3. ScType annotation
+    print("[INFO] Running scType for automatic cell annotation...")
     load_sctype()
     run_sctype_annotation(adata, marker_gene_list)
     
     sc.pl.umap(adata, color='sctype_annotation', frameon=False, show=False, save=f'.ScType_Annotation.{tissue_std}.png')
     plot_final_marker_dotplots(adata, tissue_std, valid_marker_genes)
 
-    # 4. Save h5ad and annotation table
     print("[INFO] Save files and figures...")
-    save_results(adata, outdir, tissue_std)
+    # 4. Save h5ad and annotation table
+    save_results(adata, figdir, tissue_std)
 
     # 5. Move figures
-    move_figures_to_newdir(workdir, tissue_std, old="figures", new="cell_annotation")
+    move_figures_to_newdir(workdir, old="figures", new="cell_annotation_auto")
 
     print(f"[INFO] Completed annotation step for {tissue}.")
 
@@ -174,27 +172,29 @@ def main(config_path):
     
     workdir = config['paths']['workdir']
     input_h5ad_file = config['paths']['input_h5ad_dir']
-    sample_metadata = config['paths']['sample_metadata']
-    
+    os.makedirs(workdir, exist_ok=True)
+        
     # Load marker gene file
     marker_gene_list = load_marker_genes(config)
         
     tissue = config['params']['tissue']
     
     if tissue == "---":
+        sample_metadata = config['paths']['sample_metadata']
         df = pd.read_csv(sample_metadata, sep='\t', header=None,
             names=["rnaID", "atacID", "species", "donorID", "ageGroup", "gender", "tissue"])
+        
         tissues = sorted(df['tissue'].unique())
         print(f"[INFO] Annotating MULTIPLE tissues: {tissues}")
         
         for idx, tissue_name in enumerate(tissues, 1):
-            print(f"\n----- Annotating tissue: {tissue_name} ({idx}/{len(tissues)}) -----")
+            print(f"\n========== Annotating tissue: {tissue_name} ({idx}/{len(tissues)}) ==========")
             try:
                 run_per_tissue(workdir, input_h5ad_file, tissue_name, marker_gene_list)
             except Exception as e:
                 print(f"[ERROR] Cell annotation failed for {tissue_name}: {e}")
     else:
-        print(f"[INFO] Annotating tissue: {tissue}")
+        print(f"\n========== Annotating tissue: {tissue} ==========")
         try:
             run_per_tissue(workdir, input_h5ad_file, tissue, marker_gene_list)
         except Exception as e:

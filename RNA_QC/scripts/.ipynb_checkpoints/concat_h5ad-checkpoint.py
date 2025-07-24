@@ -2,9 +2,7 @@
 
 """
 Author: Kaili Fan
-Description:
-    Concatenate single-cell h5ad files for a given tissue, integrating sample- and Scrinvex-based information,
-    and return a unified h5ad file.
+Description: Concatenate single-cell h5ad files for a given tissue, integrating sample- and Scrinvex-based information, and return a unified h5ad file.
 """
 
 import os
@@ -46,46 +44,54 @@ def extract_batch_number(sampleID):
     """Extract batch number from sampleID with pattern 'EXP<digits>'; returns 'unknown' if not found."""
     match = re.search(r'EXP(\d+)', str(sampleID))
     return match.group(1) if match else "unknown"
+
+def extract_chanel_number(sampleID):
+    """Extract chancel number from sampleID with pattern 'EXP<digits>'; returns 'unknown' if not found."""
+    match = re.search(r'-(\d+)$', str(sampleID))
+    return match.group(1) if match else "unknown"
     
-def reindex_obs_names(adata, donorID, batch_number):
-    """Update cell barcodes for global uniqueness as donorID_batch_cellbarcode."""
+def reindex_obs_names(adata, donorID, batch_number, chanel_number):
+    """Update cell barcodes for global uniqueness as donorID_batch_chancel_cellbarcode."""
     adata.obs['donorID'] = donorID
     adata.obs['cellbarcode'] = adata.obs_names
-    adata.obs_names = [f"{donorID}_{batch_number}_{bc}" for bc in adata.obs_names]
+    adata.obs_names = [f"{donorID}_{batch_number}_{chanel_number}_{bc}" for bc in adata.obs_names]
 
 def run_per_tissue(working_df, tissue, input_dir, scrinvex_dir, output_h5ad_dir, donor_colors, tissue_color):
     """Process all samples for a single tissue and concatenate h5ad files."""
     tissue_std = standardize_tissue_name(tissue)
     anndata_list = []
-    tissue_rows = working_df[working_df['tissue'] == tissue]
 
-    # addign all colors
-    all_donor_colors = assign_donor_colors(tissue_rows, donor_colors, key='donorID')
+    # get colors
+    all_donor_colors = assign_donor_colors(working_df, donor_colors, key='donorID')
 
-    for _, row in tissue_rows.iterrows():
+    for _, row in working_df.iterrows():
         donorID = row["donorID"]
         sampleID = row["rnaID"]
         batch_number = extract_batch_number(sampleID)
+        chanel_number = extract_chanel_number(sampleID)
 
-        print(f"[INFO] Processing sample: {sampleID} (donor: {donorID}, batch: {batch_number})")
+        print(f"[INFO] Processing sample: {sampleID} (donor: {donorID}, batch: {batch_number})...")
         try:
             adata = load_cellranger_h5(input_dir, sampleID)
         except Exception as e:
             print(f"[ERROR] Failed to load 10X data for {sampleID}: {e}")
             continue
 
+        print(f"[INFO] Loading Scrinvex file for exon_reads% ...")
         if scrinvex_dir:
             adata = add_scrinvex_info(scrinvex_dir, sampleID, adata)
         else:
-            print("[WARNING] No Scrinvex directory provided. Skipping exon% info.")
+            print("[WARNING] No Scrinvex directory provided. Skipping exon_reads% info.")
 
-        reindex_obs_names(adata, donorID, batch_number)
+        reindex_obs_names(adata, donorID, batch_number, chanel_number)
 
+        adata.obs['sampleID'] = sampleID
+        
         # add color
-        adata.uns['donorID_colors'] = all_donor_colors[donorID]
-        adata.uns['tissue_colors'] = tissue_color
         print(f"donor color for {donorID} is {all_donor_colors[donorID]}")
+        adata.uns['donorID_colors'] = all_donor_colors[donorID]
         print(f"tissue color for {tissue} is {tissue_color}")
+        adata.uns['tissue_colors'] = tissue_color
         
         anndata_list.append(adata)
 
@@ -95,12 +101,10 @@ def run_per_tissue(working_df, tissue, input_dir, scrinvex_dir, output_h5ad_dir,
 
     print(f"[INFO] Concatenating AnnData objects for tissue {tissue_std}...")
     concatenated_adata = ad.concat(anndata_list, join='inner', label=None, index_unique=None)
-    concatenated_adata.obs['tissue'] = tissue
+    concatenated_adata.obs['tissue'] = tissue_std
     concatenated_adata.var = anndata_list[0].var.copy()
 
-    out_dir = os.path.join(output_h5ad_dir, tissue_std)
-    os.makedirs(out_dir, exist_ok=True)
-    out_path = os.path.join(out_dir, f'{tissue_std}_GEX.raw.h5ad')
+    out_path = os.path.join(output_h5ad_dir, f'{tissue_std}_GEX.raw.h5ad')
     print(f"[INFO] Saving concatenated AnnData to: {out_path}")
     concatenated_adata.write_h5ad(out_path)
     
@@ -112,14 +116,13 @@ def main(config_path):
     input_dir = config['paths']['input_dir']
     scrinvex_dir = config['paths'].get('scrinvex_dir', None)
     output_h5ad_dir = config['paths']['output_h5ad_dir']
-    sample_metadata = config['paths']['sample_metadata']
-
+    
     tissue = config['params']['tissue']
 
     donor_colors = config['color'].get("donor_colors")
     tissue_colors = config['color'].get("tissue_colors")
 
-
+    sample_metadata = config['paths']['sample_metadata']
     df = pd.read_csv(sample_metadata, sep='\t', header=None,
                      names=["rnaID", "atacID", "species", "donorID", "ageGroup", "gender", "tissue"])
 
@@ -128,17 +131,21 @@ def main(config_path):
         print(f"[INFO] Running analysis for MULTIPLE tissues: {tissues}")
 
         for idx, tissue_name in enumerate(tissues, 1):
-            print(f"\n============== Processing tissue: {tissue_name} ({idx}/{len(tissues)}) ==============")
-            tissue_col = tissue_colors.get(tissue_name, "#bdbdbd") if tissue_colors else "#bdbdbd"
+            print(f"\n========== Processing tissue: {tissue_name} ({idx}/{len(tissues)}) ==========")
+            
             try:
-                run_per_tissue(df, tissue_name, input_dir, scrinvex_dir, output_h5ad_dir, donor_colors, tissue_col)
+                tissue_col = tissue_colors.get(tissue_name, "#bdbdbd") if tissue_colors else "#bdbdbd"
+                working_df = df[df["tissue"] == tissue_name]
+                run_per_tissue(working_df, tissue_name, input_dir, scrinvex_dir, output_h5ad_dir, donor_colors, tissue_col)
             except Exception as e:
                 print(f"[ERROR] Encountered error for tissue {tissue_name}: {e}")
     else:
-        print(f"\n============== Processing tissue: {tissue} ==============")
-        tissue_col = tissue_colors.get(tissue, "#bdbdbd") if tissue_colors else "#bdbdbd"
+        print(f"\n========== Processing tissue: {tissue} ==========")
+    
         try:
-            run_per_tissue(df, tissue, input_dir, scrinvex_dir, output_h5ad_dir, donor_colors, tissue_col)
+            tissue_col = tissue_colors.get(tissue, "#bdbdbd") if tissue_colors else "#bdbdbd"
+            working_df = df[df["tissue"] == tissue]
+            run_per_tissue(working_df, tissue, input_dir, scrinvex_dir, output_h5ad_dir, donor_colors, tissue_col)
         except Exception as e:
             print(f"[ERROR] Encountered error for tissue {tissue}: {e}")
 

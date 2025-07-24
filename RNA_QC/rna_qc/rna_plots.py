@@ -30,9 +30,9 @@ def assign_donor_colors(df, donor_col, key='donorID'):
         return {**donor_col, **extra}
     return dict(donor_col)
 
-def move_figures_to_newdir(output_figures_dir, tissue_std, old, new):
-    old_path = os.path.join(output_figures_dir, tissue_std, old)
-    new_path = os.path.join(output_figures_dir, tissue_std, new)
+def move_figures_to_newdir(output_figures_dir, old, new):
+    old_path = os.path.join(output_figures_dir, old)
+    new_path = os.path.join(output_figures_dir, new)
     if os.path.exists(new_path):
         shutil.rmtree(new_path)
     if os.path.exists(old_path):
@@ -99,7 +99,7 @@ def plot_doublet_hist(adata, donor_col, tissue, tissue_std, figdir):
         doublet_scores = adata[adata.obs['donorID'] == donorID].obs['doublet_score']
         doublet_probabilities = adata[adata.obs['donorID'] == donorID].obs['doublet_probabilities']
         if doublet_probabilities.isnull().all():
-            print(f"[WARN] No doublet probabilities for donor {donorID}")
+            print(f"[WARNING] No doublet probabilities for donor {donorID}")
             continue
         probability_midpoint = ((doublet_probabilities.max()+doublet_probabilities.min())/2).round(1)
         doublet_mask = doublet_probabilities > probability_midpoint
@@ -129,6 +129,7 @@ def plot_doublet_hist(adata, donor_col, tissue, tissue_std, figdir):
         plt.close(fig)
 
 def clustering_umap(adata, tissue, tissue_std, figdir):
+    print("[INFO] Clustering and UMAP...")
     sc.pp.pca(adata, n_comps=50, svd_solver='arpack')
     sc.pp.neighbors(adata, n_neighbors=15, use_rep='X_pca')
     sc.pp.neighbors(adata)

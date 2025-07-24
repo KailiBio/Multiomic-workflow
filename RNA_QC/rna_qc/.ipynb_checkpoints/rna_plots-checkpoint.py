@@ -30,9 +30,9 @@ def assign_donor_colors(df, donor_col, key='donorID'):
         return {**donor_col, **extra}
     return dict(donor_col)
 
-def move_figures_to_newdir(output_figures_dir, tissue_std, old, new):
-    old_path = os.path.join(output_figures_dir, tissue_std, old)
-    new_path = os.path.join(output_figures_dir, tissue_std, new)
+def move_figures_to_newdir(output_figures_dir, old, new):
+    old_path = os.path.join(output_figures_dir, old)
+    new_path = os.path.join(output_figures_dir, new)
     if os.path.exists(new_path):
         shutil.rmtree(new_path)
     if os.path.exists(old_path):
