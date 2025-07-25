@@ -1,0 +1,4 @@
+Initial unique reads:	632323550
+Filtered unique reads:	591838094
+Initial total reads:	1965427217
+Filtered total reads:	1881787534
