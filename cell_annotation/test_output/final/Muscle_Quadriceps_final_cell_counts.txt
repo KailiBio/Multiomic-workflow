@@ -1,6 +1,12 @@
 celltype_broad	DGTEX008	DGTEX027
-Endothelial Cell	12	13
-Glial Cell	30	4
-Immune Cell	613	59
-Muscle Cell	126	1891
-Stroma Cell	418	1198
+Fast-Twitch Type II Myofiber	86	58
+Fibroblast	48	25
+Macrophage	566	6
+Neuromuscular Junction Myonuclei	12	54
+Pericyte	195	60
+Satellite Cell	28	35
+Schwann Cell	30	4
+Slow-Twitch Type I Myofiber	0	1744
+T Cell	47	53
+Vascular Endothelial Cell	12	13
+Vascular Smooth Muscle Cell	175	1113
