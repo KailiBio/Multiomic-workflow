@@ -20,7 +20,10 @@ from multiome_integration.utils import load_config, standardize_tissue_name
 def propagate_obs(adata, refdata, features, new_prefix):
     for feature in features:
         print(f"[INFO] Propagating {feature}")
-        adata.obs[new_prefix+feature] = refdata.obs[feature].reindex(adata.obs_names).values
+        if new_prefix != "":
+            adata.obs[new_prefix+"."+feature] = refdata.obs[feature].reindex(adata.obs_names).values
+        else:
+            adata.obs[feature] = refdata.obs[feature].reindex(adata.obs_names).values
 
 def propagate_obs_with_fallback(adata, ref1, ref2, features, new_prefix=''):
     for feature in features:
@@ -33,7 +36,7 @@ def propagate_obs_with_fallback(adata, ref1, ref2, features, new_prefix=''):
             tmp.loc[missing] = ref2.obs[feature].reindex(adata.obs_names[missing]).values
         adata.obs[new_prefix+feature] = tmp.values
         
-def propagate_ann_structures(adata, rna, atac, celltype_col, celllineage_col):
+def propagate_ann_structures(adata, rna, atac, celltype_obs, celllineage_obs):
     """
     Copy AnnData var, uns, obsm, varm keys from both rna and atac into adata if they don't exist yet.
     Only features/cells in intersection are copied (other entries are set NaN if required).
@@ -53,7 +56,7 @@ def propagate_ann_structures(adata, rna, atac, celltype_col, celllineage_col):
     # --- UNS keys (RNA related) ---
     uns_copy_keys = [
         'donorID_colors','hvg','leiden','leiden_before_harmony','leiden_colors',
-        celltype_col+'_colors', celllineage_col+'_colors','neighbors','pca',
+        celltype_obs+'_colors', celllineage_obs+'_colors','neighbors','pca',
         'rank_genes_groups','sampleID_colors','scrublet','umap'
     ]
     for key in uns_copy_keys:
@@ -144,29 +147,28 @@ def add_imputed_signal(adata, rna_impute, atac_impute):
     print("[INFO] Added layer: imputation_signal.")
 
     
-def split_and_save_multiome(adata, output_h5ad_dir, tissue_std, celllineage_col):
+def split_and_save_multiome(adata, output_h5ad_dir, tissue_std, celltype_obs, celllineage_obs):
     # RNA-only
     print("[INFO] Extracting and writing RNA AnnData ...")
     rna_final = adata[adata.obs['modality']!='accessibility', adata.var['modality']=="Gene Expression"].copy()
     rna_keep = [
-        'rnasampleID', 'rnaleiden', 'donorID', 'cellbarcode', 'total_counts', 'n_genes_by_counts', 
+        'rna.sampleID', 'rna.leiden', 'donorID', 'cellbarcode', 'total_counts', 'n_genes_by_counts', 
         'n_genes', 'pct_counts_mt', 'pct_counts_ribo', 'pct_counts_hb', 'pct_exon_reads', 'MALAT1_CPM', 
-        'doublet_score', 'doublet_probabilities', celllineage_col
-    ]
+        'doublet_score', 'doublet_probabilities', celllineage_obs, celltype_obs]
     drop_cols = [col for col in rna_final.obs.columns if col not in rna_keep]
     rna_final.obs.drop(columns=drop_cols, inplace=True)
     rna_file = os.path.join(output_h5ad_dir, f'multiome_final.RNA.{tissue_std}.h5ad')
     rna_final.write(rna_file, compression="gzip")
     print(f"[INFO] Wrote RNA AnnData: {rna_file}")
-    sc.pl.umap(rna_final, color=[celltype_col], save=f"_multiome_final.RNA.{celltype_col}.{tissue_std}.png")
-    sc.pl.umap(rna_final, color=[celllineage_col], save=f"_multiome_final.RNA.{celllineage_col}.{tissue_std}.png")
+    sc.pl.umap(rna_final, color=[celltype_obs], save=f"_multiome_final.RNA.{celltype_obs}.{tissue_std}.png")
+    sc.pl.umap(rna_final, color=[celllineage_obs], save=f"_multiome_final.RNA.{celllineage_obs}.{tissue_std}.png")
 
     # ATAC-only
     print("[INFO] Extracting and writing ATAC AnnData ...")
-    atac_final = adata[:, adata.var['modality']=="Peaks"].copy()
+    atac_final = adata[adata.obs['modality']!='expression', adata.var['modality']=="Peaks"].copy()
     atac_keep = [
-        'modality', 'celltype_glue', 'atacsampleID', 'atacleiden', 'n_fragment', 'frac_dup', 
-        'frac_mito', 'tsse', 'donorID', 'cellbarcode']
+        'atac.sampleID', 'atac.leiden', 'modality', 'celltype_glue', 'n_fragment', 'frac_dup', 
+        'frac_mito', 'tsse', 'donorID', 'cellbarcode', celllineage_obs, celltype_obs]
     drop_cols2 = [col for col in atac_final.obs.columns if col not in atac_keep]
     atac_final.obs.drop(columns=drop_cols2, inplace=True)
     if 'X_pca_before_harmony' in atac_final.obsm: del atac_final.obsm['X_pca_before_harmony']
@@ -178,12 +180,13 @@ def split_and_save_multiome(adata, output_h5ad_dir, tissue_std, celllineage_col)
     atac_file = os.path.join(output_h5ad_dir, f'multiome_final.ATAC.{tissue_std}.h5ad')
     atac_final.write(atac_file, compression="gzip")
     print(f"[INFO] Wrote ATAC AnnData: {atac_file}")
-    sc.pl.umap(atac_final, color=[celltype_col], save=f"_multiome_final.ATAC.{celltype_col}.{tissue_std}.png")
-    sc.pl.umap(atac_final, color=[celllineage_col], save=f"_multiome_final.ATAC.{celllineage_col}.{tissue_std}.png")
+    sc.pl.umap(atac_final, color=['celltype_broad'], save=f"_multiome_final.ATAC.celltype_broad.{tissue_std}.png")
+    sc.pl.umap(atac_final, color=['cell_lineage'], save=f"_multiome_final.ATAC.cell_lineage.{tissue_std}.png")
 
+def run_per_tissue(tissue, output_h5ad_dir, celltype_obs, celllineage_obs, imputation):
     
-def run_per_tissue(tissue, output_h5ad_dir, celltype_col, celllineage_col, imputation):
     tissue_std = standardize_tissue_name(tissue)
+    
     print(f"[INFO] Loading AnnData for tissue: {tissue}")
     adata = ad.read_h5ad(os.path.join(output_h5ad_dir, f'MultiVI_merged.{tissue_std}.h5ad'))
     adata.obs_names = [name.rsplit('_', 1)[0] for name in adata.obs_names]
@@ -193,22 +196,20 @@ def run_per_tissue(tissue, output_h5ad_dir, celltype_col, celllineage_col, imput
 
     # propagate obs/metadata
     print("[INFO] Propagating RNA/ATAC obs fields ...")
-    propagate_obs(adata, rna, ['sampleID'], 'rna')
-    propagate_obs(adata, rna, ['leiden'], 'rna')
-    propagate_obs(adata, rna, [
-        'cellbarcode', 'total_counts', 'n_genes_by_counts', 'n_genes',
-        'pct_counts_mt', 'pct_counts_ribo', 'pct_counts_hb', 'pct_exon_reads', 'MALAT1_CPM',
-        'doublet_score', 'doublet_probabilities'], '')
+    propagate_obs(adata, rna, ['sampleID','leiden'], 'rna')
+    propagate_obs(adata, rna, ['cellbarcode', 'total_counts', 'n_genes_by_counts', 'n_genes',
+                               'pct_counts_mt', 'pct_counts_ribo', 'pct_counts_hb', 'pct_exon_reads', 'MALAT1_CPM',
+                               'doublet_score', 'doublet_probabilities'], '')
     propagate_obs_with_fallback(adata, rna, atac, ['donorID'], new_prefix='')
-    propagate_obs(adata, atac, ['sampleID'], 'atac')
-    propagate_obs(adata, atac, ['leiden'], 'atac')
+    propagate_obs(adata, atac, ['sampleID', 'leiden'], 'atac')
     propagate_obs(adata, atac, ['n_fragment', 'frac_dup', 'frac_mito', 'tsse'], '')
 
     # add cell lineage
-    celltype_to_lineage = dict(zip(rna.obs[celltype_col], rna.obs[celllineage_col]))
-    adata.obs['celllineage'] = adata.obs['celltype_glue'].map(celltype_to_lineage)
+    celltype_to_lineage = dict(zip(rna.obs[celltype_obs], rna.obs[celllineage_obs]))
+    adata.obs['cell_lineage'] = adata.obs['celltype_glue'].map(celltype_to_lineage)
+    adata.obs['celltype_broad'] = adata.obs['celltype_glue']
 
-    propagate_ann_structures(adata, rna, atac, celltype_col, celllineage_col)
+    propagate_ann_structures(adata, rna, atac, 'celltype_broad', 'cell_lineage')
 
     propagate_layers_from_rna(adata, rna, ['CPM', 'rawcounts'])
 
@@ -220,41 +221,54 @@ def run_per_tissue(tissue, output_h5ad_dir, celltype_col, celllineage_col, imput
 
     # Save main complete file
     final_file = os.path.join(output_h5ad_dir, f'multiome_final.{tissue_std}.h5ad')
-    adata.write(final_file, compression="gzip")
+    adata.write(final_file)
     print(f"[INFO] Wrote: {final_file}")
 
     # plot UMAP
     print(f"[INFO] plotting UMAPs")
-    sc.pl.umap(adata, color=['celltype_glue'], save=f"_multiome_final.{celltype_col}.{tissue_std}.png")
-    sc.pl.umap(adata, color=['celllineage'], save=f"_multiome_final.{celllineage_col}.{tissue_std}.png")
+    sc.pl.umap(adata, color=['celltype_broad'], save=f"_multiome_final.celltype_broad.{tissue_std}.png")
+    sc.pl.umap(adata, color=['cell_lineage'], save=f"_multiome_final.cell_lineage.{tissue_std}.png")
     sc.pl.umap(adata, color=["modality"], save=f"_multiome_final.modality.{tissue_std}.png")
 
-    split_and_save_multiome(adata, output_h5ad_dir, tissue_std, celllineage_col)
+    split_and_save_multiome(adata, output_h5ad_dir, tissue_std, 'celltype_broad', 'cell_lineage')
+
+    print(f"[DONE] Finish the whole workflow! Hooray!!!")
 
 def main(config_path):
     config = load_config(config_path)
+
+    workdir = config['paths']['workdir']
     output_h5ad_dir = config['paths']['output_h5ad_dir']
-    os.chdir(config['paths']['workdir'])
+    final_output_dir = os.path.join(workdir, 'final')
+    os.makedirs(final_output_dir, exist_ok=True)
+    os.chdir(final_output_dir)
     
     tissue = config['params']['tissue']
-    celltype_col = config['params']['celltype_col']
-    celllineage_col = config['params']['celllineage_col']
+    
+    celltype_obs = config['params']['celltype_obs']
+    celllineage_obs = config['params']['celllineage_obs']
     imputation = config['params']['imputation']
     
     if tissue == "---":
-        working_df = pd.read_csv(config['paths']['sample_metadata'], sep='\t', header=None,
-                                 names=["rnaID", "atacID", "species", "donorID", "ageGroup", "gender", "tissue"])
-        tissues = sorted(working_df["tissue"].unique())
-        for idx, working_tissue in enumerate(tissues, 1):
-            print(f"\n============== [Main] Processing tissue: {working_tissue} ({idx}/{len(tissues)}) ==============")
+        sample_metadata = config['paths']['sample_metadata']
+        df = pd.read_csv(sample_metadata, sep='\t', header=None,
+                     names=["rnaID", "atacID", "species", "donorID", "ageGroup", "gender", "tissue"])
+        
+        tissues = sorted(df["tissue"].unique())
+        print(f"[INFO] Data integration for MULTIPLE tissues: {tissues}")
+        
+        for idx, tissue_name in enumerate(tissues, 1):
+            print(f"\n========== Processing tissue: {tissue_name} ({idx}/{len(tissues)}) ==========")
+            
             try:
-                run_per_tissue(working_tissue, output_h5ad_dir, celltype_col, celllineage_col, imputation)
+                run_per_tissue(working_tissue, output_h5ad_dir, celltype_obs, celllineage_obs, imputation)
             except Exception as e:
                 print(f"[ERROR] Encountered error for tissue {working_tissue}: {str(e)}")
     else:
-        print(f"\n============== [Main] Processing tissue: {tissue} ==============")
+        print(f"\n========== Processing tissue: {tissue} ==========")
+        
         try:
-            run_per_tissue(tissue, output_h5ad_dir, celltype_col, celllineage_col, imputation)
+            run_per_tissue(tissue, output_h5ad_dir, celltype_obs, celllineage_obs, imputation)
         except Exception as e:
             print(f"[ERROR] Encountered error for tissue {tissue}: {str(e)}")
 

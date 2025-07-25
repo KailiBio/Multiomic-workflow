@@ -16,6 +16,7 @@ import snapatac2 as snap
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 from atac_qc.utils import load_config, standardize_tissue_name
+from atac_qc.atac_plots import assign_donor_colors
 
 def load_barcode_dicts(barcode_whitelist):
     """Load RNA/ATAC barcode mapping from file."""
@@ -70,7 +71,7 @@ def process_fragments(row, config, barcode_dic_rna, overwrite=False):
 
     # Barcode conversion
     data.obs['ATAC_cellbarcode'] = data.obs_names
-    print("[INFO] Converting barcodes...")
+    print("\n[INFO] Converting barcodes...")
     
     new_bc = []
     for barcode in data.obs_names:

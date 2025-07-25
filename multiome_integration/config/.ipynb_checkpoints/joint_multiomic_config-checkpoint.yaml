@@ -1,10 +1,9 @@
 paths:
   workdir: /data/fankaili/scripts/multi-Omic_workflow/multiome_integration/test_output/
-  rna_post_qc_h5ad: /data/fankaili/scripts/multi-Omic_workflow/cell_annotation/test_output/rna_final.h5ad
-  atac_post_qc_h5ad: /data/fankaili/scripts/multi-Omic_workflow/ATAC_QC/test_output/atac_h5ad/Muscle_Quadriceps.demo_run.h5ad
-  rna_doublet_dir: /data/fankaili/project/dgtex/QC/20250414/Muscle_Quadriceps/RNA/
-  atac_doublet_dir: /data/fankaili/scripts/multi-Omic_workflow/ATAC_QC/test_output/
-  output_dir: /data/fankaili/scripts/multi-Omic_workflow/multiome_integration/test_output/
+  rna_post_qc_h5ad: /data/fankaili/scripts/multi-Omic_workflow/cell_annotation/test_output/final/Muscle_Quadriceps.GEX.final.h5ad
+  atac_post_qc_h5ad: /data/fankaili/scripts/multi-Omic_workflow/ATAC_QC/test_output/atac_h5ad/Muscle_Quadriceps.ATAC.demo_run.h5ad
+  rna_doublet_dir: /data/fankaili/scripts/multi-Omic_workflow/RNA_QC/test_output/filter_qc.demo_run/
+  atac_doublet_dir: /data/fankaili/scripts/multi-Omic_workflow/ATAC_QC/test_output/doublet_filter_processing.demo_run/
   output_h5ad_dir: /data/fankaili/scripts/multi-Omic_workflow/multiome_integration/test_output/h5ad/
   sample_metadata: /data/fankaili/scripts/multi-Omic_workflow/ATAC_QC/test_data/test_metatable.txt
 
@@ -18,7 +17,8 @@ params:
   n_threads: 16
   n_features: 50000
   peak_half_width: 150
-  celltype_col: manual_fine_annotation0
+  celllineage_obs: cell_lineage
+  celltype_obs: celltype_broad
   imputation: True
 
 color:

@@ -1,4 +1,4 @@
-broad_annotation	DGTEX008	DGTEX027
+celltype_broad	DGTEX008	DGTEX027
 Endothelial Cell	12	13
 Glial Cell	30	4
 Immune Cell	613	59

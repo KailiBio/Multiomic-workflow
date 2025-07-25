@@ -83,9 +83,14 @@ def assign_obs_colors(adata, sample_tissue_dict, config,
     print("Donor colors assigned:", donor_colors)
 
     # Store colors in adata.uns
-    adata.uns[sample_key+'_colors'] = sample_colors
-    adata.uns[tissue_key+'_colors'] = palette_tissue_colors
-    adata.uns[donor_key+'_colors'] = donor_colors
+    adata.obs[sample_key] = adata.obs[sample_key].astype('category')
+    adata.uns[sample_key+'_colors'] = np.array([sample_colors[d] for d in adata.obs[sample_key].cat.categories])
+    #
+    adata.obs[tissue_key] = adata.obs[tissue_key].astype('category')
+    adata.uns[tissue_key+'_colors'] = np.array([palette_tissue_colors[d] for d in adata.obs[tissue_key].cat.categories])
+    #
+    adata.obs[donor_key] = adata.obs[donor_key].astype('category')
+    adata.uns[donor_key+'_colors'] = np.array([donor_colors[d] for d in adata.obs[donor_key].cat.categories])
 
     return {
         'sample_colors': sample_colors,
@@ -113,8 +118,8 @@ def save_merged_anndata(adataset, h5ad_dir, suffix, runtag, sample_tissue_dict,
         all_colors = assign_obs_colors(adata_merged, sample_tissue_dict=sample_tissue_dict, config=config,
                           tissue_key='tissue', donor_key='donorID', sample_key='sampleID')
 
-    merged_h5ad_path = os.path.join(h5ad_dir, f"{suffix}.{runtag}.h5ad")
-    adata_merged.write(merged_h5ad_path, compression="gzip")
+    merged_h5ad_path = os.path.join(h5ad_dir, f"{suffix}.ATAC.{runtag}.h5ad")
+    adata_merged.write(merged_h5ad_path)
     print(f"Wrote merged h5ad: {merged_h5ad_path}")
     return adata_merged, all_colors
 
@@ -197,7 +202,8 @@ def main(config_path, runtag):
             
             try:
                 working_df = df[df["tissue"] == tissue_name]
-                run_per_tissue(tissue, working_df, output_h5ad_dir, config, runtag, outdir, gencode_gtf, n_threads, n_features_merge)
+                run_per_tissue(tissue, working_df, output_h5ad_dir, config, runtag, outdir, 
+                               gencode_gtf, n_threads, n_features_merge)
             except Exception as e:
                 print(f"[ERROR] Concatenating & Clustering failed for {tissue_name}: {e}")
     else:
@@ -205,7 +211,8 @@ def main(config_path, runtag):
         
         try:
             working_df = df[df["tissue"] == tissue]
-            run_per_tissue(tissue, working_df, output_h5ad_dir, config, runtag, outdir, gencode_gtf, n_threads, n_features_merge)
+            run_per_tissue(tissue, working_df, output_h5ad_dir, config, runtag, outdir, 
+                           gencode_gtf, n_threads, n_features_merge)
         except Exception as e:
             print(f"[ERROR] Concatenating & Clustering failed for {tissue}: {e}")
      

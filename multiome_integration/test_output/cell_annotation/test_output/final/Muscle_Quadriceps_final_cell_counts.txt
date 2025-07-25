@@ -1,6 +1,0 @@
-celltype_broad	DGTEX008	DGTEX027
-Endothelial Cell	12	13
-Glial Cell	30	4
-Immune Cell	613	59
-Muscle Cell	126	1891
-Stroma Cell	418	1198

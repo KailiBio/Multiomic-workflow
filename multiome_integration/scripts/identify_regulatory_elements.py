@@ -37,7 +37,7 @@ def call_peaks_by_cluster(atac, tissue_std, output_h5ad_dir, nthread=16):
     print(f"[INFO] Calling peaks by cluster for tissue: {tissue_std} (n_jobs={nthread})")
     snap.tl.macs3(atac, groupby='celltype_std', n_jobs=nthread)
     outfile = os.path.join(output_h5ad_dir, f'ATAC_withPeak.{tissue_std}.h5ad')
-    atac.write(outfile, compression="gzip")
+    atac.write(outfile)
     print(f"[INFO] Wrote ATAC with peaks: {outfile}")
 
     raw_peak_dir = './raw_bed'
@@ -54,6 +54,7 @@ def call_and_save_consensus_peaks(atac, chrom_size, tissue_std, half_width=150):
     consensus_peaks = snap.tl.merge_peaks(atac.uns['macs3'], chrom_size, half_width=half_width)
     consensus_peaks_df = pd.DataFrame(consensus_peaks)
     consensus_peaks_df.columns = consensus_peaks.columns
+    
     out_csv = f'consensus_peak_metatable.{tissue_std}.txt'
     consensus_peaks_df.to_csv(out_csv, sep='\t', index=False, header=True)
     print(f"[INFO] Consensus peaks saved: {out_csv} (n_peaks={len(consensus_peaks_df)})")
@@ -68,6 +69,7 @@ def plot_active_peaks(consensus_peaks_df, tissue_std, color_palette):
     }).sort_values('celltype')
     out_png = f'./figures/consensusPeak_counts_barplot.{tissue_std}.png'
     out_pdf = f'./figures/consensusPeak_counts_barplot.{tissue_std}.pdf'
+    
     plot_celltype_property_barplot(
         df_active, 'Counts',
         label='# of active peaks (k)',
@@ -96,14 +98,17 @@ def compute_and_save_cellbypeak_umap(atac, consensus_peaks_df, tissue_std, outpu
     print(f"[INFO] UMAP plot saved: ./figures/{fig_out}")
     return peak_mat
 
-def run_per_tissue(
-    tissue, output_h5ad_dir, chrom_size, color_palette, nthread=16, half_width=150):
+def run_per_tissue(tissue, output_h5ad_dir, chrom_size, color_palette, nthread=16, half_width=150):
+    
     tissue_std = standardize_tissue_name(tissue)
-    print(f"\n============== [ATAC] Processing tissue: {tissue} ({tissue_std}) ==============")
+    
     atac_path = os.path.join(output_h5ad_dir, f'ATAC.GLUE.{tissue_std}.h5ad')
     print(f"[INFO] Loading ATAC AnnData: {atac_path}")
     atac = ad.read_h5ad(atac_path)
+
+    # standardize cell type names
     atac.obs['celltype_std'] = [standardize_tissue_name(celltype) for celltype in atac.obs['celltype_glue']]
+    
     atac = call_peaks_by_cluster(atac, tissue_std, output_h5ad_dir, nthread=nthread)
     consensus_peaks_df = call_and_save_consensus_peaks(atac, chrom_size, tissue_std, half_width=half_width)
     plot_active_peaks(consensus_peaks_df, tissue_std, color_palette)
@@ -113,14 +118,16 @@ def run_per_tissue(
 def main(config_path):
     config = load_config(config_path)
 
+    workdir = config['paths']['workdir']
     output_h5ad_dir = config['paths']['output_h5ad_dir']
-    peak_output_dir = os.path.join(config['paths']['workdir'], 'atac_peak')
+    peak_output_dir = os.path.join(workdir, 'atac_peak')
     os.makedirs(peak_output_dir, exist_ok=True)
     os.makedirs(os.path.join(peak_output_dir, 'figures'), exist_ok=True)
     os.chdir(peak_output_dir)
     print(f"[INFO] Output path set to: {peak_output_dir}")
 
     tissue = config['params']['tissue']
+    
     color_palette = config["my_color_palette"]
     nthread = config['params'].get('threads', 16)
     half_width = config['params'].get('peak_half_width', 150)
@@ -129,18 +136,24 @@ def main(config_path):
     chrom_size = read_chrom_size(chromsize_path)
 
     if tissue == "---":
-        working_df = pd.read_csv(config['paths']['sample_metadata'], sep='\t', header=None,
-                                 names=["rnaID", "atacID", "species", "donorID", "ageGroup", "gender", "tissue"])
-        tissues = sorted(working_df["tissue"].unique())
-        for idx, working_tissue in enumerate(tissues, 1):
-            print(f"\n============== [Main] Processing tissue: {working_tissue} ({idx}/{len(tissues)}) ==============")
+        sample_metadata = config['paths']['sample_metadata']
+        df = pd.read_csv(sample_metadata, sep='\t', header=None,
+                     names=["rnaID", "atacID", "species", "donorID", "ageGroup", "gender", "tissue"])
+        
+        tissues = sorted(df["tissue"].unique())
+        print(f"[INFO] Calling ATAC Peaks for MULTIPLE tissues: {tissues}")
+        
+        for idx, tissue_name in enumerate(tissues, 1):
+            print(f"\n========== Processing tissue: {tissue_name} ({idx}/{len(tissues)}) ==========")
+            
             try:
-                run_per_tissue(working_tissue, output_h5ad_dir, chrom_size, color_palette, 
+                run_per_tissue(tissue_name, output_h5ad_dir, chrom_size, color_palette, 
                                nthread=nthread, half_width=half_width)
             except Exception as e:
-                print(f"[ERROR] Encountered error for tissue {working_tissue}: {str(e)}")
+                print(f"[ERROR] Encountered error for tissue {tissue_name}: {str(e)}")
     else:
-        print(f"\n============== [Main] Processing tissue: {tissue} ==============")
+        print(f"\n========== Processing tissue: {tissue} ==========")
+        
         try:
             run_per_tissue(tissue, output_h5ad_dir, chrom_size, color_palette, 
                                nthread=nthread, half_width=half_width)

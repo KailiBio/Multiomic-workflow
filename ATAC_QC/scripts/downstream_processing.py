@@ -117,8 +117,9 @@ def main(config_path, runtag):
             df_doublet['doublet_call'] = df_doublet['doublet_score'].apply(lambda x: 'yes' if x > doublet_cutoff else 'no')
             snap.pp.filter_doublets(adata, n_jobs=n_threads, 
                                     score_threshold=doublet_cutoff, probability_threshold=None)
-            
-        df_doublet.to_csv(f'ATAC_doublet_results.{fileID}.tsv', sep='\t', index=True, header=True, 
+
+        doublet_outpath = os.path.join(outdir, f'ATAC_doublet_results.{fileID}.tsv')
+        df_doublet.to_csv(doublet_outpath, sep='\t', index=True, header=True, 
                           index_label="cell_barcode")
 
         

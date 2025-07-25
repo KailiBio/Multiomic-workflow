@@ -2,7 +2,7 @@
 
 """
 Author: Kaili Fan
-Annotate ATAC cells via GLUE integrating scRNA and scATAC data.
+Description: Annotate ATAC cells via GLUE integrating scRNA and scATAC data.
 """
 
 import os
@@ -177,19 +177,10 @@ def annotate_and_merge(rna, atac, glue, output_h5ad_dir, tissue_std):
 
     print(f"[INFO] Annotation and merging completed for '{tissue_std}'.")
 
-def run_per_tissue(
-    tissue_std, rna, atac,
-    output_h5ad_dir,
-    glue_output_dir,
-    gtf,
-    celltype_col,
-    n_features=50000,
-):
-    print(f"\n============== [GLUE] Processing tissue: {tissue_std} ==============")
-    # Load filtered AnnData for the current tissue
-    print(f"[INFO] Loading RNA and ATAC for tissue: {tissue_std}")
-
+def run_per_tissue(tissue_std, rna, atac, output_h5ad_dir, glue_output_dir, gtf, celltype_col, n_features=50000):
+    
     # Prepare
+    print(f"[INFO] Preparing RNA and ATAC for GLUE...")
     rna_prepared = prepare_rna(rna, gtf, output_h5ad_dir, tissue_std, celltype_col)
     atac_prepared = prepare_atac(atac, gtf, output_h5ad_dir, tissue_std, n_features=n_features)
 
@@ -202,29 +193,27 @@ def run_per_tissue(
 def main(config_path):
     config = load_config(config_path)
 
+    workdir = config['paths']['workdir']
     output_h5ad_dir = config['paths']['output_h5ad_dir']
-    glue_output_dir = os.path.join(config['paths']['workdir'], 'glue')
+    glue_output_dir = os.path.join(workdir, 'glue')
     os.makedirs(glue_output_dir, exist_ok=True)
     os.makedirs(os.path.join(glue_output_dir, 'figures'), exist_ok=True)
     os.chdir(glue_output_dir)
     print(f"[INFO] Output path set to: {glue_output_dir}")
 
     tissue = config['params']['tissue']
+    
     celltype_col = config['params']['celltype_col']
     gtf = config['references']['gencode_gtf']
     n_features = config['params'].get('n_features', 50000)
 
     if tissue == "---":
-        working_df = pd.read_csv(config['paths']['sample_metadata'], sep='\t', header=None,
+        sample_metadata = config['paths']['sample_metadata']
+        df = pd.read_csv(sample_metadata, sep='\t', header=None,
                      names=["rnaID", "atacID", "species", "donorID", "ageGroup", "gender", "tissue"])
-        tissues = sorted(working_df["tissue"].unique())
-        # for CZI
-        if "Skin - Not Sun Exposed (Suprapubic)" in tissues:
-            tissues.remove("Skin - Not Sun Exposed (Suprapubic)")
-            tissues.remove("Skin - Sun Exposed (Lower leg)")
-            tissues.append("Skin_merged")
-
-        print(f"[INFO] Running analysis for MULTIPLE tissues: {tissues}")
+    
+        tissues = sorted(df["tissue"].unique())
+        print(f"[INFO] Annotating ATAC cells for MULTIPLE tissues: {tissues}")
 
         suffix = config['params']['suffix']
         rna_path = os.path.join(output_h5ad_dir, f'RNA_removeDoublet.{suffix}.h5ad')
@@ -232,10 +221,11 @@ def main(config_path):
         atac_path = os.path.join(output_h5ad_dir, f'ATAC_removeDoublet.{suffix}.h5ad')
         atac = ad.read_h5ad(atac_path)
     
-        for idx, working_tissue in enumerate(tissues, 1):
-            print(f"\n============== [Main] Processing tissue: {working_tissue} ({idx}/{len(tissues)}) ==============")
+        for idx, tissue_name in enumerate(tissues, 1):
+            print(f"\n========== Processing tissue: {tissue_name} ({idx}/{len(tissues)}) ==========")
+    
             try:
-                tissue_std = standardize_tissue_name(working_tissue)
+                tissue_std = standardize_tissue_name(tissue_name)
                 
                 rna_sel = rna[rna.obs['tissue']==tissue_std,:].copy()
                 atac_sel = atac[atac.obs['tissue']==tissue_std,:].copy()
@@ -243,17 +233,18 @@ def main(config_path):
                 run_per_tissue(tissue_std, rna_sel, atac_sel, output_h5ad_dir, glue_output_dir, gtf, 
                                celltype_col, n_features=n_features)
             except Exception as e:
-                print(f"[ERROR] Encountered error for tissue {working_tissue}: {str(e)}")
+                print(f"[ERROR] Encountered error for tissue {tissue_name}: {str(e)}")
     else:
-        print(f"\n============== [Main] Processing tissue: {tissue} ==============")
+        print(f"\n========== Processing tissue: {tissue} ==========")
+        
         try:
             tissue_std = standardize_tissue_name(tissue)
-            
+
             rna_path = os.path.join(output_h5ad_dir, f'RNA_removeDoublet.{tissue_std}.h5ad')
             rna = ad.read_h5ad(rna_path)
             atac_path = os.path.join(output_h5ad_dir, f'ATAC_removeDoublet.{tissue_std}.h5ad')
             atac = ad.read_h5ad(atac_path)
-        
+            
             run_per_tissue(
                 tissue_std, rna, atac, output_h5ad_dir, glue_output_dir, gtf, celltype_col, n_features=n_features
             )
@@ -266,7 +257,7 @@ if __name__ == "__main__":
     print(f"[INFO] torch.cuda.is_available(): {torch.cuda.is_available()}")
     print(f"[INFO] torch.cuda.device_count(): {torch.cuda.device_count()}")
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-    print(f"[INFO] Using device: {device}")
+    print(f"[INFO] Using device: {device}\n")
 
     parser = argparse.ArgumentParser(
         description="Annotate ATAC cells via GLUE integrating scRNA and scATAC data."
