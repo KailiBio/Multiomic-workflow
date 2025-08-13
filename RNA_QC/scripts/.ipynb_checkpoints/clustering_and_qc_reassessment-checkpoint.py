@@ -88,7 +88,7 @@ def run_per_tissue(workdir, output_h5ad_dir, qc_cutoff_tissue, tissue, donor_col
     batch_corrected = qc_cutoff_dict[next(iter(qc_cutoff_dict))]['Whether_batch_correction'] == "Yes"
     adata_path = get_h5ad_path(output_h5ad_dir, tissue_std, batch_corrected, runtag)
     if not os.path.exists(adata_path):
-        print(f"[ERROR] No h5ad for tissue {tissue} at {adata_path}. Skipping.")
+        print(f"[ERROR] No h5ad for tissue {tissue} at {adata_path}.")
         return
 
     print("[INFO] Loading anndata object...")
@@ -115,7 +115,12 @@ def run_per_tissue(workdir, output_h5ad_dir, qc_cutoff_tissue, tissue, donor_col
     
     qc_metrics = ["leiden", "log10_total_counts", "log10_n_genes_by_counts", "pct_counts_mt", "pct_counts_ribo", 
                   "pct_exon_reads", "log10_MALAT1_CPM", "doublet_score", "doublet_probabilities"]
+    if "pct_exon_reads" not in adata.obs:
+        qc_metrics.remove('pct_exon_reads')
+    print(qc_metrics)
+    
     plot_umap_highlight_by_qc_metrics(adata, tissue, tissue_std, figdir, qc_metrics)
+    print("ss")
     plot_qc_metrics_violin_by_cluster(adata, tissue, tissue_std, figdir, qc_metrics[1:])
     
     # Save outputs

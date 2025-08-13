@@ -133,6 +133,8 @@ def run_per_tissue(working_df, tissue, output_h5ad_dir, outdir, donor_colors, sc
     # Violin plots for cell QC
     QC_metrics = ['log10_n_genes_by_counts', 'log10_total_counts', 'pct_counts_in_top_50_genes',
                   'pct_counts_mt', 'pct_counts_ribo', 'pct_counts_hb', 'pct_exon_reads', 'log10_MALAT1_CPM']
+    if 'pct_exon_reads' not in adata.obs:
+        QC_metrics.remove('pct_exon_reads')
 
     # Cutoff for percent exon reads
     if scrinvex_dir != None:

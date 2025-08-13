@@ -70,30 +70,33 @@ def run_per_tissue(working_df, tissue, input_dir, scrinvex_dir, output_h5ad_dir,
         batch_number = extract_batch_number(sampleID)
         chanel_number = extract_chanel_number(sampleID)
 
-        print(f"[INFO] Processing sample: {sampleID} (donor: {donorID}, batch: {batch_number})...")
-        try:
-            adata = load_cellranger_h5(input_dir, sampleID)
-        except Exception as e:
-            print(f"[ERROR] Failed to load 10X data for {sampleID}: {e}")
-            continue
-
-        print(f"[INFO] Loading Scrinvex file for exon_reads% ...")
-        if scrinvex_dir:
-            adata = add_scrinvex_info(scrinvex_dir, sampleID, adata)
+        if sampleID == "---":
+            print("[INFO] missing data, skip.")
         else:
-            print("[WARNING] No Scrinvex directory provided. Skipping exon_reads% info.")
-
-        reindex_obs_names(adata, donorID, batch_number, chanel_number)
-
-        adata.obs['sampleID'] = sampleID
-        
-        # add color
-        print(f"donor color for {donorID} is {all_donor_colors[donorID]}")
-        adata.uns['donorID_colors'] = all_donor_colors[donorID]
-        print(f"tissue color for {tissue} is {tissue_color}")
-        adata.uns['tissue_colors'] = tissue_color
-        
-        anndata_list.append(adata)
+            print(f"[INFO] Processing sample: {sampleID} (donor: {donorID}, batch: {batch_number})...")
+            try:
+                adata = load_cellranger_h5(input_dir, sampleID)
+            except Exception as e:
+                print(f"[ERROR] Failed to load 10X data for {sampleID}: {e}")
+                continue
+    
+            print(f"[INFO] Loading Scrinvex file for exon_reads% ...")
+            if scrinvex_dir:
+                adata = add_scrinvex_info(scrinvex_dir, sampleID, adata)
+            else:
+                print("[WARNING] No Scrinvex directory provided. Skipping exon_reads% info.")
+    
+            reindex_obs_names(adata, donorID, batch_number, chanel_number)
+    
+            adata.obs['sampleID'] = sampleID
+            
+            # add color
+            print(f"donor color for {donorID} is {all_donor_colors[donorID]}")
+            adata.uns['donorID_colors'] = all_donor_colors[donorID]
+            print(f"tissue color for {tissue} is {tissue_color}")
+            adata.uns['tissue_colors'] = tissue_color
+            
+            anndata_list.append(adata)
 
     if not anndata_list:
         print(f"[ERROR] No AnnData objects for tissue '{tissue_std}'. Skipping concatenation.")
@@ -116,6 +119,7 @@ def main(config_path):
     input_dir = config['paths']['input_dir']
     scrinvex_dir = config['paths'].get('scrinvex_dir', None)
     output_h5ad_dir = config['paths']['output_h5ad_dir']
+    os.makedirs(output_h5ad_dir, exist_ok=True)
     
     tissue = config['params']['tissue']
 

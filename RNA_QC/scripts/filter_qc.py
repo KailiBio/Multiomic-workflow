@@ -37,13 +37,14 @@ def prepare_upset_summary_allQC(sample_data, QC_cutoff_dict, global_obs, default
     else:
         mask_pct_counts_ribo = sample_data['pct_counts_ribo'] > float(QC_cutoff_dict[sampleID]['Max_percent_ribo_in_cells'])
 
-    if QC_cutoff_dict[sampleID]['Exon_ratio_cutoffs'] == '---':
-        Q75 = np.nanpercentile(global_obs['pct_exon_reads'], 75)
-        Q25 = np.nanpercentile(global_obs['pct_exon_reads'], 25)
-        cutoff = (Q75 + (Q75 - Q25))
-        mask_pct_exon_reads = sample_data['pct_exon_reads'] > cutoff
-    else:
-        mask_pct_exon_reads = sample_data['pct_exon_reads'] > float(QC_cutoff_dict[sampleID]['Exon_ratio_cutoffs'])
+    if 'pct_exon_reads' in sample_data:
+        if QC_cutoff_dict[sampleID]['Exon_ratio_cutoffs'] == '---':
+            Q75 = np.nanpercentile(global_obs['pct_exon_reads'], 75)
+            Q25 = np.nanpercentile(global_obs['pct_exon_reads'], 25)
+            cutoff = (Q75 + (Q75 - Q25))
+            mask_pct_exon_reads = sample_data['pct_exon_reads'] > cutoff
+        else:
+            mask_pct_exon_reads = sample_data['pct_exon_reads'] > float(QC_cutoff_dict[sampleID]['Exon_ratio_cutoffs'])
 
     if QC_cutoff_dict[sampleID]['MALAT1_CPM_cutoffs'] == '---':
         mask_MALAT1_CPM = sample_data['MALAT1_CPM'] < default_cutoffs['MALAT1_CPM']
@@ -64,11 +65,12 @@ def prepare_upset_summary_allQC(sample_data, QC_cutoff_dict, global_obs, default
         'Max_counts': sample_data.index[mask_max_counts],
         'pct_counts_mt': sample_data.index[mask_pct_counts_mt],
         'pct_counts_ribo': sample_data.index[mask_pct_counts_ribo],
-        'pct_exon_reads': sample_data.index[mask_pct_exon_reads],
         'MALAT1_CPM': sample_data.index[mask_MALAT1_CPM],
         'MALAT1_max_CPM': sample_data.index[mask_MALAT1_max_CPM],
         'doublets': sample_data.index[mask_doublets]
     }
+    if 'pct_exon_reads' in sample_data:
+        condition_indices[pct_exon_reads] = sample_data.index[mask_pct_exon_reads]
     
     upset_data = pd.DataFrame(index=sample_data.index)
     for cond, indices in condition_indices.items():
@@ -157,8 +159,9 @@ def filter_and_process_adata(adata, df, QC_cutoff_dict, tissue, tissue_std, log_
         adata_process = adata_filter[sample_obs == sampleID,:].copy()
         adata_remain  = adata_filter[sample_obs != sampleID,:].copy()
         log_lines.append(f'total cellbarcodes in {sampleID}: {len(adata_process.obs_names)}\n')
-        
+
         cutoff = QC_cutoff_dict[sampleID]
+
         adata_process = adata_process[adata_process.obs['n_genes_by_counts'] > int(cutoff['Min_genes_in_cells']), :]
         adata_process = adata_process[adata_process.obs['n_genes_by_counts'] < int(cutoff['Max_genes_in_cells']), :]
         adata_process = adata_process[adata_process.obs['total_counts'] < int(cutoff['Max_counts_in_cells']), :]
@@ -166,8 +169,9 @@ def filter_and_process_adata(adata, df, QC_cutoff_dict, tissue, tissue_std, log_
             adata_process = adata_process[adata_process.obs['pct_counts_mt'] < float(cutoff['Max_percent_mt_in_cells']), :]
         if cutoff['Max_percent_ribo_in_cells'] != '---':
             adata_process = adata_process[adata_process.obs['pct_counts_ribo'] < float(cutoff['Max_percent_ribo_in_cells']), :]
-        if cutoff['Exon_ratio_cutoffs'] != '---':
-            adata_process = adata_process[adata_process.obs['pct_exon_reads'] < float(cutoff['Exon_ratio_cutoffs']), :]
+        if 'pct_exon_reads' in adata_process.obs:
+            if cutoff['Exon_ratio_cutoffs'] != '---':
+                adata_process = adata_process[adata_process.obs['pct_exon_reads'] < float(cutoff['Exon_ratio_cutoffs']), :]
         if cutoff['MALAT1_CPM_cutoffs'] != '---':
             adata_process = adata_process[adata_process.obs['MALAT1_CPM'] > int(cutoff['MALAT1_CPM_cutoffs']), :]
         if cutoff['MALAT1_CPM_max_cutoffs'] != '---':
@@ -175,9 +179,8 @@ def filter_and_process_adata(adata, df, QC_cutoff_dict, tissue, tissue_std, log_
         adata_process = adata_process[adata_process.obs['doublet_probabilities'] < float(cutoff['doublet_cutoffs']), :]
         log_lines.append(f'num of cellbarcodes after QC filtering in {sampleID}: {len(adata_process.obs_names)}\n\n')
         adata_filter = ad.concat([adata_process, adata_remain])
-        
     log_lines.append(f'\nnum of cellbarcodes after QC filtering: {len(adata_filter.obs_names)}')
-    
+
     # Save log
     os.makedirs(log_file_dir, exist_ok=True)
     logfile = os.path.join(log_file_dir, f"{tissue_std}_filtering_stat_counts.txt")
@@ -199,9 +202,12 @@ def downstream_process(adata, tissue_std, figdir, all_colors):
     sc.pl.pca_variance_ratio(adata, n_pcs=50, log=True, save=f'.var_ratio.filterqc.{tissue_std}.png', show=False)
     
     # PCA colored by donorID/QC/batch
+    pca_list = ["donorID", "pct_counts_mt","pct_counts_ribo", "pct_exon_reads", "log10_MALAT1_CPM" ]
+    if "pct_exon_reads" not in adata.obs:
+        pca_list.remove('pct_exon_reads')
     sc.pl.pca(
         adata,
-        color=["donorID", "pct_counts_mt","pct_counts_ribo", "pct_exon_reads", "log10_MALAT1_CPM" ],
+        color=pca_list,
         wspace=0.5,
         ncols=2,
         palette=all_colors,
@@ -245,14 +251,19 @@ def run_per_tissue(working_df, output_h5ad_dir, workdir, QC_cutoff, tissue, dono
         "total_counts": adata.obs["total_counts"],
         "pct_counts_mt": adata.obs["pct_counts_mt"],
         "pct_counts_ribo": adata.obs["pct_counts_ribo"],
-        "pct_exon_reads": adata.obs["pct_exon_reads"],
         "MALAT1_CPM": adata.obs["MALAT1_CPM"],
         "MALAT1_max_CPM": adata.obs["MALAT1_CPM"],
         "doublet_probabilities": adata.obs["doublet_probabilities"]
     })
+    if 'pct_exon_reads' in adata.obs:
+        filter_df["pct_exon_reads"] = adata.obs["pct_exon_reads"]
 
     plotlist = ["leiden", "log10_total_counts", "log10_n_genes_by_counts", "pct_counts_mt", "pct_counts_ribo",
                 "pct_exon_reads", "log10_MALAT1_CPM", "doublet_score", "doublet_probabilities"]
+    if 'pct_exon_reads' not in adata.obs:
+        plotlist.remove('pct_exon_reads')
+        for d in QC_cutoff_dict.values():
+            d.pop('pct_exon_reads', None)
 
     # 1. Plot upset (all metrics and filtered only)
     print("[INFO] Generating upset plot...")
@@ -279,7 +290,7 @@ def run_per_tissue(working_df, output_h5ad_dir, workdir, QC_cutoff, tissue, dono
     adata = adata_filt.copy()
 
     # 4. Filter genes with < min_cells, normalize, PCA, cluster, UMAP, save
-    sc.pp.filter_genes(adata, min_cells=int(QC_cutoff_dict[working_df['rnaID'].unique()[0]]['Min_cells_for_genes']))
+    sc.pp.filter_genes(adata, min_cells=int(QC_cutoff_dict[adata_filt.obs['sampleID'].unique()[0]]['Min_cells_for_genes']))
 
     # 5. normalization, feature selection, linear dimensional reduction
     print("[INFO] Post-filter processing...")

@@ -47,14 +47,14 @@ def save_stats(adata, out_dir, tissue_std, runtag):
     with open(stat_fp, 'w') as f:
         f.write("---------------\n")
         f.write("Total Number of Cells\n")
-        cellbarcode_count_per_donor = adata.obs.groupby('donorID').size()
+        cellbarcode_count_per_donor = adata.obs.groupby('donorID', observed=False).size()
         f.write("Number of cellbarcodes per donorID:\n")
         f.write(cellbarcode_count_per_donor.to_string())
         f.write("\n\n")
         f.write("---------------\n")
         f.write("Number of Genes Detected per Cell\n")
-        mean_n_genes_by_counts = adata.obs.groupby('donorID')['n_genes_by_counts'].mean().round().astype(int)
-        median_n_genes_by_counts = adata.obs.groupby('donorID')['n_genes_by_counts'].median().astype(int)
+        mean_n_genes_by_counts = adata.obs.groupby('donorID', observed=False)['n_genes_by_counts'].mean().round().astype(int)
+        median_n_genes_by_counts = adata.obs.groupby('donorID', observed=False)['n_genes_by_counts'].median().astype(int)
         f.write("Mean of n_genes_by_counts per donorID:\n")
         f.write(mean_n_genes_by_counts.to_string())
         f.write("\n")
@@ -63,8 +63,8 @@ def save_stats(adata, out_dir, tissue_std, runtag):
         f.write("\n\n")
         f.write("---------------\n")
         f.write("Number of UMI Counts per Cell\n")
-        mean_total_counts = adata.obs.groupby('donorID')['total_counts'].mean().round(0).astype(int)
-        median_total_counts = adata.obs.groupby('donorID')['total_counts'].median().astype(int)
+        mean_total_counts = adata.obs.groupby('donorID', observed=False)['total_counts'].mean().round(0).astype(int)
+        median_total_counts = adata.obs.groupby('donorID', observed=False)['total_counts'].median().astype(int)
         f.write("Mean of total_counts per donorID:\n")
         f.write(mean_total_counts.to_string())
         f.write("\n")
@@ -115,6 +115,9 @@ def run_per_tissue(workdir, output_h5ad_dir, qc_cutoff_tissue, tissue, donor_col
     
     qc_metrics = ["leiden", "log10_total_counts", "log10_n_genes_by_counts", "pct_counts_mt", "pct_counts_ribo", 
                   "pct_exon_reads", "log10_MALAT1_CPM", "doublet_score", "doublet_probabilities"]
+    if "pct_exon_reads" not in adata.obs:
+        qc_metrics.remove('pct_exon_reads')
+    
     plot_umap_highlight_by_qc_metrics(adata, tissue, tissue_std, figdir, qc_metrics)
     plot_qc_metrics_violin_by_cluster(adata, tissue, tissue_std, figdir, qc_metrics[1:])
     
