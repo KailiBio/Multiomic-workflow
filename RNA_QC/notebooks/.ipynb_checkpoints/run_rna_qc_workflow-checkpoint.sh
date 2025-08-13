@@ -40,6 +40,6 @@ printf "\nStep 4: Batch correction (Optional)\n"
 python scripts/batch_correction.py "$config" "$runtag"
 
 printf "\nStep 5: Clustering and QC re-assessment\n"
-python scripts/clustering_and_qc_reassessment.py "$config" "$runtag"
+python scripts/clustering_and_qc_reassessment.py "$config" "$runtag" "sampleID"
 
 printf "\nAll RNA QC workflow steps completed. Cheers!\n"

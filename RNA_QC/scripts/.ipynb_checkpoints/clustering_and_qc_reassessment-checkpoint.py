@@ -78,7 +78,7 @@ def save_processed_adata(adata, output_h5ad_dir, tissue_std, runtag):
     out_h5ad = os.path.join(output_h5ad_dir,  f"{tissue_std}_GEX.filtered.processed.{runtag}.h5ad")
     adata.write(out_h5ad)
 
-def run_per_tissue(workdir, output_h5ad_dir, qc_cutoff_tissue, tissue, donor_colors, runtag, key = "sampleID",
+def run_per_tissue(workdir, output_h5ad_dir, qc_cutoff_tissue, tissue, donor_colors, runtag, key = "aliquotID",
                                 resolutions=[0.1,0.5,1.0], default_res=0.5,):
     
     tissue_std = standardize_tissue_name(tissue)
@@ -93,6 +93,11 @@ def run_per_tissue(workdir, output_h5ad_dir, qc_cutoff_tissue, tissue, donor_col
 
     print("[INFO] Loading anndata object...")
     adata = sc.read_h5ad(adata_path)
+
+    print("[INFO] adding aliquot ID...")
+    aliquotID = [f"{parts[0]}_{parts[3]}-{parts[4]}" 
+                 for parts in (id.split('-') for id in adata.obs['sampleID'])]
+    adata.obs['aliquotID'] = aliquotID
     
     figdir = os.path.join(workdir, 'figures')
     os.makedirs(figdir, exist_ok=True)
@@ -105,6 +110,10 @@ def run_per_tissue(workdir, output_h5ad_dir, qc_cutoff_tissue, tissue, donor_col
     elif key == 'sampleID':
         sample_colors={}
         all_colors = assign_donor_colors(adata.obs, sample_colors, key = 'sampleID')
+        print(f"use colors: {all_colors}")
+    elif key == 'aliquotID':
+        aliquot_colors={}
+        all_colors = assign_donor_colors(adata.obs, aliquot_colors, key = 'aliquotID')
         print(f"use colors: {all_colors}")
     else:
         print("[WARNING] need to edit for colors")
@@ -138,7 +147,7 @@ def run_per_tissue(workdir, output_h5ad_dir, qc_cutoff_tissue, tissue, donor_col
     
     print(f"[INFO] Finished clustering and QC re-assessment for {tissue}.")
 
-def main(config_path, runtag):
+def main(config_path, runtag, key):
     config = load_config(config_path)
 
     workdir = config['paths']['workdir']
@@ -169,8 +178,7 @@ def main(config_path, runtag):
             
             try:
                 QC_cutoff = df_cutoff_all[df_cutoff_all['Tissue'] == tissue_name]
-                run_per_tissue(workdir, output_h5ad_dir, QC_cutoff, tissue_name, donor_colors, runtag, 
-                               key = "sampleID")
+                run_per_tissue(workdir, output_h5ad_dir, QC_cutoff, tissue_name, donor_colors, runtag, key)
             except Exception as e:
                 print(f"[ERROR] QC re-assessment failed for {tissue_name}: {e}")
     else:
@@ -178,8 +186,7 @@ def main(config_path, runtag):
         
         try:
             QC_cutoff = df_cutoff_all[df_cutoff_all['Tissue'] == tissue]
-            run_per_tissue(workdir, output_h5ad_dir, QC_cutoff, tissue, donor_colors, runtag,
-                           key = "sampleID")
+            run_per_tissue(workdir, output_h5ad_dir, QC_cutoff, tissue, donor_colors, runtag, key)
         except Exception as e:
             print(f"[ERROR] QC re-assessment failed for {tissue}: {e}")
 
@@ -187,5 +194,6 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Cluster and re-assess QC metrics for scRNA-seq h5ad.")
     parser.add_argument("config", help="YAML config file describing tissue, paths, etc.")
     parser.add_argument("runtag", help="Tag for this run (e.g. round3 or v1)")
+    parser.add_argument("key", help="key to plot (sampleID, aliquotID, donorID)")
     args = parser.parse_args()
-    main(args.config, args.runtag)
+    main(args.config, args.runtag, args.key)
