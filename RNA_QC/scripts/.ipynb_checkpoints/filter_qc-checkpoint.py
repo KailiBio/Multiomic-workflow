@@ -145,22 +145,22 @@ def export_doublet_calls_by_sample(adata, QC_cutoff_dict, figdir):
         df_doublet.to_csv(doublet_outfile, sep='\t', index=True, header=True, index_label="cell_barcode")
 
 
-def filter_and_process_adata(adata, df, QC_cutoff_dict, tissue, tissue_std, log_file_dir):
+def filter_and_process_adata(adata, df, QC_cutoff_dict, tissue, tissue_std, log_file_dir, key):
 
     adata_filter = adata.copy()
     
     log_lines = []
     log_lines.append(f'total cellbarcodes for all samples: {len(adata.obs_names)}\n\n')
     
-    for sampleID in adata.obs['sampleID'].unique():
+    for ID in adata.obs[key].unique():
 
-        print(f"[INFO] Filtering {sampleID}...")
-        sample_obs = adata_filter.obs['sampleID']
-        adata_process = adata_filter[sample_obs == sampleID,:].copy()
-        adata_remain  = adata_filter[sample_obs != sampleID,:].copy()
-        log_lines.append(f'total cellbarcodes in {sampleID}: {len(adata_process.obs_names)}\n')
+        print(f"[INFO] Filtering {ID}...")
+        sample_obs = adata_filter.obs[key]
+        adata_process = adata_filter[sample_obs == ID,:].copy()
+        adata_remain  = adata_filter[sample_obs != ID,:].copy()
+        log_lines.append(f'total cellbarcodes in {ID}: {len(adata_process.obs_names)}\n')
 
-        cutoff = QC_cutoff_dict[sampleID]
+        cutoff = QC_cutoff_dict[ID]
 
         adata_process = adata_process[adata_process.obs['n_genes_by_counts'] > int(cutoff['Min_genes_in_cells']), :]
         adata_process = adata_process[adata_process.obs['n_genes_by_counts'] < int(cutoff['Max_genes_in_cells']), :]
@@ -177,7 +177,7 @@ def filter_and_process_adata(adata, df, QC_cutoff_dict, tissue, tissue_std, log_
         if cutoff['MALAT1_CPM_max_cutoffs'] != '---':
             adata_process = adata_process[adata_process.obs['MALAT1_CPM'] < int(cutoff['MALAT1_CPM_max_cutoffs']), :]
         adata_process = adata_process[adata_process.obs['doublet_probabilities'] < float(cutoff['doublet_cutoffs']), :]
-        log_lines.append(f'num of cellbarcodes after QC filtering in {sampleID}: {len(adata_process.obs_names)}\n\n')
+        log_lines.append(f'num of cellbarcodes after QC filtering in {ID}: {len(adata_process.obs_names)}\n\n')
         adata_filter = ad.concat([adata_process, adata_remain])
     log_lines.append(f'\nnum of cellbarcodes after QC filtering: {len(adata_filter.obs_names)}')
 
@@ -202,7 +202,7 @@ def downstream_process(adata, tissue_std, figdir, all_colors):
     sc.pl.pca_variance_ratio(adata, n_pcs=50, log=True, save=f'.var_ratio.filterqc.{tissue_std}.png', show=False)
     
     # PCA colored by donorID/QC/batch
-    pca_list = ["donorID", "pct_counts_mt","pct_counts_ribo", "pct_exon_reads", "log10_MALAT1_CPM" ]
+    pca_list = ["sampleID", "pct_counts_mt","pct_counts_ribo", "pct_exon_reads", "log10_MALAT1_CPM" ]
     if "pct_exon_reads" not in adata.obs:
         pca_list.remove('pct_exon_reads')
     sc.pl.pca(
@@ -225,7 +225,8 @@ def compress_and_save_postqc_h5ad(adata, output_h5ad_dir, tissue_std, runtag):
     print("[INFO] Saving h5ad...")
     adata.write(os.path.join(output_h5ad_dir, f'{tissue_std}_GEX.filtered.{runtag}.h5ad'))
 
-def run_per_tissue(working_df, output_h5ad_dir, workdir, QC_cutoff, tissue, donor_colors, default_cutoffs, runtag):
+def run_per_tissue(working_df, output_h5ad_dir, workdir, QC_cutoff, tissue, donor_colors, default_cutoffs, runtag,
+                  key):
     tissue_std = standardize_tissue_name(tissue)
 
     adata_path = os.path.join(output_h5ad_dir, f"{tissue_std}_GEX.withQC.h5ad")
@@ -240,7 +241,16 @@ def run_per_tissue(working_df, output_h5ad_dir, workdir, QC_cutoff, tissue, dono
     os.makedirs(figdir, exist_ok=True)
     os.chdir(workdir)
 
-    all_colors = assign_donor_colors(adata.obs, donor_colors)
+    print(f'[INFO] all figure plots by {key}')
+    if key == 'donorID':
+        all_colors = assign_donor_colors(working_df, donor_colors, key = key)
+        print(f"use colors: {all_colors}")
+    elif key == 'sampleID':
+        sample_colors={}
+        all_colors = assign_donor_colors(working_df, sample_colors, key = 'rnaID')
+        print(f"use colors: {all_colors}")
+    else:
+        print("[WARNING] need to edit for colors")
 
     QC_cutoff_dict = QC_cutoff.set_index('rnaID').T.to_dict()
 
@@ -267,16 +277,16 @@ def run_per_tissue(working_df, output_h5ad_dir, workdir, QC_cutoff, tissue, dono
 
     # 1. Plot upset (all metrics and filtered only)
     print("[INFO] Generating upset plot...")
-    for sampleID in filter_df['sampleID'].unique():
-        sample_df = filter_df[filter_df['sampleID']==sampleID]
+    for ID in filter_df[key].unique():
+        sample_df = filter_df[filter_df[key]==ID]
 
         up1 = prepare_upset_summary_allQC(sample_df, QC_cutoff_dict, adata.obs, default_cutoffs)
-        plot_upset(up1, tissue, sampleID, tissue_std, adata, 
-                   os.path.join(figdir,f"QC_filtering_upset.all.filterqc.{tissue_std}.{sampleID}.png"))
+        plot_upset(up1, tissue, key, ID, tissue_std, adata, 
+                   os.path.join(figdir,f"QC_filtering_upset.all.filterqc.{tissue_std}.{ID}.png"))
 
         up2 = prepare_upset_summary_filteredQC(sample_df, QC_cutoff_dict)
-        plot_upset(up2, tissue, sampleID, tissue_std, adata, 
-                   os.path.join(figdir, f"QC_filtering_upset.filteringOnly.filterqc.{tissue_std}.{sampleID}.png"))
+        plot_upset(up2, tissue, key, ID, tissue_std, adata, 
+                   os.path.join(figdir, f"QC_filtering_upset.filteringOnly.filterqc.{tissue_std}.{ID}.png"))
 
     # 2. save doublet results
     print("[INFO] Export doublet information...")
@@ -284,13 +294,13 @@ def run_per_tissue(working_df, output_h5ad_dir, workdir, QC_cutoff, tissue, dono
     
     # 3. Filtering + logging
     print("[INFO] Filtering...")
-    adata_filt = filter_and_process_adata(adata, working_df, QC_cutoff_dict, tissue, tissue_std, figdir)
+    adata_filt = filter_and_process_adata(adata, working_df, QC_cutoff_dict, tissue, tissue_std, figdir, key)
     adata_filt.var = adata.var.copy()
     adata_filt.uns = adata.uns.copy()
     adata = adata_filt.copy()
 
     # 4. Filter genes with < min_cells, normalize, PCA, cluster, UMAP, save
-    sc.pp.filter_genes(adata, min_cells=int(QC_cutoff_dict[adata_filt.obs['sampleID'].unique()[0]]['Min_cells_for_genes']))
+    sc.pp.filter_genes(adata, min_cells=int(QC_cutoff_dict[adata_filt.obs[key].unique()[0]]['Min_cells_for_genes']))
 
     # 5. normalization, feature selection, linear dimensional reduction
     print("[INFO] Post-filter processing...")
@@ -348,7 +358,7 @@ def main(config_path, runtag):
             try:
                 working_df = df[df["tissue"] == tissue_name]
                 QC_cutoff = df_cutoff_all[df_cutoff_all['Tissue'] == tissue_name]
-                run_per_tissue(working_df, output_h5ad_dir, workdir, QC_cutoff, tissue_name, donor_colors, default_cutoffs, runtag)
+                run_per_tissue(working_df, output_h5ad_dir, workdir, QC_cutoff, tissue_name, donor_colors, default_cutoffs, runtag, "sampleID")
             except Exception as e:
                 print(f"[ERROR] QC filtering failed for {tissue_name}: {e}")
     else:
@@ -356,7 +366,7 @@ def main(config_path, runtag):
         try:
             working_df = df[df["tissue"] == tissue]
             QC_cutoff = df_cutoff_all[df_cutoff_all['Tissue'] == tissue]
-            run_per_tissue(working_df, output_h5ad_dir, workdir, QC_cutoff, tissue, donor_colors, default_cutoffs, runtag)
+            run_per_tissue(working_df, output_h5ad_dir, workdir, QC_cutoff, tissue, donor_colors, default_cutoffs, runtag, "sampleID")
         except Exception as e:
             print(f"[ERROR] QC filtering failed for {tissue}: {e}")
 

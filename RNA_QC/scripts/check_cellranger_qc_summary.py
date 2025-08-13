@@ -45,7 +45,7 @@ def plot_qc_metrics(summary_df, all_colors, tissue, outdir, suffix):
     axes = axes.flatten()
     for i, col in enumerate(columns_to_plot):
         ax = axes[i]
-        colors = summary_df['donorID'].map(all_colors)
+        colors = summary_df['sampleID'].map(all_colors)
         values = summary_df[col].copy()
 
         # plot horizontal bar
@@ -79,9 +79,9 @@ def plot_read_mappability(summary_df, all_colors, tissue, outdir, suffix):
     fig, axes = plt.subplots(nrows=7, ncols=1, figsize=(6, 9), sharex=True)
     mappability_cols = list(summary_df.columns[9:16])
     for i, (ax, col) in enumerate(zip(axes, mappability_cols)):
-        colors = summary_df['donorID'].map(all_colors)
+        colors = summary_df['sampleID'].map(all_colors)
         values = summary_df[col].apply(lambda x: float(str(x).replace('%', '').strip()) if isinstance(x, str) else x).fillna(0)
-        ax.barh(summary_df['donorID'], values, color=colors, height=0.6)
+        ax.barh(summary_df['sampleID'], values, color=colors, height=0.6)
         for index, value in enumerate(values):
             if value > 0:
                 ax.text(value, index, f'{value:.2f}%', va='center', color='black', fontsize=10)
@@ -125,8 +125,11 @@ def main(config_path):
         sys.exit(1)
 
     # Get donor color map
-    donor_colors = config['color'].get("donor_colors")
-    all_colors = assign_donor_colors(summary_df, donor_colors)
+    #donor_colors = config['color'].get("donor_colors")
+    #all_colors = assign_donor_colors(summary_df, donor_colors)
+    sample_colors = {}
+    all_colors = assign_donor_colors(summary_df, sample_colors, 'sampleID')
+    
 
     print("[INFO] Plotting general QC metrics...")
     plot_qc_metrics(summary_df, all_colors, tissue, outdir, suffix)

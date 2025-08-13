@@ -21,7 +21,7 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')
 from rna_qc.utils import load_config, standardize_tissue_name
 from rna_qc.rna_plots import move_figures_to_newdir
 
-def run_harmony_batch_correction(output_h5ad_dir, workdir, tissue, runtag, donor_key="donorID"):
+def run_harmony_batch_correction(output_h5ad_dir, workdir, tissue, runtag, key="sampleID"):
     
     tissue_std = standardize_tissue_name(tissue)
 
@@ -47,7 +47,7 @@ def run_harmony_batch_correction(output_h5ad_dir, workdir, tissue, runtag, donor
 
     # Run Harmony batch correction
     print("[INFO] Running Harmony integration...")
-    sce.pp.harmony_integrate(adata, key=donor_key, max_iter_harmony=30)
+    sce.pp.harmony_integrate(adata, key=key, max_iter_harmony=30)
 
     # Build UMAP from Harmony-corrected PCA
     adata.obsm['X_pca'] = adata.obsm['X_pca_harmony']
@@ -57,10 +57,10 @@ def run_harmony_batch_correction(output_h5ad_dir, workdir, tissue, runtag, donor
     # Plot before and after Harmony UMAP
     fig, axes = plt.subplots(1, 2, figsize=(10, 4))
     ## before Harmony
-    sc.pl.umap(adata_before, color=[donor_key], ax=axes[0], show=False, title="Before Harmony")
+    sc.pl.umap(adata_before, color=[key], ax=axes[0], show=False, title="Before Harmony")
     axes[0].set_title('Before Harmony')
     ## after Harmony
-    sc.pl.umap(adata, color=[donor_key], ax=axes[1], show=False, title="After Harmony")
+    sc.pl.umap(adata, color=[key], ax=axes[1], show=False, title="After Harmony")
     axes[1].set_title('After Harmony')
     #
     fig.suptitle(f"{tissue}: Harmony Batch Correction", fontsize=16)
@@ -102,14 +102,14 @@ def main(config_path, runtag):
             print(f"\n============== Processing tissue: {tissue_name} ({idx}/{len(tissue_names)}) ==============")
             
             try:
-                run_harmony_batch_correction(output_h5ad_dir, workdir, tissue_name, runtag)
+                run_harmony_batch_correction(output_h5ad_dir, workdir, tissue_name, runtag, key = "sampleID")
             except Exception as e:
                 print(f"[ERROR] Harmony batch correction failed for {tissue_name}: {e}")
     else:
         print(f"\n============== Processing tissue: {tissue} ==============")
         
         try:
-            run_harmony_batch_correction(output_h5ad_dir, workdir, tissue, runtag)
+            run_harmony_batch_correction(output_h5ad_dir, workdir, tissue, runtag, key = "sampleID")
         except Exception as e:
             print(f"[ERROR] Harmony batch correction failed for {tissue}: {e}")
 

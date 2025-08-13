@@ -43,11 +43,11 @@ def move_figures_to_newdir(output_figures_dir, old, new):
     if os.path.exists(old_path):
         os.rename(old_path, new_path)
 
-def plot_qc_violin(adata, metric, tissue, tissue_std, all_colors, metrics_with_cutoffs, figdir):
+def plot_qc_violin(adata, metric, tissue, tissue_std, all_colors, metrics_with_cutoffs, figdir, key):
     if metric in adata.obs:
         print(f"[INFO] Plotting violin for: {metric}...")
         all_data = adata.obs[metric].copy()
-        df = adata.obs[[metric, 'donorID']].copy()
+        df = adata.obs[[metric, key]].copy()
         donor_order = list(all_colors.keys())
         fig, axes = plt.subplots(1, 2, figsize=(2 * len(donor_order), 4), gridspec_kw={'width_ratios': [1, 3]}, sharey=True)
         # All data
@@ -56,10 +56,10 @@ def plot_qc_violin(adata, metric, tissue, tissue_std, all_colors, metrics_with_c
         axes[0].set_ylabel(metric)
         axes[0].grid(False)
         # By donor
-        sns.violinplot(x='donorID', y=metric, data=df, ax=axes[1],
-                       palette=all_colors, hue='donorID', legend=False,
+        sns.violinplot(x=key, y=metric, data=df, ax=axes[1],
+                       palette=all_colors, hue=key, legend=False,
                        order=donor_order, inner='box')
-        axes[1].set_title('by DonorID')
+        axes[1].set_title(f'by {key}')
         axes[1].set_xlabel('')
         axes[1].tick_params(axis='x', rotation=0)
         axes[1].grid(False)
@@ -70,7 +70,7 @@ def plot_qc_violin(adata, metric, tissue, tissue_std, all_colors, metrics_with_c
                 axes[1].axhline(y=v, color='red', linestyle='--', linewidth=1)
         fig.suptitle(f'{metric} on {tissue}', fontsize=14)
         plt.tight_layout()
-        fig.savefig(os.path.join(figdir, f'RNA_QC_violin.{tissue_std}.{metric}.png'), dpi=300, bbox_inches='tight')
+        fig.savefig(os.path.join(figdir, f'RNA_QC_violin.by{key}.{tissue_std}.{metric}.png'), dpi=300, bbox_inches='tight')
         plt.close(fig)
 
 def plot_qc_jointplot(adata, x_metric, y_metric, title, save_path):
@@ -86,28 +86,28 @@ def plot_qc_jointplot(adata, x_metric, y_metric, title, save_path):
         g.figure.savefig(save_path, dpi=300, bbox_inches='tight')
         plt.close(g.fig)
 
-def plot_qc_cumulative_distribution(adata, metrics, tissue, tissue_std, all_colors, figdir):
+def plot_qc_cumulative_distribution(adata, metrics, tissue, tissue_std, all_colors, figdir, key):
     for metric in metrics:
         if metric in adata.obs:
             print(f"[INFO] Plotting cumulative distribution for: {metric}...")
             plt.figure(figsize=(5, 4))
-            sns.ecdfplot(data=adata.obs, x=metric, hue='donorID', palette=all_colors)
+            sns.ecdfplot(data=adata.obs, x=metric, hue=key, palette=all_colors)
             ax = plt.gca()
             ax.set_xlabel(metric)
             ax.set_ylabel('Proportion of Cells')
             ax.set_title(f'Cumulative Distribution in {tissue}')
             ax.grid(False)
             plt.tight_layout()
-            plt.savefig(os.path.join(figdir, f"RNA_QC_cumulative.{tissue_std}.{metric}.png"), dpi=300, bbox_inches='tight')
+            plt.savefig(os.path.join(figdir, f"RNA_QC_cumulative.by{key}.{tissue_std}.{metric}.png"), dpi=300, bbox_inches='tight')
             plt.close()
 
-def plot_doublet_hist(adata, donor_col, tissue, tissue_std, figdir):
-    for donorID in adata.obs['donorID'].unique():
-        print(f"[INFO] Plotting doublet score & probability distribution for: {donorID}...")
-        doublet_scores = adata[adata.obs['donorID'] == donorID].obs['doublet_score']
-        doublet_probabilities = adata[adata.obs['donorID'] == donorID].obs['doublet_probabilities']
+def plot_doublet_hist(adata, donor_col, tissue, tissue_std, figdir, key):
+    for ID in adata.obs[key].unique():
+        print(f"[INFO] Plotting doublet score & probability distribution for: {ID}...")
+        doublet_scores = adata[adata.obs[key] == ID].obs['doublet_score']
+        doublet_probabilities = adata[adata.obs[key] == ID].obs['doublet_probabilities']
         if doublet_probabilities.isnull().all():
-            print(f"[WARNING] No doublet probabilities for donor {donorID}")
+            print(f"[WARNING] No doublet probabilities for {ID}")
             continue
         probability_midpoint = ((doublet_probabilities.max()+doublet_probabilities.min())/2).round(1)
         doublet_mask = doublet_probabilities > probability_midpoint
@@ -131,12 +131,12 @@ def plot_doublet_hist(adata, donor_col, tissue, tissue_std, figdir):
         axes[1].set_ylabel('Frequency')
         axes[1].set_xlim(0, 1)
         axes[1].grid(False)
-        fig.suptitle(f'distribution of doublet scores and probability on {tissue}, {donorID}', fontsize=14)
+        fig.suptitle(f'distribution of doublet scores and probability on {tissue}, {ID}', fontsize=14)
         plt.tight_layout()
-        plt.savefig(os.path.join(figdir, f"RNA_QC_doublet_hist.{tissue_std}-{donorID}.png"), dpi=300, bbox_inches='tight')
+        plt.savefig(os.path.join(figdir, f"RNA_QC_doublet_hist.{tissue_std}-{ID}.png"), dpi=300, bbox_inches='tight')
         plt.close(fig)
 
-def clustering_umap(adata, tissue, tissue_std, figdir):
+def clustering_umap(adata, tissue, tissue_std, figdir, key):
     print("[INFO] Clustering and UMAP...")
     sc.pp.pca(adata, n_comps=50, svd_solver='arpack')
     sc.pp.neighbors(adata, n_neighbors=15, use_rep='X_pca')
@@ -145,37 +145,40 @@ def clustering_umap(adata, tissue, tissue_std, figdir):
     sc.tl.umap(adata)
     sc.pl.umap(
         adata, color=["leiden"], title=f'{tissue}: before filtering',
-        save=f'.{tissue_std}.LeidenClusterBeforeFiltering.png', show=False
-    )
+        save=f'.{tissue_std}.LeidenClusterBeforeFiltering.png', show=False)
     
     plotlist = ["leiden", "log10_total_counts", "log10_n_genes_by_counts", "pct_counts_mt", "pct_counts_ribo",
                 "pct_exon_reads", "log10_MALAT1_CPM", "doublet_score", "doublet_probabilities"]
     if "pct_exon_reads" not in adata.obs:
         plotlist.remove("pct_exon_reads")
+
+    print(plotlist)
         
     # All together
+    print("ss")
     sc.pl.umap(
         adata, color=plotlist, wspace=0.3, ncols=3,
         title=[f"{tissue} (before filtering): {feature}" for feature in plotlist],
-        save=f'.QCmetrics_LeidenClusterBeforeFiltering.{tissue_std}.png', show=False
-    )
-    # By donor
-    donorlist = adata.obs['donorID'].unique()
-    for donor in donorlist:
-        adata_plot = adata[adata.obs['donorID'] == donor,:]
+        save=f'.QCmetrics_LeidenClusterBeforeFiltering.{tissue_std}.png', show=False)
+    
+    # By sample/donor
+    print(key)
+    IDlist = adata.obs[key].unique()
+    for ID in IDlist:
+        adata_plot = adata[adata.obs[key] == ID,:]
         sc.pl.umap(
             adata_plot, color=plotlist, wspace=0.3, ncols=3,
-            title=[f"{tissue} - {donor} (before filtering): {feature}" for feature in plotlist],
-            save=f'.QCmetrics_LeidenClusterBeforeFiltering.{tissue_std}-{donor}.png', show=False
+            title=[f"{tissue} - {ID} (before filtering): {feature}" for feature in plotlist],
+            save=f'.QCmetrics_LeidenClusterBeforeFiltering.{tissue_std}-{ID}.png', show=False
         )
 
-def plot_upset(upset_data_summary, tissue, donorID, tissue_std, adata, savepath):
+def plot_upset(upset_data_summary, tissue, key, ID, tissue_std, adata, savepath):
     """
     Plot an upset diagram for the given donor's data summary and save to file.
     """
     plt.figure(figsize=(8, 4))
     upsetplot.plot(upset_data_summary, show_counts=True, sort_by="cardinality")
-    plt.suptitle(f'{tissue} - {donorID}: total N={len(adata[adata.obs["donorID"] == donorID, :].obs_names)}', fontsize=14)
+    plt.suptitle(f'{tissue} - {ID}: total N={len(adata[adata.obs[key] == ID, :].obs_names)}', fontsize=14)
     plt.tight_layout()
     plt.savefig(savepath, dpi=300, bbox_inches='tight')
     plt.close()
@@ -189,28 +192,28 @@ def run_umap_clustering(adata, tissue, tissue_std, figdir, plotlist):
 
     sc.pl.umap(
         adata,
-        color=["leiden", "donorID"],
+        color=["leiden", "sampleID"],
         wspace=0.5,
         title = [f"{tissue}: {feature}" for feature in plotlist],
         save=f'.filterqc.LeidenCluster-donorID.{tissue_std}.png',
         show=False
     )
 
-def plot_umap_by_donor(adata, tissue, tissue_std, figdir, all_colors):
-    donors = adata.obs['donorID'].unique()
-    fig, axes = plt.subplots(1, len(donors), figsize=(3*len(donors)+2, 3), squeeze=False)
-    for i, donor in enumerate(donors):
-        adata_plot = adata[adata.obs['donorID'] == donor, :]
+def plot_umap_by_ID(adata, tissue, tissue_std, figdir, all_colors, key):
+    IDs = adata.obs[key].unique()
+    fig, axes = plt.subplots(1, len(IDs), figsize=(3*len(IDs)+2, 3), squeeze=False)
+    for i, ID in enumerate(IDs):
+        adata_plot = adata[adata.obs[key] == ID, :]
         sc.pl.umap(adata_plot, color=['leiden'], ax=axes[0, i], show=False, save=False)
-        axes[0, i].set_title(f"{donor} N={len(adata_plot.obs_names)}")
+        axes[0, i].set_title(f"{ID} N={len(adata_plot.obs_names)}")
     fig.suptitle(f"{tissue}")
     plt.tight_layout()
-    plt.savefig(os.path.join(figdir, f"UMAP_LeidenCluster_byDonor.{tissue_std}.png"), dpi=300, bbox_inches='tight')
+    plt.savefig(os.path.join(figdir, f"UMAP_LeidenCluster_by{key}.{tissue_std}.png"), dpi=300, bbox_inches='tight')
     plt.close(fig)
 
-def plot_cellcount_per_cluster_barplot(adata, tissue_std, figdir, all_colors):
-    df_ = adata.obs[['donorID', 'leiden']]
-    df_counts = df_.groupby(['donorID', 'leiden'], observed=False).size().unstack(fill_value=0).T
+def plot_cellcount_per_cluster_barplot(adata, tissue_std, figdir, all_colors, key):
+    df_ = adata.obs[[key, 'leiden']]
+    df_counts = df_.groupby([key, 'leiden'], observed=False).size().unstack(fill_value=0).T
     
     colors = [all_colors[c] for c in df_counts.columns]
     
@@ -220,13 +223,13 @@ def plot_cellcount_per_cluster_barplot(adata, tissue_std, figdir, all_colors):
     ax.set_ylabel('Number of Cells')
     ax.set_title(f"{tissue_std}")
     ax.set_xticklabels(ax.get_xticklabels(), rotation=0)
-    ax.legend(title="Donor ID", bbox_to_anchor=(1.05, 1), loc='upper left')
+    ax.legend(title=key, bbox_to_anchor=(1.05, 1), loc='upper left')
     ax.grid(False)
     plt.tight_layout()
-    plt.savefig(os.path.join(figdir, f"Number_cellbarcode_cluster_byDonor.{tissue_std}.png"), dpi=300, bbox_inches='tight')
+    plt.savefig(os.path.join(figdir, f"Number_cellbarcode_cluster_by{key}.{tissue_std}.png"), dpi=300, bbox_inches='tight')
     plt.close(fig)
 
-def plot_umap_highlight_by_qc_metrics(adata, tissue, tissue_std, figdir, qc_metrics):
+def plot_umap_highlight_by_qc_metrics(adata, tissue, tissue_std, figdir, qc_metrics, key):
     sc.pl.umap(
         adata, color=qc_metrics, wspace=0.3, ncols=3,
         title=[f"{tissue}: {feature}" for feature in qc_metrics],
@@ -234,17 +237,17 @@ def plot_umap_highlight_by_qc_metrics(adata, tissue, tissue_std, figdir, qc_metr
         save=f".LeidenCluster-QCmetrics.{tissue_std}.png"
     )
     
-    for donor in adata.obs['donorID'].unique():
-        adata_plot = adata[adata.obs['donorID'] == donor, :]
+    for ID in adata.obs[key].unique():
+        adata_plot = adata[adata.obs[key] == ID, :]
         sc.pl.umap(
             adata_plot, color=qc_metrics, wspace=0.3, ncols=3,
-            title=[f"{tissue} - {donor}: {feature}" for feature in qc_metrics],
+            title=[f"{tissue} - {ID}: {feature}" for feature in qc_metrics],
             show=False,
-            save=f".LeidenCluster-QCmetrics.{tissue_std}-{donor}.png"
+            save=f".LeidenCluster-QCmetrics.{tissue_std}-{ID}.png"
         )
 
-def plot_qc_metrics_violin_by_cluster(adata, tissue, tissue_std, figdir, features):
-    dfqc = adata.obs[['donorID', "leiden"] + features]
+def plot_qc_metrics_violin_by_cluster(adata, tissue, tissue_std, figdir, features, key):
+    dfqc = adata.obs[[key, "leiden"] + features]
 
     for feature in features:
         fig, ax = plt.subplots(figsize=(12, 4))
@@ -261,24 +264,24 @@ def plot_qc_metrics_violin_by_cluster(adata, tissue, tissue_std, figdir, feature
         plt.close(fig)
         
     # Per donor
-    if len(adata.obs['donorID'].unique()) > 1:
+    if len(adata.obs[key].unique()) > 1:
         for feature in features:
             print(feature)
-            fig, axes = plt.subplots(len(adata.obs['donorID'].unique()), 1, figsize=(12, 3*len(adata.obs['donorID'].unique())), sharey=True)
+            fig, axes = plt.subplots(len(adata.obs[key].unique()), 1, figsize=(12, 3*len(adata.obs[key].unique())), sharey=True)
             y_min, y_max = dfqc[feature].min(), dfqc[feature].max()
             
-            for i, donor in enumerate(adata.obs['donorID'].unique()):
-                df_plot = dfqc[dfqc['donorID'] == donor]
+            for i, ID in enumerate(adata.obs[key].unique()):
+                df_plot = dfqc[dfqc[key] == ID]
                 sns.violinplot(
                     x="leiden", y=feature, data=df_plot,
-                    palette=adata.uns.get('leiden_colors', None), hue="leiden", legend=False, inner="box", ax=axes[i]
-                )
+                    palette=adata.uns.get('leiden_colors', None), hue="leiden", legend=False, inner="box", 
+                    ax=axes[i])
                 axes[i].set_ylim(y_min, y_max)
-                axes[i].set_title(f"{tissue} - {donor}: {feature}")
+                axes[i].set_title(f"{tissue} - {ID}: {feature}")
                 axes[i].set_xlabel("leiden cluster")
                 axes[i].tick_params(axis="x", rotation=0)
                 axes[i].grid(False)
             plt.tight_layout()
-            plt.savefig(os.path.join(figdir, f"QCmetric_bycluster.{tissue_std}-donorID.{feature}.png"), dpi=300, bbox_inches='tight')
+            plt.savefig(os.path.join(figdir, f"QCmetric_bycluster.{tissue_std}-{key}.{feature}.png"), dpi=300, bbox_inches='tight')
             plt.close(fig)
 

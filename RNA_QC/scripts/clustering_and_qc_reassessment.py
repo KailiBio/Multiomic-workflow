@@ -15,7 +15,7 @@ import anndata as ad
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 from rna_qc.utils import load_config, standardize_tissue_name
-from rna_qc.rna_plots import assign_donor_colors, move_figures_to_newdir, plot_umap_by_donor, plot_cellcount_per_cluster_barplot, plot_umap_highlight_by_qc_metrics, plot_qc_metrics_violin_by_cluster
+from rna_qc.rna_plots import assign_donor_colors, move_figures_to_newdir, plot_umap_by_ID, plot_cellcount_per_cluster_barplot, plot_umap_highlight_by_qc_metrics, plot_qc_metrics_violin_by_cluster
 
 def get_h5ad_path(output_h5ad_dir, tissue_std, batch_corrected, runtag):
     if batch_corrected:
@@ -78,8 +78,8 @@ def save_processed_adata(adata, output_h5ad_dir, tissue_std, runtag):
     out_h5ad = os.path.join(output_h5ad_dir,  f"{tissue_std}_GEX.filtered.processed.{runtag}.h5ad")
     adata.write(out_h5ad)
 
-def run_per_tissue(workdir, output_h5ad_dir, qc_cutoff_tissue, tissue, donor_colors, runtag,
-                                resolutions=[0.1,0.5,1.0], default_res=0.5):
+def run_per_tissue(workdir, output_h5ad_dir, qc_cutoff_tissue, tissue, donor_colors, runtag, key = "sampleID",
+                                resolutions=[0.1,0.5,1.0], default_res=0.5,):
     
     tissue_std = standardize_tissue_name(tissue)
 
@@ -98,17 +98,26 @@ def run_per_tissue(workdir, output_h5ad_dir, qc_cutoff_tissue, tissue, donor_col
     os.makedirs(figdir, exist_ok=True)
     os.chdir(workdir)
     
-    all_colors = assign_donor_colors(adata.obs, donor_colors)
+    print(f'[INFO] all figure plots by {key}')
+    if key == 'donorID':
+        all_colors = assign_donor_colors(adata.obs, donor_colors, key = key)
+        print(f"use colors: {all_colors}")
+    elif key == 'sampleID':
+        sample_colors={}
+        all_colors = assign_donor_colors(adata.obs, sample_colors, key = 'sampleID')
+        print(f"use colors: {all_colors}")
+    else:
+        print("[WARNING] need to edit for colors")
     
     # check and decide Leiden resolution
     run_leiden_multi_res(adata, tissue_std, resolutions)
     set_best_leiden(adata, tissue_std, best_res=default_res)
 
-    sc.pl.umap(adata, color=["leiden", "donorID"], wspace=0.3, 
-               title=[f"{tissue}: {feature}" for feature in ["leiden", "donorID"]],
-               show=False, save=f".LeidenCluster-donorID.{tissue_std}.png")
-    plot_umap_by_donor(adata, tissue, tissue_std, figdir, all_colors)
-    plot_cellcount_per_cluster_barplot(adata, tissue_std, figdir, all_colors)
+    sc.pl.umap(adata, color=["leiden", key], wspace=0.3, 
+               title=[f"{tissue}: {feature}" for feature in ["leiden", key]],
+               show=False, save=f".LeidenCluster-{key}.{tissue_std}.png")
+    plot_umap_by_ID(adata, tissue, tissue_std, figdir, all_colors, key)
+    plot_cellcount_per_cluster_barplot(adata, tissue_std, figdir, all_colors, key)
     
     # QC reassessment
     sc.pl.highest_expr_genes(adata, n_top=20, show=False, save=f".postFilter.{tissue_std}.png")
@@ -118,8 +127,8 @@ def run_per_tissue(workdir, output_h5ad_dir, qc_cutoff_tissue, tissue, donor_col
     if "pct_exon_reads" not in adata.obs:
         qc_metrics.remove('pct_exon_reads')
     
-    plot_umap_highlight_by_qc_metrics(adata, tissue, tissue_std, figdir, qc_metrics)
-    plot_qc_metrics_violin_by_cluster(adata, tissue, tissue_std, figdir, qc_metrics[1:])
+    plot_umap_highlight_by_qc_metrics(adata, tissue, tissue_std, figdir, qc_metrics, key)
+    plot_qc_metrics_violin_by_cluster(adata, tissue, tissue_std, figdir, qc_metrics[1:], key)
     
     # Save outputs
     save_stats(adata, figdir, tissue_std, runtag)
@@ -160,7 +169,8 @@ def main(config_path, runtag):
             
             try:
                 QC_cutoff = df_cutoff_all[df_cutoff_all['Tissue'] == tissue_name]
-                run_per_tissue(workdir, output_h5ad_dir, QC_cutoff, tissue_name, donor_colors, runtag)
+                run_per_tissue(workdir, output_h5ad_dir, QC_cutoff, tissue_name, donor_colors, runtag, 
+                               key = "sampleID")
             except Exception as e:
                 print(f"[ERROR] QC re-assessment failed for {tissue_name}: {e}")
     else:
@@ -168,7 +178,8 @@ def main(config_path, runtag):
         
         try:
             QC_cutoff = df_cutoff_all[df_cutoff_all['Tissue'] == tissue]
-            run_per_tissue(workdir, output_h5ad_dir, QC_cutoff, tissue, donor_colors, runtag)
+            run_per_tissue(workdir, output_h5ad_dir, QC_cutoff, tissue, donor_colors, runtag,
+                           key = "sampleID")
         except Exception as e:
             print(f"[ERROR] QC re-assessment failed for {tissue}: {e}")
 

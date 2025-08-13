@@ -68,16 +68,16 @@ def get_doublet_probability(
     i = np.argmax(gmm.means_)
     return gmm.predict_proba(doublet_scores.reshape((-1, 1)))[:,i]
 
-def run_doublet_detection(adata, donor_col):
+def run_doublet_detection(adata, donor_col, key):
     
-    sc.pp.scrublet(adata, batch_key="donorID")
+    sc.pp.scrublet(adata, batch_key=key)
     
     dfs = []
-    for donorID in adata.obs['donorID'].unique():
+    for ID in adata.obs[key].unique():
         try:
-            print(f"[INFO] Doublet detection for {donorID}...")
-            doublet_scores_sim = adata.uns['scrublet']['batches'][donorID]['doublet_scores_sim']
-            doublet_scores = adata[adata.obs['donorID'] == donorID].obs['doublet_score'].to_numpy()
+            print(f"[INFO] Doublet detection for {ID}...")
+            doublet_scores_sim = adata.uns['scrublet']['batches'][ID]['doublet_scores_sim']
+            doublet_scores = adata[adata.obs[key] == ID].obs['doublet_score'].to_numpy()
             
             probabilities = get_doublet_probability(
                 doublet_scores_sim=doublet_scores_sim,
@@ -86,12 +86,12 @@ def run_doublet_detection(adata, donor_col):
                 verbose=True
             )
             
-            obs_names = adata[adata.obs['donorID'] == donorID].obs_names
+            obs_names = adata[adata.obs[key] == ID].obs_names
             df = pd.DataFrame({'obs_names': obs_names, 'probabilities': probabilities})
             dfs.append(df)
             
         except Exception as e:
-            print(f"[WARNING] Could not run doublet GMM for {donorID}: {e}")
+            print(f"[WARNING] Could not run doublet GMM for {ID}: {e}")
     
     if dfs:
         all_prob_df = pd.concat(dfs).set_index('obs_names')
@@ -108,7 +108,7 @@ def compress_and_save(adata, output_h5ad_dir, tissue_std):
     print("[INFO] Saving h5ad...")
     adata.write(os.path.join(output_h5ad_dir, f'{tissue_std}_GEX.withQC.h5ad'))
 
-def run_per_tissue(working_df, tissue, output_h5ad_dir, outdir, donor_colors, scrinvex_dir):
+def run_per_tissue(working_df, tissue, output_h5ad_dir, outdir, donor_colors, scrinvex_dir, key = "sampleID"):
     tissue_std = standardize_tissue_name(tissue)
         
     adata_path = os.path.join(output_h5ad_dir, f"{tissue_std}_GEX.raw.h5ad")
@@ -123,7 +123,16 @@ def run_per_tissue(working_df, tissue, output_h5ad_dir, outdir, donor_colors, sc
     os.makedirs(figdir, exist_ok=True)
     os.chdir(os.path.join(outdir))
 
-    all_colors = assign_donor_colors(working_df, donor_colors)
+    print(f'[INFO] all figure plots by {key}')
+    if key == 'donorID':
+        all_colors = assign_donor_colors(working_df, donor_colors, key = key)
+        print(f"use colors: {all_colors}")
+    elif key == 'sampleID':
+        sample_colors={}
+        all_colors = assign_donor_colors(working_df, sample_colors, key = 'rnaID')
+        print(f"use colors: {all_colors}")
+    else:
+        print("[WARNING] need to edit for colors")
 
     calculate_qc_metrics(adata)
 
@@ -155,7 +164,7 @@ def run_per_tissue(working_df, tissue, output_h5ad_dir, outdir, donor_colors, sc
     }
 
     for metric in QC_metrics:
-        plot_qc_violin(adata, metric, tissue, tissue_std, all_colors, metrics_with_cutoffs, figdir)
+        plot_qc_violin(adata, metric, tissue, tissue_std, all_colors, metrics_with_cutoffs, figdir, key)
 
     # Joint scatter gene/cell counts
     plot_qc_jointplot(
@@ -167,32 +176,25 @@ def run_per_tissue(working_df, tissue, output_h5ad_dir, outdir, donor_colors, sc
     )
     
     # Joint per-donor
-    for donorID in adata.obs['donorID'].unique():
-        donor_data = adata[adata.obs['donorID'] == donorID]
+    for ID in adata.obs[key].unique():
+        per_data = adata[adata.obs[key] == ID]
         plot_qc_jointplot(
-            adata=donor_data,
+            adata=per_data,
             x_metric='log10_total_counts',
             y_metric='log10_n_genes_by_counts',
-            title=f"{tissue_std}: {donorID}",
-            save_path=os.path.join(figdir, f"RNA_QC.{tissue_std}-{donorID}.cellCounts_geneCounts_scatter.png"),
+            title=f"{tissue_std}: {ID}",
+            save_path=os.path.join(figdir, f"RNA_QC.{tissue_std}-{ID}.cellCounts_geneCounts_scatter.png"),
         )
 
     # Cumulative plots
-    plot_qc_cumulative_distribution(
-        adata=adata,
-        metrics=QC_metrics,
-        tissue=tissue,
-        tissue_std=tissue_std,
-        all_colors=all_colors,
-        figdir=figdir
-    )
+    plot_qc_cumulative_distribution(adata, QC_metrics, tissue, tissue_std, all_colors, figdir, key)
 
     # Doublet detection
-    run_doublet_detection(adata, all_colors)
-    plot_doublet_hist(adata, all_colors, tissue, tissue_std, figdir)
+    run_doublet_detection(adata, all_colors, key)
+    plot_doublet_hist(adata, all_colors, tissue, tissue_std, figdir, key)
 
     # Clustering, UMAP, etc.
-    clustering_umap(adata, tissue, tissue_std, figdir)
+    clustering_umap(adata, tissue, tissue_std, figdir, key)
 
     # Save output h5ad
     compress_and_save(adata, output_h5ad_dir, tissue_std)
@@ -224,7 +226,8 @@ def main(config_path):
 
             try:
                 working_df = df[df["tissue"] == tissue_name]
-                run_per_tissue(working_df, tissue_name, output_h5ad_dir, workdir, donor_colors, scrinvex_dir)
+                run_per_tissue(working_df, tissue_name, output_h5ad_dir, workdir, donor_colors, scrinvex_dir,
+                              key = "sampleID")
             except Exception as e:
                 print(f"[ERROR] Encountered error for tissue {tissue_name}: {e}")
     else:
@@ -232,7 +235,8 @@ def main(config_path):
         
         try:
             working_df = df[df["tissue"] == tissue]
-            run_per_tissue(working_df, tissue, output_h5ad_dir, workdir, donor_colors, scrinvex_dir)
+            run_per_tissue(working_df, tissue, output_h5ad_dir, workdir, donor_colors, scrinvex_dir,
+                           key = "sampleID")
         except Exception as e:
             print(f"[ERROR] Encountered error for tissue {tissue}: {e}")
             
