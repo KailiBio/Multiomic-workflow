@@ -27,17 +27,37 @@ def load_cellranger_h5(input_dir, sampleID):
     return adata
 
 def add_scrinvex_info(scrinvex_dir, sampleID, adata):
-    """Add 'pct_exon_reads' to adata.obs from Scrinvex output if available."""
-    scrinvex_file = os.path.join(scrinvex_dir, sampleID, f'{sampleID}.scrinvex.tsv')
-    if not os.path.isfile(scrinvex_file):
-        print(f"[WARNING] Scrinvex file not found for sample {sampleID}. Skipping exon% info.")
-        return adata
+    """Add 'pct_exon_reads' to adata.obs from Scrinvex output if available (prefer pct_exonic if present).
+    """
+    # 1. Try to read precomputed pct_exonic
+    pct_exonic_file = os.path.join(scrinvex_dir, sampleID, f"{sampleID}.pct_exonic.tsv")
+    if os.path.isfile(pct_exonic_file):
+        try:
+            pct_df = pd.read_csv(pct_exonic_file, sep=r'\s+')
+            # Ensure barcode alignment
+            adata.obs['pct_exon_reads'] = pct_df.set_index('barcode').reindex(adata.obs.index)['pct_exonic']
+            print(f"[INFO] Loaded pct_exonic from {pct_exonic_file} for sample {sampleID}.")
+            return adata
+        except Exception as e:
+            print(f"[WARNING] Could not parse {pct_exonic_file} for pct_exon_reads: {e}")
+            # Fall through to legacy mode
 
-    scrinvex_all = pd.read_csv(scrinvex_file, sep='\t')
-    scrinvex_count = scrinvex_all.groupby("barcode").sum(numeric_only=True)
-    denom = scrinvex_count[['introns', 'junctions', 'exons']].sum(axis=1).replace(0, pd.NA)
-    scrinvex_count['pct_exon_reads'] = (scrinvex_count['exons'] / denom * 100).round(2)
-    adata.obs['pct_exon_reads'] = scrinvex_count['pct_exon_reads'].reindex(adata.obs.index)
+    # 2. Fallback to legacy scrinvex if available
+    scrinvex_file = os.path.join(scrinvex_dir, sampleID, f'{sampleID}.scrinvex.tsv')
+    if os.path.isfile(scrinvex_file):
+        try:
+            scrinvex_all = pd.read_csv(scrinvex_file, sep='\t')
+            scrinvex_count = scrinvex_all.groupby("barcode").sum(numeric_only=True)
+            denom = scrinvex_count[['introns', 'junctions', 'exons']].sum(axis=1).replace(0, pd.NA)
+            scrinvex_count['pct_exon_reads'] = (scrinvex_count['exons'] / denom * 100).round(2)
+            adata.obs['pct_exon_reads'] = scrinvex_count['pct_exon_reads'].reindex(adata.obs.index)
+            print(f"[INFO] Loaded legacy scrinvex for sample {sampleID}.")
+            return adata
+        except Exception as e:
+            print(f"[WARNING] Could not parse legacy scrinvex for {sampleID}: {e}")
+
+    # 3. No info found
+    print(f"[WARNING] No pct_exon_reads found for sample {sampleID} - skipping.")
     return adata
 
 def extract_batch_number(sampleID):
