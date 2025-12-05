@@ -1,0 +1,14 @@
+scanpy
+anndata
+pandas
+numpy
+matplotlib
+seaborn
+harmonypy
+upsetplot
+scikit-image
+igraph
+jupyter
+notebook
+scipy
+tqdm
