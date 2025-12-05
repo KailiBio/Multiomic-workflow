@@ -15,6 +15,7 @@ import scanpy as sc
 import scipy.sparse
 import logging
 from sklearn.mixture import BayesianGaussianMixture
+import warnings
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 from rna_qc.utils import load_config, standardize_tissue_name
@@ -22,6 +23,20 @@ from rna_qc.rna_plots import assign_donor_colors, move_figures_to_newdir, plot_q
 
 def calculate_qc_metrics(adata):
     # calculate mt, ribo, hb
+    # Canonical mitochondrial protein-coding genes (with both naming conventions)
+#    mito_gene_list = [
+#    "ND1","ND2","ND3","ND4","ND4L","ND5","ND6",
+#    "MT-ND1","MT-ND2","MT-ND3","MT-ND4","MT-ND4L","MT-ND5","MT-ND6",
+#    "COX1","COX2","COX3",
+#    "MT-CO1","MT-CO2","MT-CO3",
+#    "CYTB","MT-CYB",
+#    "ATP6","ATP8",
+#    "MT-ATP6","MT-ATP8",
+#    ]
+
+    # Flag mito genes
+#    adata.var["mt"] = adata.var_names.isin(mito_gene_list)
+
     adata.var["mt"] = adata.var_names.str.startswith("MT-")
     adata.var["ribo"] = adata.var_names.str.startswith(("RPS", "RPL"))
     adata.var["hb"] = adata.var_names.str.contains("^HB[^(P)]")
@@ -55,12 +70,14 @@ def get_doublet_probability(
     random_state: int = 0,
     verbose: bool = False,
 ):
-    from sklearn.mixture import BayesianGaussianMixture
 
     X = doublet_scores_sim.reshape((-1, 1))
-    gmm = BayesianGaussianMixture(
-        n_components=2, n_init=10, max_iter=1000, random_state=random_state
-    ).fit(X)
+    with warnings.catch_warnings():
+        # Ignore RuntimeWarnings (divide by zero, overflow, etc.)
+        warnings.filterwarnings("ignore", category=RuntimeWarning)
+        gmm = BayesianGaussianMixture(
+            n_components=2, n_init=10, max_iter=1000, random_state=random_state
+        ).fit(X)
 
     if verbose:
         logging.info("GMM means: {}".format(gmm.means_))
@@ -162,7 +179,6 @@ def run_per_tissue(working_df, tissue, output_h5ad_dir, outdir, donor_colors, sc
         'pct_exon_reads': [percent_exon_cutoff],
         'log10_MALAT1_CPM': [np.log10(10)]
     }
-
     for metric in QC_metrics:
         plot_qc_violin(adata, metric, tissue, tissue_std, all_colors, metrics_with_cutoffs, figdir, key)
 

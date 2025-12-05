@@ -12,6 +12,7 @@ import pandas as pd
 import scanpy as sc
 import anndata as ad
 import re
+import warnings
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 from rna_qc.utils import load_config, standardize_tissue_name
@@ -22,7 +23,10 @@ def load_cellranger_h5(input_dir, sampleID):
     adata_path = os.path.join(input_dir, sampleID, 'filtered_feature_bc_matrix.h5')
     if not os.path.isfile(adata_path):
         raise FileNotFoundError(f"[ERROR] CellRanger file not found: {adata_path}")
-    adata = sc.read_10x_h5(adata_path)
+    with warnings.catch_warnings():
+        warnings.filterwarnings("ignore", message="Variable names are not unique")
+        adata = sc.read_10x_h5(adata_path)
+
     adata.var_names_make_unique()
     return adata
 

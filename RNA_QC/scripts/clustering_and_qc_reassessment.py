@@ -40,7 +40,7 @@ def set_best_leiden(adata, tissue_std, best_res=0.5):
     if 'leiden_colors' in adata.uns: del adata.uns['leiden_colors']
     sc.tl.leiden(adata, resolution=best_res, flavor="igraph")
     
-    sc.pl.umap(adata, color=["leiden"], title = f'{tissue_std}: leiden {best_res}', save=f'.LeidenCluster.{tissue_std}.png')
+    sc.pl.umap(adata, color=["leiden"], title = f'{tissue_std}: leiden {best_res}', save=f'.LeidenCluster.{tissue_std}.png', show=False)
 
 def save_stats(adata, out_dir, tissue_std, runtag):
     stat_fp = os.path.join(out_dir, f"{tissue_std}_stat_counts.{runtag}.txt")

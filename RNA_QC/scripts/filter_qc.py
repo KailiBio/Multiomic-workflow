@@ -13,6 +13,7 @@ import pandas as pd
 import scanpy as sc
 import anndata as ad
 import scipy.sparse
+import warnings
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 from rna_qc.utils import load_config, standardize_tissue_name
@@ -70,7 +71,7 @@ def prepare_upset_summary_allQC(sample_data, QC_cutoff_dict, global_obs, default
         'doublets': sample_data.index[mask_doublets]
     }
     if 'pct_exon_reads' in sample_data:
-        condition_indices[pct_exon_reads] = sample_data.index[mask_pct_exon_reads]
+        condition_indices['pct_exon_reads'] = sample_data.index[mask_pct_exon_reads]
     
     upset_data = pd.DataFrame(index=sample_data.index)
     for cond, indices in condition_indices.items():
@@ -197,8 +198,9 @@ def downstream_process(adata, tissue_std, figdir, all_colors):
     sc.pp.highly_variable_genes(adata, flavor='seurat')
     
     sc.pl.highly_variable_genes(adata, save=f'.highlyVariableGenes.filterqc.{tissue_std}.png', show=False)
-    
-    sc.tl.pca(adata, svd_solver='arpack')
+    with warnings.catch_warnings():
+        warnings.filterwarnings("ignore", category=RuntimeWarning) 
+        sc.tl.pca(adata, svd_solver='arpack')
     sc.pl.pca_variance_ratio(adata, n_pcs=50, log=True, save=f'.var_ratio.filterqc.{tissue_std}.png', show=False)
     
     # PCA colored by donorID/QC/batch
@@ -261,12 +263,14 @@ def run_per_tissue(working_df, output_h5ad_dir, workdir, QC_cutoff, tissue, dono
         "total_counts": adata.obs["total_counts"],
         "pct_counts_mt": adata.obs["pct_counts_mt"],
         "pct_counts_ribo": adata.obs["pct_counts_ribo"],
-        "MALAT1_CPM": adata.obs["MALAT1_CPM"],
-        "MALAT1_max_CPM": adata.obs["MALAT1_CPM"],
         "doublet_probabilities": adata.obs["doublet_probabilities"]
     })
     if 'pct_exon_reads' in adata.obs:
         filter_df["pct_exon_reads"] = adata.obs["pct_exon_reads"]
+    if 'MALAT1_CPM' in adata.obs:
+        filter_df["MALAT1_CPM"] = adata.obs["MALAT1_CPM"]
+        filter_df["MALAT1_max_CPM"] = adata.obs["MALAT1_CPM"]
+
 
     plotlist = ["leiden", "log10_total_counts", "log10_n_genes_by_counts", "pct_counts_mt", "pct_counts_ribo",
                 "pct_exon_reads", "log10_MALAT1_CPM", "doublet_score", "doublet_probabilities"]
@@ -275,11 +279,16 @@ def run_per_tissue(working_df, output_h5ad_dir, workdir, QC_cutoff, tissue, dono
         for d in QC_cutoff_dict.values():
             d.pop('pct_exon_reads', None)
 
+    if 'MALAT1_CPM' not in adata.obs:
+        plotlist.remove('log10_MALAT1_CPM')
+        for d in QC_cutoff_dict.values():
+            d.pop('log10_MALAT1_CPM', None)
+
     # 1. Plot upset (all metrics and filtered only)
     print("[INFO] Generating upset plot...")
     for ID in filter_df[key].unique():
         sample_df = filter_df[filter_df[key]==ID]
-
+        print(f"{ID}")
         up1 = prepare_upset_summary_allQC(sample_df, QC_cutoff_dict, adata.obs, default_cutoffs)
         plot_upset(up1, tissue, key, ID, tissue_std, adata, 
                    os.path.join(figdir,f"QC_filtering_upset.all.filterqc.{tissue_std}.{ID}.png"))

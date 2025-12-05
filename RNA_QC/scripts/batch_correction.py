@@ -16,6 +16,7 @@ import anndata as ad
 import matplotlib as mpl
 mpl.rcParams['pdf.fonttype'] = 42
 import matplotlib.pyplot as plt
+import warnings
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 from rna_qc.utils import load_config, standardize_tissue_name
@@ -47,7 +48,9 @@ def run_harmony_batch_correction(output_h5ad_dir, workdir, tissue, runtag, key="
 
     # Run Harmony batch correction
     print("[INFO] Running Harmony integration...")
-    sce.pp.harmony_integrate(adata, key=key, max_iter_harmony=30)
+    with warnings.catch_warnings():
+        warnings.filterwarnings("ignore", category=RuntimeWarning)
+        sce.pp.harmony_integrate(adata, key=key, max_iter_harmony=30)
 
     # Build UMAP from Harmony-corrected PCA
     adata.obsm['X_pca'] = adata.obsm['X_pca_harmony']
@@ -57,14 +60,32 @@ def run_harmony_batch_correction(output_h5ad_dir, workdir, tissue, runtag, key="
     # Plot before and after Harmony UMAP
     fig, axes = plt.subplots(1, 2, figsize=(10, 4))
     ## before Harmony
-    sc.pl.umap(adata_before, color=[key], ax=axes[0], show=False, title="Before Harmony")
+    sc.pl.umap(adata_before, color=[key], ax=axes[0], show=False, title="Before Harmony", legend_loc=None)
     axes[0].set_title('Before Harmony')
+    axes[0].set_aspect('auto')
     ## after Harmony
-    sc.pl.umap(adata, color=[key], ax=axes[1], show=False, title="After Harmony")
+    sc.pl.umap(adata, color=[key], ax=axes[1], show=False, title="After Harmony", legend_loc=None)
     axes[1].set_title('After Harmony')
-    #
+    axes[1].set_aspect('auto')
+    # Add back in legend
+    import matplotlib.patches as mpatches
+    
+    categories = adata.obs[key].cat.categories
+    colors = adata.uns[f'{key}_colors']
+    
+    # Create handle list for the legend
+    handles = [mpatches.Patch(color=c, label=l) for c, l in zip(colors, categories)]
+    
+    # Place the legend at the bottom center
+    # ncol=4 splits the list into 4 columns to make it wide instead of tall
+    fig.legend(handles=handles, loc='lower center', bbox_to_anchor=(0.5, 0.0), ncol=4, frameon=False)
+
+    # 4. Adjust layout to leave space at the bottom
     fig.suptitle(f"{tissue}: Harmony Batch Correction", fontsize=16)
-    fig.tight_layout()
+    # rect=[left, bottom, right, top] -> reserves the bottom 15% of the canvas for the legend
+    plt.tight_layout(rect=[0, 0.15, 1, 1])
+
+
     plot_path = os.path.join(figures_dir, f"Harmony_batchCorrection_umap.{tissue_std}.png")
     plt.savefig(plot_path, dpi=300, bbox_inches='tight')
     plt.close(fig)

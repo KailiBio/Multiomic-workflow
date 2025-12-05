@@ -14,7 +14,7 @@ import matplotlib.colors as mcolors
 import seaborn as sns
 import upsetplot
 import shutil
-
+import warnings
 import scanpy as sc
 
 def assign_donor_colors(df, donor_col, key='donorID'):
@@ -50,15 +50,22 @@ def plot_qc_violin(adata, metric, tissue, tissue_std, all_colors, metrics_with_c
         df = adata.obs[[metric, key]].copy()
         donor_order = list(all_colors.keys())
         fig, axes = plt.subplots(1, 2, figsize=(2 * len(donor_order), 4), gridspec_kw={'width_ratios': [1, 3]}, sharey=True)
-        # All data
-        sns.violinplot(y=all_data, ax=axes[0], color="gray", inner='box')
-        axes[0].set_title(tissue_std)
-        axes[0].set_ylabel(metric)
-        axes[0].grid(False)
-        # By donor
-        sns.violinplot(x=key, y=metric, data=df, ax=axes[1],
-                       palette=all_colors, hue=key, legend=False,
-                       order=donor_order, inner='box')
+
+        # catch warnings specifically for the plotting block to silence divide by zero/overflow
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore")
+            
+            # All data
+            sns.violinplot(y=all_data, ax=axes[0], color="gray", inner='box')
+            axes[0].set_title(tissue_std)
+            axes[0].set_ylabel(metric)
+            axes[0].grid(False)
+            
+            # By donor
+            sns.violinplot(x=key, y=metric, data=df, ax=axes[1],
+                           palette=all_colors, hue=key, legend=False,
+                           order=donor_order, inner='box')
+
         axes[1].set_title(f'by {key}')
         axes[1].set_xlabel('')
         axes[1].tick_params(axis='x', rotation=0)
@@ -138,11 +145,15 @@ def plot_doublet_hist(adata, donor_col, tissue, tissue_std, figdir, key):
 
 def clustering_umap(adata, tissue, tissue_std, figdir, key):
     print("[INFO] Clustering and UMAP...")
-    sc.pp.pca(adata, n_comps=50, svd_solver='arpack')
-    sc.pp.neighbors(adata, n_neighbors=15, use_rep='X_pca')
-    sc.pp.neighbors(adata)
-    sc.tl.leiden(adata, flavor="igraph")
-    sc.tl.umap(adata)
+
+    with warnings.catch_warnings():
+        warnings.filterwarnings("ignore", category=RuntimeWarning)
+        sc.pp.pca(adata, n_comps=50, svd_solver='arpack')
+        sc.pp.neighbors(adata, n_neighbors=15, use_rep='X_pca')
+        # sc.pp.neighbors(adata) # why is this called twice?
+
+        sc.tl.leiden(adata, flavor="igraph")
+        sc.tl.umap(adata)
     sc.pl.umap(
         adata, color=["leiden"], title=f'{tissue}: before filtering',
         save=f'.{tissue_std}.LeidenClusterBeforeFiltering.png', show=False)
@@ -151,18 +162,16 @@ def clustering_umap(adata, tissue, tissue_std, figdir, key):
                 "pct_exon_reads", "log10_MALAT1_CPM", "doublet_score", "doublet_probabilities"]
     if "pct_exon_reads" not in adata.obs:
         plotlist.remove("pct_exon_reads")
-
-    print(plotlist)
+    if "log10_MALAT1_CPM" not in adata.obs:
+        plotlist.remove("log10_MALAT1_CPM")
         
     # All together
-    print("ss")
     sc.pl.umap(
         adata, color=plotlist, wspace=0.3, ncols=3,
         title=[f"{tissue} (before filtering): {feature}" for feature in plotlist],
         save=f'.QCmetrics_LeidenClusterBeforeFiltering.{tissue_std}.png', show=False)
     
     # By sample/donor
-    print(key)
     IDlist = adata.obs[key].unique()
     for ID in IDlist:
         adata_plot = adata[adata.obs[key] == ID,:]
@@ -177,9 +186,13 @@ def plot_upset(upset_data_summary, tissue, key, ID, tissue_std, adata, savepath)
     Plot an upset diagram for the given donor's data summary and save to file.
     """
     plt.figure(figsize=(8, 4))
-    upsetplot.plot(upset_data_summary, show_counts=True, sort_by="cardinality")
+    with warnings.catch_warnings():
+        warnings.filterwarnings("ignore", category=FutureWarning)
+        upsetplot.plot(upset_data_summary, show_counts=True, sort_by="cardinality")
     plt.suptitle(f'{tissue} - {ID}: total N={len(adata[adata.obs[key] == ID, :].obs_names)}', fontsize=14)
-    plt.tight_layout()
+    with warnings.catch_warnings():
+        warnings.filterwarnings("ignore", category=UserWarning)
+        plt.tight_layout()
     plt.savefig(savepath, dpi=300, bbox_inches='tight')
     plt.close()
 
@@ -251,10 +264,12 @@ def plot_qc_metrics_violin_by_cluster(adata, tissue, tissue_std, figdir, feature
 
     for feature in features:
         fig, ax = plt.subplots(figsize=(12, 4))
-        sns.violinplot(
-            x="leiden", y=feature, data=dfqc, palette=adata.uns.get('leiden_colors', None),
-            hue="leiden", legend=False, inner="box", ax=ax
-        )
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore")
+            sns.violinplot(
+               x="leiden", y=feature, data=dfqc, palette=adata.uns.get('leiden_colors', None),
+               hue="leiden", legend=False, inner="box", ax=ax
+            )
         ax.set_title(f"{tissue}: {feature}")
         ax.set_xlabel("leiden cluster")
         ax.tick_params(axis="x", rotation=0)
@@ -266,13 +281,14 @@ def plot_qc_metrics_violin_by_cluster(adata, tissue, tissue_std, figdir, feature
     # Per donor
     if len(adata.obs[key].unique()) > 1:
         for feature in features:
-            print(feature)
             fig, axes = plt.subplots(len(adata.obs[key].unique()), 1, figsize=(12, 3*len(adata.obs[key].unique())), sharey=True)
             y_min, y_max = dfqc[feature].min(), dfqc[feature].max()
             
             for i, ID in enumerate(adata.obs[key].unique()):
                 df_plot = dfqc[dfqc[key] == ID]
-                sns.violinplot(
+                with warnings.catch_warnings():
+                    warnings.simplefilter("ignore")
+                    sns.violinplot(
                     x="leiden", y=feature, data=df_plot,
                     palette=adata.uns.get('leiden_colors', None), hue="leiden", legend=False, inner="box", 
                     ax=axes[i])
