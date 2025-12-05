@@ -78,11 +78,11 @@ This script coordinates data loading, QC, analysis and results export.
 ### Setting up your Data and Configurations
 
 1. **Input data folder:**  
-   For each sample, create directories structured as follows:
+   For each sample, create directories structured as follows (files from CellRanger):
    ```
    input_data/
      └── sample_id/
-           ├── filtered_feature_matrix/
+           ├── filtered_feature_bc_matrix.h5
            └── metrics_summary.csv
    ```
    - Place your `filtered_feature_matrix` and `metrics_summary.csv` in each respective `sample_id` folder.
