@@ -23,21 +23,18 @@ from rna_qc.rna_plots import assign_donor_colors, move_figures_to_newdir, plot_q
 
 def calculate_qc_metrics(adata):
     # calculate mt, ribo, hb
-    # Canonical mitochondrial protein-coding genes (with both naming conventions)
-#    mito_gene_list = [
-#    "ND1","ND2","ND3","ND4","ND4L","ND5","ND6",
-#    "MT-ND1","MT-ND2","MT-ND3","MT-ND4","MT-ND4L","MT-ND5","MT-ND6",
-#    "COX1","COX2","COX3",
-#    "MT-CO1","MT-CO2","MT-CO3",
-#    "CYTB","MT-CYB",
-#    "ATP6","ATP8",
-#    "MT-ATP6","MT-ATP8",
-#    ]
-
-    # Flag mito genes
-#    adata.var["mt"] = adata.var_names.isin(mito_gene_list)
-
-    adata.var["mt"] = adata.var_names.str.startswith("MT-")
+    macaque_mito_gene_list = ['COX1', 'KEG06_p08', 'KEG06_p13', 
+                              'KEG06_p05', 'COX3', 'ND1', 'KEG06_p10', 
+                              'KEG06_p02', 'ND6', 'KEG06_p07', 'ND4L', 
+                              'ND3', 'KEG06_p12', 'KEG06_p04', 'COX2', 
+                              'KEG06_p09', 'KEG06_p01', 'ND5', 'KEG06_p06', 
+                              'ATP8', 'CYTB', 'ND2', 'KEG06_p11', 'KEG06_p03']
+    # listing here for completeness but follows human convention
+    #marmoset_mito_gene_list = ['MT-NAD3', 'MT-COX1', 'MT-COX3', 'MT-COB', 'MT-NAD2', 'MT-COX2', 'MT-NAD1', 'MT-NAD4L', 'MT-NAD6', 'MT-ATP8']
+    adata.var["mt"] = (
+        adata.var_names.str.startswith("MT-") | 
+        adata.var_names.isin(macaque_mito_gene_list)
+    )
     adata.var["ribo"] = adata.var_names.str.startswith(("RPS", "RPL"))
     adata.var["hb"] = adata.var_names.str.contains("^HB[^(P)]")
     sc.pp.calculate_qc_metrics(adata, qc_vars=["mt", "ribo", "hb"], inplace=True, log1p=False)
