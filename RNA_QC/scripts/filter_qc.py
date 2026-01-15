@@ -20,24 +20,25 @@ from rna_qc.utils import load_config, standardize_tissue_name
 from rna_qc.rna_plots import assign_donor_colors, move_figures_to_newdir, plot_upset, run_umap_clustering
 
 def prepare_upset_summary_allQC(sample_data, QC_cutoff_dict, global_obs, default_cutoffs):
-    
-    sampleID = sample_data['sampleID'].iloc[0]
+    sampleID = sample_data['sampleID'].iloc[0].strip()
+
+    if sampleID not in QC_cutoff_dict:
+        raise KeyError(
+            f"QC cutoffs missing for sampleID '{sampleID}'. Check agreement between tissue and sample"
+        )
 
     # Create masks
     mask_min_genes = sample_data['n_genes_by_counts'] < int(QC_cutoff_dict[sampleID]['Min_genes_in_cells'])
     mask_max_genes = sample_data['n_genes_by_counts'] > int(QC_cutoff_dict[sampleID]['Max_genes_in_cells'])
     mask_max_counts = sample_data['total_counts'] > int(QC_cutoff_dict[sampleID]['Max_counts_in_cells'])
-
     if QC_cutoff_dict[sampleID]['Max_percent_mt_in_cells'] == '---':
         mask_pct_counts_mt = sample_data['pct_counts_mt'] > default_cutoffs['pct_counts_mt']
     else:
         mask_pct_counts_mt = sample_data['pct_counts_mt'] > float(QC_cutoff_dict[sampleID]['Max_percent_mt_in_cells'])
-
     if QC_cutoff_dict[sampleID]['Max_percent_ribo_in_cells'] == '---':
         mask_pct_counts_ribo = sample_data['pct_counts_ribo'] > default_cutoffs['pct_counts_ribo']
     else:
         mask_pct_counts_ribo = sample_data['pct_counts_ribo'] > float(QC_cutoff_dict[sampleID]['Max_percent_ribo_in_cells'])
-
     if 'pct_exon_reads' in sample_data:
         if QC_cutoff_dict[sampleID]['Exon_ratio_cutoffs'] == '---':
             Q75 = np.nanpercentile(global_obs['pct_exon_reads'], 75)
@@ -46,7 +47,6 @@ def prepare_upset_summary_allQC(sample_data, QC_cutoff_dict, global_obs, default
             mask_pct_exon_reads = sample_data['pct_exon_reads'] > cutoff
         else:
             mask_pct_exon_reads = sample_data['pct_exon_reads'] > float(QC_cutoff_dict[sampleID]['Exon_ratio_cutoffs'])
-
     if QC_cutoff_dict[sampleID]['MALAT1_CPM_cutoffs'] == '---':
         mask_MALAT1_CPM = sample_data['MALAT1_CPM'] < default_cutoffs['MALAT1_CPM']
     else:
@@ -58,7 +58,6 @@ def prepare_upset_summary_allQC(sample_data, QC_cutoff_dict, global_obs, default
         mask_MALAT1_max_CPM = sample_data['MALAT1_max_CPM'] > int(QC_cutoff_dict[sampleID]['MALAT1_CPM_max_cutoffs'])
 
     mask_doublets = sample_data['doublet_probabilities'] > float(QC_cutoff_dict[sampleID]['doublet_cutoffs'])
-
     # Indices
     condition_indices = {
         'Min_genes': sample_data.index[mask_min_genes],
@@ -78,7 +77,6 @@ def prepare_upset_summary_allQC(sample_data, QC_cutoff_dict, global_obs, default
         upset_data[cond] = 0
         upset_data.loc[indices, cond] = 1
     upset_data = upset_data[(upset_data.sum(axis=1) > 0)]
-
     return upset_data.groupby(list(condition_indices.keys())).size()
 
 def prepare_upset_summary_filteredQC(sample_df, QC_cutoff_dict):
@@ -271,7 +269,6 @@ def run_per_tissue(working_df, output_h5ad_dir, workdir, QC_cutoff, tissue, dono
         filter_df["MALAT1_CPM"] = adata.obs["MALAT1_CPM"]
         filter_df["MALAT1_max_CPM"] = adata.obs["MALAT1_CPM"]
 
-
     plotlist = ["leiden", "log10_total_counts", "log10_n_genes_by_counts", "pct_counts_mt", "pct_counts_ribo",
                 "pct_exon_reads", "log10_MALAT1_CPM", "doublet_score", "doublet_probabilities"]
     if 'pct_exon_reads' not in adata.obs:
@@ -292,7 +289,6 @@ def run_per_tissue(working_df, output_h5ad_dir, workdir, QC_cutoff, tissue, dono
         up1 = prepare_upset_summary_allQC(sample_df, QC_cutoff_dict, adata.obs, default_cutoffs)
         plot_upset(up1, tissue, key, ID, tissue_std, adata, 
                    os.path.join(figdir,f"QC_filtering_upset.all.filterqc.{tissue_std}.{ID}.png"))
-
         up2 = prepare_upset_summary_filteredQC(sample_df, QC_cutoff_dict)
         plot_upset(up2, tissue, key, ID, tissue_std, adata, 
                    os.path.join(figdir, f"QC_filtering_upset.filteringOnly.filterqc.{tissue_std}.{ID}.png"))
@@ -338,20 +334,22 @@ def main(config_path, runtag):
     # Default QC cutoffs for fallback
     default_cutoffs = {
         'log10_n_genes_by_counts':[np.log10(200), np.log10(5000)],
-        'log10_total_counts':[np.log10(25000)],
-        'pct_counts_mt': [10],
-        'pct_counts_ribo': [10],
+        'log10_total_counts': np.log10(25000),
+        'pct_counts_mt': 10,
+        'pct_counts_ribo': 10,
         'MALAT1_CPM':10,
-        'MALAT1_max_CPM': 100000
+        'MALAT1_max_CPM': 1000000 # or remove entirely
     }
 
     # Load master sample metadata across tissues/donors
     sample_metadata = config['paths']['sample_metadata']
+    print(f"[INFO] Loading sample metadata {sample_metadata}")
     df = pd.read_csv(sample_metadata, sep='\t', header=None,
                      names=["rnaID", "atacID", "species", "donorID", "ageGroup", "gender", "tissue"])
-    
+   
     # Load qc cutoff table
     qc_cutoff_table = config['qc']['rna_qc_cutoff_table']
+    print(f"[INFO] Loading QC cutoff table {qc_cutoff_table}")
     if qc_cutoff_table.endswith('.xlsx') or qc_cutoff_table.endswith('.xls'):
         df_cutoff_all = pd.read_excel(qc_cutoff_table,
                                       sheet_name=config['qc']['sheet_name'], engine='openpyxl')
