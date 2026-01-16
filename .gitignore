@@ -10,7 +10,11 @@ multi-Omic_workflow/ATAC_QC/test_data/fragmemt_files/*/fragments.*tsv.gz
 *test*.ipynb
 *.pt
 *.scrinvex.tsv
-
+# Macintosh storage
+.DS_Store
+# Python compiled files
+__pycache__/
+*.pyc
 multiome_integration/test_output/multivi/MultiVI.Muscle_Quadriceps.model/model.pt
 
 RNA_QC/test_data/scrinvex/DGTEX008-2BO-01-SM-OJX6G-EXP01-GEX-01/DGTEX008-2BO-01-SM-OJX6G-EXP01-GEX-01.scrinvex.tsv

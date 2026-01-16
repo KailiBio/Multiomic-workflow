@@ -40,7 +40,7 @@ def set_best_leiden(adata, tissue_std, best_res=0.5):
     if 'leiden_colors' in adata.uns: del adata.uns['leiden_colors']
     sc.tl.leiden(adata, resolution=best_res, flavor="igraph")
     
-    sc.pl.umap(adata, color=["leiden"], title = f'{tissue_std}: leiden {best_res}', save=f'.LeidenCluster.{tissue_std}.png')
+    sc.pl.umap(adata, color=["leiden"], title = f'{tissue_std}: leiden {best_res}', save=f'.LeidenCluster.{tissue_std}.png', show=False)
 
 def save_stats(adata, out_dir, tissue_std, runtag):
     stat_fp = os.path.join(out_dir, f"{tissue_std}_stat_counts.{runtag}.txt")
@@ -135,7 +135,9 @@ def run_per_tissue(workdir, output_h5ad_dir, qc_cutoff_tissue, tissue, donor_col
                   "pct_exon_reads", "log10_MALAT1_CPM", "doublet_score", "doublet_probabilities"]
     if "pct_exon_reads" not in adata.obs:
         qc_metrics.remove('pct_exon_reads')
-    
+    if ("log10_MALAT1_CPM" not in adata.obs or adata.obs["log10_MALAT1_CPM"].isnull().all() or
+    ((adata.obs["log10_MALAT1_CPM"] == np.inf) | (adata.obs["log10_MALAT1_CPM"] == -np.inf)).all()):
+        qc_metrics.remove("log10_MALAT1_CPM")
     plot_umap_highlight_by_qc_metrics(adata, tissue, tissue_std, figdir, qc_metrics, key)
     plot_qc_metrics_violin_by_cluster(adata, tissue, tissue_std, figdir, qc_metrics[1:], key)
     

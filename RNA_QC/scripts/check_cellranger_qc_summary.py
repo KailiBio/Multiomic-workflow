@@ -121,7 +121,8 @@ def main(config_path):
     sample_dict = dict(zip(working_df['rnaID'], working_df['donorID']))
     summary_df = load_cellranger_summary(sample_dict, input_dir)
     if summary_df.empty:
-        print("[WARNING] No CellRanger summary data could be loaded. Exiting.")
+        print("[WARNING] No CellRanger summary data could be loaded.")
+        print("Check config file to be sure tissue names are matching. Exiting.")
         sys.exit(1)
 
     # Get donor color map
