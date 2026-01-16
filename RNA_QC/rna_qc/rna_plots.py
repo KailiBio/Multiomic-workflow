@@ -254,7 +254,7 @@ def plot_umap_highlight_by_qc_metrics(adata, tissue, tissue_std, figdir, qc_metr
         adata_plot = adata[adata.obs[key] == ID, :]
         sc.pl.umap(
             adata_plot, color=qc_metrics, wspace=0.3, ncols=3,
-            title=[f"{tissue} - {ID}: {feature}" for feature in qc_metrics],
+            title=[f"{tissue} - {ID}\n: {feature}" for feature in qc_metrics],
             show=False,
             save=f".LeidenCluster-QCmetrics.{tissue_std}-{ID}.png"
         )
