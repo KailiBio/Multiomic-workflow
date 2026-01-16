@@ -23,10 +23,10 @@ This repository contains a pipeline for processing single-cell multiomic data (R
 This workflow facilitates the analysis of single-cell multiomic datasets (RNA + ATAC). It includes modules for preprocessing, QC, analysis, and visualization.
 
 Key master scripts:
-- [Run RNA Workflow on Jupyter](notebooks/run_rna_workflow.ipynb)
-- [Run RNA Workflow as script](notebooks/run_rna_workflow.py)
-- [Run ATAC Workflow on Jupyter](notebooks/ATAC_QC_demo.ipynb)
-- [Run ATAC Workflow as script](notebooks/run_atac_qc_workflow.sh)
+- [Run RNA QC Workflow on Jupyter](notebooks/run_rna_workflow.ipynb)
+- [Run RNA QC Workflow as script](notebooks/run_rna_workflow.py)
+- [Run ATAC QC Workflow on Jupyter](notebooks/ATAC_QC_demo.ipynb)
+- [Run ATAC QC Workflow as script](notebooks/run_atac_qc_workflow.sh)
 - Please see the Jupyter Notebooks for additional step-by-step analyses.
 
 ---
