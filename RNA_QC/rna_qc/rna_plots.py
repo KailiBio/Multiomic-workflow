@@ -108,16 +108,21 @@ def plot_qc_cumulative_distribution(adata, metrics, tissue, tissue_std, all_colo
             plt.savefig(os.path.join(figdir, f"RNA_QC_cumulative.by{key}.{tissue_std}.{metric}.png"), dpi=300, bbox_inches='tight')
             plt.close()
 
-def plot_doublet_hist(adata, donor_col, tissue, tissue_std, figdir, key):
+def plot_doublet_hist(adata, donor_col, tissue, tissue_std, figdir, key, probability_midpoint=None):
     for ID in adata.obs[key].unique():
         print(f"[INFO] Plotting doublet score & probability distribution for: {ID}...")
         doublet_scores = adata[adata.obs[key] == ID].obs['doublet_score']
         doublet_probabilities = adata[adata.obs[key] == ID].obs['doublet_probabilities']
+        
         if doublet_probabilities.isnull().all():
             print(f"[WARNING] No doublet probabilities for {ID}")
             continue
-        probability_midpoint = ((doublet_probabilities.max()+doublet_probabilities.min())/2).round(1)
-        doublet_mask = doublet_probabilities > probability_midpoint
+        if probability_midpoint is None:
+            cutoff = np.round((doublet_probabilities.max()+doublet_probabilities.min())/2).round(1)
+        else:
+            cutoff = probability_midpoint
+        doublet_mask = doublet_probabilities > cutoff
+        
         bins = np.histogram_bin_edges(doublet_scores, bins=50)
         hist_non_doublets, _ = np.histogram(doublet_scores[~doublet_mask], bins=bins)
         hist_doublets, _ = np.histogram(doublet_scores[doublet_mask], bins=bins)
@@ -132,8 +137,8 @@ def plot_doublet_hist(adata, donor_col, tissue, tissue_std, figdir, key):
         prob_bins = np.histogram_bin_edges(doublet_probabilities, bins=30)
         prob_hist, _ = np.histogram(doublet_probabilities, bins=prob_bins)
         axes[1].bar(prob_bins[:-1], prob_hist, width=np.diff(prob_bins), edgecolor='black', color='grey', alpha=0.7)
-        axes[1].axvline(probability_midpoint, color='red', linestyle='--', label='Doublet Threshold')
-        axes[1].set_title(f'cutoff = {str(probability_midpoint)}')
+        axes[1].axvline(cutoff, color='red', linestyle='--', label='Doublet Threshold')
+        axes[1].set_title(f'cutoff = {str(cutoff)}')
         axes[1].set_xlabel('Doublet Probability')
         axes[1].set_ylabel('Frequency')
         axes[1].set_xlim(0, 1)

@@ -120,12 +120,12 @@ def prepare_upset_summary_filteredQC(sample_df, QC_cutoff_dict):
     upset_data = upset_data[(upset_data.sum(axis=1) > 0)]
     return upset_data.groupby(list(condition_indices.keys())).size()
 
-def export_doublet_calls_by_sample(adata, QC_cutoff_dict, figdir):
+def export_doublet_calls_by_sample(adata, QC_cutoff_dict, tissue, tissue_std, figdir):
     """
     For each sampleID in adata.obs, determines doublet calls using the supplied QC_cutoff_dict,
     and saves the results as TSV files in the specified figdir.
     """
-
+    
     for sampleID in adata.obs['sampleID'].unique():
         if sampleID not in QC_cutoff_dict:
             print(f"[ERROR] sampleID {sampleID} not found in QC_cutoff_dict.")
@@ -142,6 +142,11 @@ def export_doublet_calls_by_sample(adata, QC_cutoff_dict, figdir):
         
         doublet_outfile = os.path.join(figdir, f'RNA_doublet_results.{sampleID}.tsv')
         df_doublet.to_csv(doublet_outfile, sep='\t', index=True, header=True, index_label="cell_barcode")
+
+        # plot the doublet distribution with filter cutoff
+        plot_doublet_hist(
+            adata=adata_sel, donor_col='sampleID', tissue=tissue, tissue_std=tissue_std,
+            figdir=figdir, key='sampleID', probability_midpoint=doublet_cutoff)
 
 
 def filter_and_process_adata(adata, df, QC_cutoff_dict, tissue, tissue_std, log_file_dir, key):
@@ -295,7 +300,7 @@ def run_per_tissue(working_df, output_h5ad_dir, workdir, QC_cutoff, tissue, dono
 
     # 2. save doublet results
     print("[INFO] Export doublet information...")
-    export_doublet_calls_by_sample(adata, QC_cutoff_dict, figdir)
+    export_doublet_calls_by_sample(adata, QC_cutoff_dict, tissue, tissue_std, figdir)
     
     # 3. Filtering + logging
     print("[INFO] Filtering...")
