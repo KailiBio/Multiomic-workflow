@@ -45,13 +45,16 @@ def main(config_path, runtag):
                                       sheet_name=config['qc']['sheet_name'], engine='openpyxl')
     else:
         df_cutoff_all = pd.read_csv(qc_cutoff_table, sep='\t')
-    
     if tissue == "---":
         working_df = df
         df_cutoff = df_cutoff_all 
     else:
         working_df = df[df["tissue"] == tissue]
         df_cutoff = df_cutoff_all[df_cutoff_all['Tissue'] == tissue]
+
+    if (df_cutoff.empty):
+        print(f'ERROR: No QC cutoffs found for {tissue} in {qc_cutoff_table}')
+        exit(1)
 
     tissues = sorted(working_df["tissue"].unique())
     print(f"Working tissue: {', '.join(tissues)}")
