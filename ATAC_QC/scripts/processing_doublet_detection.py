@@ -24,6 +24,10 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')
 from atac_qc.utils import load_config, standardize_tissue_name
 from atac_qc.atac_plots import plot_doublet_score_probability
 
+# Compatibility Hack for Python 3.12 + SciPy 1.11+
+# This adds the 'nonzero' method back to Pandas Series so SciPy indexing doesn't crash.
+if not hasattr(pd.Series, 'nonzero'):
+    pd.Series.nonzero = lambda self: self.to_numpy().nonzero()
 
 def main(config_path, runtag):
     config = load_config(config_path)
@@ -74,7 +78,7 @@ def main(config_path, runtag):
                                 bin_size=config['params'].get('genomic_bin_size', 500))
         
         # 2. feature selection
-        print("[INFO] Feture selection...")
+        print("[INFO] Feature selection...")
         snap.pp.select_features(adata, n_features=config['process'].get('n_features', 250000))
 
         # 3. doublet detection

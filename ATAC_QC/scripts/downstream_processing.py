@@ -20,6 +20,10 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')
 from atac_qc.utils import load_config, standardize_tissue_name
 from atac_qc.atac_plots import cell_count_post_filter_hist, plot_per_sample_umap_clusters
 
+if not hasattr(pd.Series, 'nonzero'):
+    pd.Series.nonzero = lambda self: self.to_numpy().nonzero()
+
+
 def summarize_and_plot_cell_counts(sample_list, h5ad_dir, fig_dir, runtag, suffix):
     """
     Summarize cell counts and plot histogram for a set of h5ad files.
