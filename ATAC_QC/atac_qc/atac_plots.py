@@ -310,7 +310,7 @@ def plot_umap_by_donor(adata, suffix, runtag, outdir, donor_colors=None, key='do
 
     
 def plot_umap_single_tissue_sample_by_side(adata, tissue, suffix, runtag, outdir, sample_colors=None, 
-                                           tissue_key='tissue', sample_key="sampleID", ncol=4):
+                                           tissue_key='tissue', sample_key="sampleID", ncol=4, show=False):
     """
     For a given tissue, plot a multi-panel UMAP: one panel per sample (of that tissue),
     all cells as white background, sample's cells in color.
@@ -364,7 +364,8 @@ def plot_umap_single_tissue_sample_by_side(adata, tissue, suffix, runtag, outdir
 
     outpng = os.path.join(outdir, f'ATAC_UMAP_sampleBySide.{suffix}.{standardize_tissue_name(tissue)}.{runtag}.png')
     plt.savefig(outpng, bbox_inches='tight', dpi=800)
-    plt.show()
+    if show:
+        plt.show()
     plt.close(fig)
     print(f"Wrote: {outpng}")
 
