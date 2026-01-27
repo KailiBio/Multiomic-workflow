@@ -44,7 +44,7 @@ def move_figures_to_newdir(output_figures_dir, old, new):
     if os.path.exists(old_path):
         os.rename(old_path, new_path)
 
-def plot_qc_violin(adata, metric, tissue, tissue_std, all_colors, metrics_with_cutoffs, figdir, key, nmads=5, add_mad_lines=True):
+def plot_qc_violin(adata, metric, tissue, tissue_std, all_colors, metrics_with_cutoffs, figdir, key, nmads, add_mad_lines=True):
     if metric in adata.obs:
         print(f"[INFO] Plotting violin for: {metric}...")
         all_data = adata.obs[metric].copy()
@@ -280,7 +280,7 @@ def plot_umap_highlight_by_qc_metrics(adata, tissue, tissue_std, figdir, qc_metr
         )
 
 def plot_qc_metrics_violin_by_cluster(adata, tissue, tissue_std, figdir, features, key, 
-                                      nmads=5, add_mad_lines=True):
+                                      nmads, add_mad_lines=True):
     dfqc = adata.obs[[key, "leiden"] + features]
 
     # === All clusters together ===

@@ -122,7 +122,7 @@ def compress_and_save(adata, output_h5ad_dir, tissue_std):
     print("[INFO] Saving h5ad...")
     adata.write(os.path.join(output_h5ad_dir, f'{tissue_std}_GEX.withQC.h5ad'))
 
-def run_per_tissue(working_df, tissue, output_h5ad_dir, outdir, donor_colors, scrinvex_dir, key = "sampleID"):
+def run_per_tissue(working_df, tissue, output_h5ad_dir, outdir, donor_colors, scrinvex_dir, nmads, key = "sampleID"):
     tissue_std = standardize_tissue_name(tissue)
         
     adata_path = os.path.join(output_h5ad_dir, f"{tissue_std}_GEX.raw.h5ad")
@@ -178,7 +178,7 @@ def run_per_tissue(working_df, tissue, output_h5ad_dir, outdir, donor_colors, sc
         'log10_MALAT1_CPM': [np.log10(10)]
     }
     for metric in QC_metrics:
-        plot_qc_violin(adata, metric, tissue, tissue_std, all_colors, metrics_with_cutoffs, figdir, key, nmads=5, add_mad_lines=True)
+        plot_qc_violin(adata, metric, tissue, tissue_std, all_colors, metrics_with_cutoffs, figdir, key, nmads=nmads, add_mad_lines=True)
 
     # Joint scatter gene/cell counts
     plot_qc_jointplot(
@@ -216,7 +216,7 @@ def run_per_tissue(working_df, tissue, output_h5ad_dir, outdir, donor_colors, sc
     move_figures_to_newdir(outdir, old="figures", new="pre_qc_assessment")
     print(f"[INFO] RNA QC pre-assessment complete for {tissue}.")
 
-def main(config_path):
+def main(config_path, nmads=5.0):
     config = load_config(config_path)
 
     workdir = config['paths']['workdir']
@@ -240,8 +240,8 @@ def main(config_path):
 
             try:
                 working_df = df[df["tissue"] == tissue_name]
-                run_per_tissue(working_df, tissue_name, output_h5ad_dir, workdir, donor_colors, scrinvex_dir,
-                              key = "sampleID")
+                run_per_tissue(working_df, tissue_name, output_h5ad_dir, workdir, donor_colors,
+                               scrinvex_dir, nmads, key = "sampleID")
             except Exception as e:
                 print(f"[ERROR] Encountered error for tissue {tissue_name}: {e}")
     else:
@@ -249,8 +249,8 @@ def main(config_path):
         
         try:
             working_df = df[df["tissue"] == tissue]
-            run_per_tissue(working_df, tissue, output_h5ad_dir, workdir, donor_colors, scrinvex_dir,
-                           key = "sampleID")
+            run_per_tissue(working_df, tissue, output_h5ad_dir, workdir, donor_colors, 
+                           scrinvex_dir, nmads, key = "sampleID")
         except Exception as e:
             print(f"[ERROR] Encountered error for tissue {tissue}: {e}")
             
@@ -258,5 +258,8 @@ def main(config_path):
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Run pre-QC metric/assessment for scRNA-seq h5ad.")
     parser.add_argument("config", help="YAML config file describing tissue, paths, etc.")
+    parser.add_argument("--nmads", type=float, default=5.0,
+                        help="number of MADs from the median used to define cutoffs (default: 5).")
+    
     args = parser.parse_args()
-    main(args.config)
+    main(args.config, nmads=args.nmads)

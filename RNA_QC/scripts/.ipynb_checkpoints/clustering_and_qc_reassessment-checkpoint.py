@@ -78,8 +78,7 @@ def save_processed_adata(adata, output_h5ad_dir, tissue_std, runtag):
     out_h5ad = os.path.join(output_h5ad_dir,  f"{tissue_std}_GEX.filtered.processed.{runtag}.h5ad")
     adata.write(out_h5ad)
 
-def run_per_tissue(workdir, output_h5ad_dir, qc_cutoff_tissue, tissue, donor_colors, runtag, key = "aliquotID",
-                                resolutions=[0.1,0.5,1.0], default_res=0.5,):
+def run_per_tissue(workdir, output_h5ad_dir, qc_cutoff_tissue, tissue, donor_colors, runtag, nmads, key = "aliquotID", resolutions=[0.1,0.5,1.0], default_res=0.5):
     
     tissue_std = standardize_tissue_name(tissue)
 
@@ -140,7 +139,7 @@ def run_per_tissue(workdir, output_h5ad_dir, qc_cutoff_tissue, tissue, donor_col
         qc_metrics.remove("log10_MALAT1_CPM")
     plot_umap_highlight_by_qc_metrics(adata, tissue, tissue_std, figdir, qc_metrics, key)
     plot_qc_metrics_violin_by_cluster(adata, tissue, tissue_std, figdir, qc_metrics[1:], key, 
-                                      nmads=5, add_mad_lines=True)
+                                      nmads, add_mad_lines=True)
     
     # Save outputs
     save_stats(adata, figdir, tissue_std, runtag)
@@ -150,7 +149,7 @@ def run_per_tissue(workdir, output_h5ad_dir, qc_cutoff_tissue, tissue, donor_col
     
     print(f"[INFO] Finished clustering and QC re-assessment for {tissue}.")
 
-def main(config_path, runtag, key):
+def main(config_path, runtag, key, nmads=5.0):
     config = load_config(config_path)
 
     workdir = config['paths']['workdir']
@@ -181,7 +180,8 @@ def main(config_path, runtag, key):
             
             try:
                 QC_cutoff = df_cutoff_all[df_cutoff_all['Tissue'] == tissue_name]
-                run_per_tissue(workdir, output_h5ad_dir, QC_cutoff, tissue_name, donor_colors, runtag, key)
+                run_per_tissue(workdir, output_h5ad_dir, QC_cutoff, tissue_name, donor_colors, 
+                               runtag, nmads, key)
             except Exception as e:
                 print(f"[ERROR] QC re-assessment failed for {tissue_name}: {e}")
     else:
@@ -189,7 +189,8 @@ def main(config_path, runtag, key):
         
         try:
             QC_cutoff = df_cutoff_all[df_cutoff_all['Tissue'] == tissue]
-            run_per_tissue(workdir, output_h5ad_dir, QC_cutoff, tissue, donor_colors, runtag, key)
+            run_per_tissue(workdir, output_h5ad_dir, QC_cutoff, tissue, donor_colors, 
+                           runtag, nmads, key)
         except Exception as e:
             print(f"[ERROR] QC re-assessment failed for {tissue}: {e}")
 
@@ -198,5 +199,8 @@ if __name__ == "__main__":
     parser.add_argument("config", help="YAML config file describing tissue, paths, etc.")
     parser.add_argument("runtag", help="Tag for this run (e.g. round3 or v1)")
     parser.add_argument("key", help="key to plot (sampleID, aliquotID, donorID)")
+    parser.add_argument("--nmads", type=float, default=5,
+                        help="number of MADs from the median used to define cutoffs (default: 5).")
+
     args = parser.parse_args()
-    main(args.config, args.runtag, args.key)
+    main(args.config, args.runtag, args.key, args.nmads)
