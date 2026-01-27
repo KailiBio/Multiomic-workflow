@@ -13,12 +13,12 @@ set -euo pipefail
 # ===========================
 # PARAMETERS
 # ===========================
-metatable="/Users/neva/Documents/Kaili-Multiomic-workflow/data/human.txt"
-runtag="${1:-v1}"
+metatable="test_data/test_metatable.txt"
+runtag="${1:-demo_run}"
 nthread="${2:-4}"
 
 config="config/atac_qc_config.yaml"
-fragdir="/Users/neva/Documents/Kaili-Multiomic-workflow/data/"
+fragdir="test_data/fragment_files"
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$repo_root"
 
@@ -27,6 +27,8 @@ cd "$repo_root"
 # ===========================
 
 printf "\nStep 1: Remove PCR chimeric reads (in parallel across samples)\n"
+#cut -f2 "$metatable" | xargs -n 1 -P "$nthread" -I{} \
+#  bash scripts/remove_pcr_chimeric.sh \
 awk '$2!="---"{print $2}' "$metatable" | xargs -n 1 -P "$nthread" -I{} \
   bash scripts/remove_pcr_chimeric_awk.sh \
     "$fragdir"/{}/fragments.tsv.gz \
