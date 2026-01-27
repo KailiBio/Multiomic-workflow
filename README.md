@@ -75,6 +75,7 @@ Key master scripts:
 
 The principal entry point for running RNA workflow is:
 - `run_rna_workflow.ipynb` (or `run_rna_workflow.py`)
+- Launch a notebook via `jupyter notebook run_rna_workflow.ipynb`
 
 This script coordinates data loading, QC, analysis and results export.
 
@@ -88,7 +89,7 @@ This script coordinates data loading, QC, analysis and results export.
            ├── filtered_feature_bc_matrix.h5
            └── metrics_summary.csv
    ```
-   - Place your `filtered_feature_matrix` and `metrics_summary.csv` in each respective `sample_id` folder.
+   - Place your `filtered_feature_matrix` and `metrics_summary.csv` in each respective `sample_id` folder. Also put your .pct_exonic.tsv file there, if you have it.
    - The `config` file specifies data locations and analysis settings.
 
 2. **Configuration file:**  

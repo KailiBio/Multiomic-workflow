@@ -27,8 +27,10 @@ cd "$repo_root"
 # ===========================
 
 printf "\nStep 1: Remove PCR chimeric reads (in parallel across samples)\n"
-cut -f2 "$metatable" | xargs -n 1 -P "$nthread" -I{} \
-  bash scripts/remove_pcr_chimeric.sh \
+#cut -f2 "$metatable" | xargs -n 1 -P "$nthread" -I{} \
+#  bash scripts/remove_pcr_chimeric.sh \
+awk '$2!="---"{print $2}' "$metatable" | xargs -n 1 -P "$nthread" -I{} \
+  bash scripts/remove_pcr_chimeric_awk.sh \
     "$fragdir"/{}/fragments.tsv.gz \
     "$fragdir"/{}/fragments.rmPCRchimeric.tsv.gz \
     "$fragdir"/{}/rmPCRchimeric_stat.txt \

@@ -1,10 +1,13 @@
+pandas==1.5.3
+scipy>=1.11.1
+numpy<2.0.0
+anndata==0.10.9
+snapatac2==2.8.0
 scanpy
-anndata
-pandas
-numpy
+anndata==0.10.9
 matplotlib
 seaborn
-harmonypy
+harmonypy==0.0.10
 upsetplot
 scikit-image
 igraph
@@ -12,3 +15,5 @@ jupyter
 notebook
 scipy
 tqdm
+openpyxl
+kaleido==0.2.1
