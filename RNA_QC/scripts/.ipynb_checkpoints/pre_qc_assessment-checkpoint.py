@@ -15,6 +15,7 @@ import scanpy as sc
 import scipy.sparse
 import logging
 from sklearn.mixture import BayesianGaussianMixture
+import warnings
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 from rna_qc.utils import load_config, standardize_tissue_name
@@ -22,7 +23,18 @@ from rna_qc.rna_plots import assign_donor_colors, move_figures_to_newdir, plot_q
 
 def calculate_qc_metrics(adata):
     # calculate mt, ribo, hb
-    adata.var["mt"] = adata.var_names.str.startswith("MT-")
+    macaque_mito_gene_list = ['COX1', 'KEG06_p08', 'KEG06_p13', 
+                              'KEG06_p05', 'COX3', 'ND1', 'KEG06_p10', 
+                              'KEG06_p02', 'ND6', 'KEG06_p07', 'ND4L', 
+                              'ND3', 'KEG06_p12', 'KEG06_p04', 'COX2', 
+                              'KEG06_p09', 'KEG06_p01', 'ND5', 'KEG06_p06', 
+                              'ATP8', 'CYTB', 'ND2', 'KEG06_p11', 'KEG06_p03']
+    # listing here for completeness but follows human convention
+    #marmoset_mito_gene_list = ['MT-NAD3', 'MT-COX1', 'MT-COX3', 'MT-COB', 'MT-NAD2', 'MT-COX2', 'MT-NAD1', 'MT-NAD4L', 'MT-NAD6', 'MT-ATP8']
+    adata.var["mt"] = (
+        adata.var_names.str.startswith("MT-") | 
+        adata.var_names.isin(macaque_mito_gene_list)
+    )
     adata.var["ribo"] = adata.var_names.str.startswith(("RPS", "RPL"))
     adata.var["hb"] = adata.var_names.str.contains("^HB[^(P)]")
     sc.pp.calculate_qc_metrics(adata, qc_vars=["mt", "ribo", "hb"], inplace=True, log1p=False)
@@ -48,19 +60,21 @@ def calculate_qc_metrics(adata):
     else:
         adata.obs['MALAT1_CPM'] = np.nan
         adata.obs['log10_MALAT1_CPM'] = np.nan
-
+    
 def get_doublet_probability(
     doublet_scores_sim: np.ndarray,
     doublet_scores: np.ndarray,
     random_state: int = 0,
     verbose: bool = False,
 ):
-    from sklearn.mixture import BayesianGaussianMixture
 
     X = doublet_scores_sim.reshape((-1, 1))
-    gmm = BayesianGaussianMixture(
-        n_components=2, n_init=10, max_iter=1000, random_state=random_state
-    ).fit(X)
+    with warnings.catch_warnings():
+        # Ignore RuntimeWarnings (divide by zero, overflow, etc.)
+        warnings.filterwarnings("ignore", category=RuntimeWarning)
+        gmm = BayesianGaussianMixture(
+            n_components=2, n_init=10, max_iter=1000, random_state=random_state
+        ).fit(X)
 
     if verbose:
         logging.info("GMM means: {}".format(gmm.means_))
@@ -141,7 +155,8 @@ def run_per_tissue(working_df, tissue, output_h5ad_dir, outdir, donor_colors, sc
     
     # Violin plots for cell QC
     QC_metrics = ['log10_n_genes_by_counts', 'log10_total_counts', 'pct_counts_in_top_50_genes',
-                  'pct_counts_mt', 'pct_counts_ribo', 'pct_counts_hb', 'pct_exon_reads', 'log10_MALAT1_CPM']
+                  'pct_counts_mt', 'pct_counts_ribo', 'pct_counts_hb', 'pct_exon_reads', 
+                  'log10_MALAT1_CPM']
     if 'pct_exon_reads' not in adata.obs:
         QC_metrics.remove('pct_exon_reads')
 
@@ -162,9 +177,8 @@ def run_per_tissue(working_df, tissue, output_h5ad_dir, outdir, donor_colors, sc
         'pct_exon_reads': [percent_exon_cutoff],
         'log10_MALAT1_CPM': [np.log10(10)]
     }
-
     for metric in QC_metrics:
-        plot_qc_violin(adata, metric, tissue, tissue_std, all_colors, metrics_with_cutoffs, figdir, key)
+        plot_qc_violin(adata, metric, tissue, tissue_std, all_colors, metrics_with_cutoffs, figdir, key, nmads=5, add_mad_lines=True)
 
     # Joint scatter gene/cell counts
     plot_qc_jointplot(

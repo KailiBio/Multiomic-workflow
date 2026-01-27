@@ -16,6 +16,7 @@ import upsetplot
 import shutil
 import warnings
 import scanpy as sc
+from scipy.stats import median_abs_deviation
 
 def assign_donor_colors(df, donor_col, key='donorID'):
     """
@@ -43,13 +44,19 @@ def move_figures_to_newdir(output_figures_dir, old, new):
     if os.path.exists(old_path):
         os.rename(old_path, new_path)
 
-def plot_qc_violin(adata, metric, tissue, tissue_std, all_colors, metrics_with_cutoffs, figdir, key):
+def plot_qc_violin(adata, metric, tissue, tissue_std, all_colors, metrics_with_cutoffs, figdir, key, nmads=5, add_mad_lines=True):
     if metric in adata.obs:
         print(f"[INFO] Plotting violin for: {metric}...")
         all_data = adata.obs[metric].copy()
         df = adata.obs[[metric, key]].copy()
         donor_order = list(all_colors.keys())
         fig, axes = plt.subplots(1, 2, figsize=(2 * len(donor_order), 4), gridspec_kw={'width_ratios': [1, 3]}, sharey=True)
+
+        # --- compute MAD-based thresholds once ---
+        med = np.median(all_data)
+        mad = median_abs_deviation(all_data)
+        lower = med - nmads * mad
+        upper = med + nmads * mad
 
         # catch warnings specifically for the plotting block to silence divide by zero/overflow
         with warnings.catch_warnings():
@@ -70,11 +77,19 @@ def plot_qc_violin(adata, metric, tissue, tissue_std, all_colors, metrics_with_c
         axes[1].set_xlabel('')
         axes[1].tick_params(axis='x', rotation=0)
         axes[1].grid(False)
+        
         # Add cutoffs
         if metric in metrics_with_cutoffs:
             for v in metrics_with_cutoffs[metric]:
                 axes[0].axhline(y=v, color='red', linestyle='--', linewidth=1)
                 axes[1].axhline(y=v, color='red', linestyle='--', linewidth=1)
+
+        # --- add MAD-based lower/upper lines ---
+        if add_mad_lines:
+            for ax in axes:
+                ax.axhline(y=lower, color='blue', linestyle='--', linewidth=1, label='MAD lower')
+                ax.axhline(y=upper, color='blue', linestyle='--', linewidth=1, label='MAD upper')
+        
         fig.suptitle(f'{metric} on {tissue}', fontsize=14)
         plt.tight_layout()
         fig.savefig(os.path.join(figdir, f'RNA_QC_violin.by{key}.{tissue_std}.{metric}.png'), dpi=300, bbox_inches='tight')
@@ -264,11 +279,21 @@ def plot_umap_highlight_by_qc_metrics(adata, tissue, tissue_std, figdir, qc_metr
             save=f".LeidenCluster-QCmetrics.{tissue_std}-{ID}.png"
         )
 
-def plot_qc_metrics_violin_by_cluster(adata, tissue, tissue_std, figdir, features, key):
+def plot_qc_metrics_violin_by_cluster(adata, tissue, tissue_std, figdir, features, key, 
+                                      nmads=5, add_mad_lines=True):
     dfqc = adata.obs[[key, "leiden"] + features]
 
+    # === All clusters together ===
     for feature in features:
         fig, ax = plt.subplots(figsize=(12, 4))
+
+        # Compute MAD thresholds from all cells for this feature
+        values = dfqc[feature].dropna()
+        med = np.median(values)
+        mad = median_abs_deviation(values)
+        lower = med - nmads * mad
+        upper = med + nmads * mad
+        
         with warnings.catch_warnings():
             warnings.simplefilter("ignore")
             sns.violinplot(
@@ -279,15 +304,28 @@ def plot_qc_metrics_violin_by_cluster(adata, tissue, tissue_std, figdir, feature
         ax.set_xlabel("leiden cluster")
         ax.tick_params(axis="x", rotation=0)
         ax.grid(False)
+
+        # Add MAD lines
+        if add_mad_lines:
+            ax.axhline(y=lower, color="blue", linestyle="--", linewidth=1)
+            ax.axhline(y=upper, color="blue", linestyle="--", linewidth=1)
+            
         plt.tight_layout()
         plt.savefig(os.path.join(figdir, f"QCmetric_bycluster.{tissue_std}.{feature}.png"), dpi=300, bbox_inches='tight')
         plt.close(fig)
         
-    # Per donor
+    # === Per donor ===
     if len(adata.obs[key].unique()) > 1:
         for feature in features:
             fig, axes = plt.subplots(len(adata.obs[key].unique()), 1, figsize=(12, 3*len(adata.obs[key].unique())), sharey=True)
             y_min, y_max = dfqc[feature].min(), dfqc[feature].max()
+
+            # Compute global MAD thresholds for this feature
+            values = dfqc[feature].dropna()
+            med = np.median(values)
+            mad = median_abs_deviation(values)
+            lower = med - nmads * mad
+            upper = med + nmads * mad
             
             for i, ID in enumerate(adata.obs[key].unique()):
                 df_plot = dfqc[dfqc[key] == ID]
@@ -295,14 +333,22 @@ def plot_qc_metrics_violin_by_cluster(adata, tissue, tissue_std, figdir, feature
                     warnings.simplefilter("ignore")
                     sns.violinplot(
                     x="leiden", y=feature, data=df_plot,
-                    palette=adata.uns.get('leiden_colors', None), hue="leiden", legend=False, inner="box", 
+                    palette=adata.uns.get('leiden_colors', None), 
+                    hue="leiden", legend=False, inner="box", 
                     ax=axes[i])
                 axes[i].set_ylim(y_min, y_max)
                 axes[i].set_title(f"{tissue} - {ID}: {feature}")
                 axes[i].set_xlabel("leiden cluster")
                 axes[i].tick_params(axis="x", rotation=0)
                 axes[i].grid(False)
+
+                # Add MAD lines
+                if add_mad_lines:
+                    ax.axhline(y=lower, color="blue", linestyle="--", linewidth=1)
+                    ax.axhline(y=upper, color="blue", linestyle="--", linewidth=1)
+                    
             plt.tight_layout()
-            plt.savefig(os.path.join(figdir, f"QCmetric_bycluster.{tissue_std}-{key}.{feature}.png"), dpi=300, bbox_inches='tight')
+            plt.savefig(os.path.join(figdir, f"QCmetric_bycluster.{tissue_std}-{key}.{feature}.png"), 
+                        dpi=300, bbox_inches='tight')
             plt.close(fig)
 

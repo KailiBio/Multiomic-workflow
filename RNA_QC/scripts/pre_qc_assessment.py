@@ -60,7 +60,7 @@ def calculate_qc_metrics(adata):
     else:
         adata.obs['MALAT1_CPM'] = np.nan
         adata.obs['log10_MALAT1_CPM'] = np.nan
-
+    
 def get_doublet_probability(
     doublet_scores_sim: np.ndarray,
     doublet_scores: np.ndarray,
@@ -155,7 +155,8 @@ def run_per_tissue(working_df, tissue, output_h5ad_dir, outdir, donor_colors, sc
     
     # Violin plots for cell QC
     QC_metrics = ['log10_n_genes_by_counts', 'log10_total_counts', 'pct_counts_in_top_50_genes',
-                  'pct_counts_mt', 'pct_counts_ribo', 'pct_counts_hb', 'pct_exon_reads', 'log10_MALAT1_CPM']
+                  'pct_counts_mt', 'pct_counts_ribo', 'pct_counts_hb', 'pct_exon_reads', 
+                  'log10_MALAT1_CPM']
     if 'pct_exon_reads' not in adata.obs:
         QC_metrics.remove('pct_exon_reads')
 
@@ -177,7 +178,7 @@ def run_per_tissue(working_df, tissue, output_h5ad_dir, outdir, donor_colors, sc
         'log10_MALAT1_CPM': [np.log10(10)]
     }
     for metric in QC_metrics:
-        plot_qc_violin(adata, metric, tissue, tissue_std, all_colors, metrics_with_cutoffs, figdir, key)
+        plot_qc_violin(adata, metric, tissue, tissue_std, all_colors, metrics_with_cutoffs, figdir, key, nmads=5, add_mad_lines=True)
 
     # Joint scatter gene/cell counts
     plot_qc_jointplot(

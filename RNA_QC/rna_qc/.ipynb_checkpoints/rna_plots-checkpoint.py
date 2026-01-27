@@ -14,8 +14,9 @@ import matplotlib.colors as mcolors
 import seaborn as sns
 import upsetplot
 import shutil
-
+import warnings
 import scanpy as sc
+from scipy.stats import median_abs_deviation
 
 def assign_donor_colors(df, donor_col, key='donorID'):
     """
@@ -43,31 +44,52 @@ def move_figures_to_newdir(output_figures_dir, old, new):
     if os.path.exists(old_path):
         os.rename(old_path, new_path)
 
-def plot_qc_violin(adata, metric, tissue, tissue_std, all_colors, metrics_with_cutoffs, figdir, key):
+def plot_qc_violin(adata, metric, tissue, tissue_std, all_colors, metrics_with_cutoffs, figdir, key, nmads=5, add_mad_lines=True):
     if metric in adata.obs:
         print(f"[INFO] Plotting violin for: {metric}...")
         all_data = adata.obs[metric].copy()
         df = adata.obs[[metric, key]].copy()
         donor_order = list(all_colors.keys())
         fig, axes = plt.subplots(1, 2, figsize=(2 * len(donor_order), 4), gridspec_kw={'width_ratios': [1, 3]}, sharey=True)
-        # All data
-        sns.violinplot(y=all_data, ax=axes[0], color="gray", inner='box')
-        axes[0].set_title(tissue_std)
-        axes[0].set_ylabel(metric)
-        axes[0].grid(False)
-        # By donor
-        sns.violinplot(x=key, y=metric, data=df, ax=axes[1],
-                       palette=all_colors, hue=key, legend=False,
-                       order=donor_order, inner='box')
+
+        # --- compute MAD-based thresholds once ---
+        med = np.median(all_data)
+        mad = median_abs_deviation(all_data)
+        lower = med - nmads * mad
+        upper = med + nmads * mad
+
+        # catch warnings specifically for the plotting block to silence divide by zero/overflow
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore")
+            
+            # All data
+            sns.violinplot(y=all_data, ax=axes[0], color="gray", inner='box')
+            axes[0].set_title(tissue_std)
+            axes[0].set_ylabel(metric)
+            axes[0].grid(False)
+            
+            # By donor
+            sns.violinplot(x=key, y=metric, data=df, ax=axes[1],
+                           palette=all_colors, hue=key, legend=False,
+                           order=donor_order, inner='box')
+
         axes[1].set_title(f'by {key}')
         axes[1].set_xlabel('')
         axes[1].tick_params(axis='x', rotation=0)
         axes[1].grid(False)
+        
         # Add cutoffs
         if metric in metrics_with_cutoffs:
             for v in metrics_with_cutoffs[metric]:
                 axes[0].axhline(y=v, color='red', linestyle='--', linewidth=1)
                 axes[1].axhline(y=v, color='red', linestyle='--', linewidth=1)
+
+        # --- add MAD-based lower/upper lines ---
+        if add_mad_lines:
+            for ax in axes:
+                ax.axhline(y=lower, color='blue', linestyle='--', linewidth=1, label='MAD lower')
+                ax.axhline(y=upper, color='blue', linestyle='--', linewidth=1, label='MAD upper')
+        
         fig.suptitle(f'{metric} on {tissue}', fontsize=14)
         plt.tight_layout()
         fig.savefig(os.path.join(figdir, f'RNA_QC_violin.by{key}.{tissue_std}.{metric}.png'), dpi=300, bbox_inches='tight')
@@ -101,16 +123,21 @@ def plot_qc_cumulative_distribution(adata, metrics, tissue, tissue_std, all_colo
             plt.savefig(os.path.join(figdir, f"RNA_QC_cumulative.by{key}.{tissue_std}.{metric}.png"), dpi=300, bbox_inches='tight')
             plt.close()
 
-def plot_doublet_hist(adata, donor_col, tissue, tissue_std, figdir, key):
+def plot_doublet_hist(adata, donor_col, tissue, tissue_std, figdir, key, probability_midpoint=None):
     for ID in adata.obs[key].unique():
         print(f"[INFO] Plotting doublet score & probability distribution for: {ID}...")
         doublet_scores = adata[adata.obs[key] == ID].obs['doublet_score']
         doublet_probabilities = adata[adata.obs[key] == ID].obs['doublet_probabilities']
+        
         if doublet_probabilities.isnull().all():
             print(f"[WARNING] No doublet probabilities for {ID}")
             continue
-        probability_midpoint = ((doublet_probabilities.max()+doublet_probabilities.min())/2).round(1)
-        doublet_mask = doublet_probabilities > probability_midpoint
+        if probability_midpoint is None:
+            cutoff = np.round((doublet_probabilities.max()+doublet_probabilities.min())/2).round(1)
+        else:
+            cutoff = probability_midpoint
+        doublet_mask = doublet_probabilities > cutoff
+        
         bins = np.histogram_bin_edges(doublet_scores, bins=50)
         hist_non_doublets, _ = np.histogram(doublet_scores[~doublet_mask], bins=bins)
         hist_doublets, _ = np.histogram(doublet_scores[doublet_mask], bins=bins)
@@ -125,8 +152,8 @@ def plot_doublet_hist(adata, donor_col, tissue, tissue_std, figdir, key):
         prob_bins = np.histogram_bin_edges(doublet_probabilities, bins=30)
         prob_hist, _ = np.histogram(doublet_probabilities, bins=prob_bins)
         axes[1].bar(prob_bins[:-1], prob_hist, width=np.diff(prob_bins), edgecolor='black', color='grey', alpha=0.7)
-        axes[1].axvline(probability_midpoint, color='red', linestyle='--', label='Doublet Threshold')
-        axes[1].set_title(f'cutoff = {str(probability_midpoint)}')
+        axes[1].axvline(cutoff, color='red', linestyle='--', label='Doublet Threshold')
+        axes[1].set_title(f'cutoff = {str(cutoff)}')
         axes[1].set_xlabel('Doublet Probability')
         axes[1].set_ylabel('Frequency')
         axes[1].set_xlim(0, 1)
@@ -138,11 +165,15 @@ def plot_doublet_hist(adata, donor_col, tissue, tissue_std, figdir, key):
 
 def clustering_umap(adata, tissue, tissue_std, figdir, key):
     print("[INFO] Clustering and UMAP...")
-    sc.pp.pca(adata, n_comps=50, svd_solver='arpack')
-    sc.pp.neighbors(adata, n_neighbors=15, use_rep='X_pca')
-    sc.pp.neighbors(adata)
-    sc.tl.leiden(adata, flavor="igraph")
-    sc.tl.umap(adata)
+
+    with warnings.catch_warnings():
+        warnings.filterwarnings("ignore", category=RuntimeWarning)
+        sc.pp.pca(adata, n_comps=50, svd_solver='arpack')
+        sc.pp.neighbors(adata, n_neighbors=15, use_rep='X_pca')
+        # sc.pp.neighbors(adata) # why is this called twice?
+
+        sc.tl.leiden(adata, flavor="igraph")
+        sc.tl.umap(adata)
     sc.pl.umap(
         adata, color=["leiden"], title=f'{tissue}: before filtering',
         save=f'.{tissue_std}.LeidenClusterBeforeFiltering.png', show=False)
@@ -151,18 +182,16 @@ def clustering_umap(adata, tissue, tissue_std, figdir, key):
                 "pct_exon_reads", "log10_MALAT1_CPM", "doublet_score", "doublet_probabilities"]
     if "pct_exon_reads" not in adata.obs:
         plotlist.remove("pct_exon_reads")
-
-    print(plotlist)
+    if "log10_MALAT1_CPM" not in adata.obs:
+        plotlist.remove("log10_MALAT1_CPM")
         
     # All together
-    print("ss")
     sc.pl.umap(
         adata, color=plotlist, wspace=0.3, ncols=3,
         title=[f"{tissue} (before filtering): {feature}" for feature in plotlist],
         save=f'.QCmetrics_LeidenClusterBeforeFiltering.{tissue_std}.png', show=False)
     
     # By sample/donor
-    print(key)
     IDlist = adata.obs[key].unique()
     for ID in IDlist:
         adata_plot = adata[adata.obs[key] == ID,:]
@@ -177,9 +206,13 @@ def plot_upset(upset_data_summary, tissue, key, ID, tissue_std, adata, savepath)
     Plot an upset diagram for the given donor's data summary and save to file.
     """
     plt.figure(figsize=(8, 4))
-    upsetplot.plot(upset_data_summary, show_counts=True, sort_by="cardinality")
+    with warnings.catch_warnings():
+        warnings.filterwarnings("ignore", category=FutureWarning)
+        upsetplot.plot(upset_data_summary, show_counts=True, sort_by="cardinality")
     plt.suptitle(f'{tissue} - {ID}: total N={len(adata[adata.obs[key] == ID, :].obs_names)}', fontsize=14)
-    plt.tight_layout()
+    with warnings.catch_warnings():
+        warnings.filterwarnings("ignore", category=UserWarning)
+        plt.tight_layout()
     plt.savefig(savepath, dpi=300, bbox_inches='tight')
     plt.close()
 
@@ -241,47 +274,81 @@ def plot_umap_highlight_by_qc_metrics(adata, tissue, tissue_std, figdir, qc_metr
         adata_plot = adata[adata.obs[key] == ID, :]
         sc.pl.umap(
             adata_plot, color=qc_metrics, wspace=0.3, ncols=3,
-            title=[f"{tissue} - {ID}: {feature}" for feature in qc_metrics],
+            title=[f"{tissue} - {ID}\n: {feature}" for feature in qc_metrics],
             show=False,
             save=f".LeidenCluster-QCmetrics.{tissue_std}-{ID}.png"
         )
 
-def plot_qc_metrics_violin_by_cluster(adata, tissue, tissue_std, figdir, features, key):
+def plot_qc_metrics_violin_by_cluster(adata, tissue, tissue_std, figdir, features, key, 
+                                      nmads=5, add_mad_lines=True):
     dfqc = adata.obs[[key, "leiden"] + features]
 
+    # === All clusters together ===
     for feature in features:
         fig, ax = plt.subplots(figsize=(12, 4))
-        sns.violinplot(
-            x="leiden", y=feature, data=dfqc, palette=adata.uns.get('leiden_colors', None),
-            hue="leiden", legend=False, inner="box", ax=ax
-        )
+
+        # Compute MAD thresholds from all cells for this feature
+        values = dfqc[feature].dropna()
+        med = np.median(values)
+        mad = median_abs_deviation(values)
+        lower = med - nmads * mad
+        upper = med + nmads * mad
+        
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore")
+            sns.violinplot(
+               x="leiden", y=feature, data=dfqc, palette=adata.uns.get('leiden_colors', None),
+               hue="leiden", legend=False, inner="box", ax=ax
+            )
         ax.set_title(f"{tissue}: {feature}")
         ax.set_xlabel("leiden cluster")
         ax.tick_params(axis="x", rotation=0)
         ax.grid(False)
+
+        # Add MAD lines
+        if add_mad_lines:
+            ax.axhline(y=lower, color="blue", linestyle="--", linewidth=1)
+            ax.axhline(y=upper, color="blue", linestyle="--", linewidth=1)
+            
         plt.tight_layout()
         plt.savefig(os.path.join(figdir, f"QCmetric_bycluster.{tissue_std}.{feature}.png"), dpi=300, bbox_inches='tight')
         plt.close(fig)
         
-    # Per donor
+    # === Per donor ===
     if len(adata.obs[key].unique()) > 1:
         for feature in features:
-            print(feature)
             fig, axes = plt.subplots(len(adata.obs[key].unique()), 1, figsize=(12, 3*len(adata.obs[key].unique())), sharey=True)
             y_min, y_max = dfqc[feature].min(), dfqc[feature].max()
+
+            # Compute global MAD thresholds for this feature
+            values = dfqc[feature].dropna()
+            med = np.median(values)
+            mad = median_abs_deviation(values)
+            lower = med - nmads * mad
+            upper = med + nmads * mad
             
             for i, ID in enumerate(adata.obs[key].unique()):
                 df_plot = dfqc[dfqc[key] == ID]
-                sns.violinplot(
+                with warnings.catch_warnings():
+                    warnings.simplefilter("ignore")
+                    sns.violinplot(
                     x="leiden", y=feature, data=df_plot,
-                    palette=adata.uns.get('leiden_colors', None), hue="leiden", legend=False, inner="box", 
+                    palette=adata.uns.get('leiden_colors', None), 
+                    hue="leiden", legend=False, inner="box", 
                     ax=axes[i])
                 axes[i].set_ylim(y_min, y_max)
                 axes[i].set_title(f"{tissue} - {ID}: {feature}")
                 axes[i].set_xlabel("leiden cluster")
                 axes[i].tick_params(axis="x", rotation=0)
                 axes[i].grid(False)
+
+                # Add MAD lines
+                if add_mad_lines:
+                    ax.axhline(y=lower, color="blue", linestyle="--", linewidth=1)
+                    ax.axhline(y=upper, color="blue", linestyle="--", linewidth=1)
+                    
             plt.tight_layout()
-            plt.savefig(os.path.join(figdir, f"QCmetric_bycluster.{tissue_std}-{key}.{feature}.png"), dpi=300, bbox_inches='tight')
+            plt.savefig(os.path.join(figdir, f"QCmetric_bycluster.{tissue_std}-{key}.{feature}.png"), 
+                        dpi=300, bbox_inches='tight')
             plt.close(fig)
 
