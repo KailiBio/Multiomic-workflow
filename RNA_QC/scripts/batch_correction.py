@@ -113,7 +113,7 @@ def main(config_path, runtag):
 
         # Load master sample metadata across tissues/donors
         sample_metadata = config['paths']['sample_metadata']
-        df = pd.read_csv(sample_metadata, sep='\t', header=None,
+        df = pd.read_csv(sample_metadata, sep='\t', header=None, index_col=False,
                          names=["rnaID", "atacID", "species", "donorID", "ageGroup", "gender", "tissue"])
     
         tissue_names = sorted(df['tissue'].unique())

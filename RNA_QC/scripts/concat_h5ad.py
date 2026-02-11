@@ -151,7 +151,7 @@ def main(config_path):
     tissue_colors = config['color'].get("tissue_colors")
 
     sample_metadata = config['paths']['sample_metadata']
-    df = pd.read_csv(sample_metadata, sep='\t', header=None,
+    df = pd.read_csv(sample_metadata, sep='\t', header=None,  index_col=False,
                      names=["rnaID", "atacID", "species", "donorID", "ageGroup", "gender", "tissue"])
 
     if tissue == "---":  # Multiple tissues mode
