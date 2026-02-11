@@ -60,7 +60,8 @@ def process_fragments(row, config, barcode_dic_rna, overwrite=False):
             print(f"Skipping {atacID}: output already exists.")
             return
 
-    data = snap.pp.import_fragments(
+    data = snap.pp.import_data(
+        #snap.pp.import_fragments(
         fragment_file,
         chrom_sizes = snap.genome.hg38,
         file = output_h5ad,
