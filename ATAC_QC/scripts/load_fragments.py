@@ -120,7 +120,7 @@ def main(config_path, overwrite=False):
 
     # Load sample info
     sample_metadata = config['paths']['sample_metadata']
-    df = pd.read_csv(sample_metadata, sep='\t', header=None,
+    df = pd.read_csv(sample_metadata, sep='\t', header=None, index_col=False,
                      names=["rnaID", "atacID", "species", "donorID", "ageGroup", "gender", "tissue"])
     
     if tissue == "---":
