@@ -39,6 +39,29 @@ def assign_donor_colors(df, donor_col, key='donorID'):
 
     # Only keep donors present in df
     return {donor: color_map[donor] for donor in donors_in_data}
+
+def assign_colors(keys, palette="tab10"):
+    """
+    Assign hex color codes from a matplotlib palette to an iterable of keys (sample/donor IDs).
+    Returns a dict: {key: hex_color}
+    """
+    keys = sorted(keys)
+    if isinstance(palette, str):
+        colors = plt.get_cmap(palette).colors
+    else:
+        colors = palette
+
+    def as_hex(c):
+        # If already a hex string, just return
+        if isinstance(c, str):
+            if c.startswith("#") and (len(c) == 7 or len(c) == 9): 
+                return c
+        return mcolors.to_hex(c)
+
+    hex_colors = [as_hex(c) for c in colors]
+
+    out = {k: hex_colors[i % len(hex_colors)] for i, k in enumerate(keys)}
+    return out
     
 def plot_kde_filter(
     adata,
@@ -277,8 +300,8 @@ def plot_umap_by_sample(adata, suffix, runtag, outdir, sample_colors=None, key="
     plt.subplots_adjust(right=0.7)
     outpng = os.path.join(outdir, f'ATAC_UMAP_bySample.{suffix}.{runtag}.png')
     plt.savefig(outpng, bbox_inches='tight', dpi=800)
-    outpdf = os.path.join(outdir, f'ATAC_UMAP_bySample.{suffix}.{runtag}.pdf')
-    plt.savefig(outpdf, bbox_inches='tight')
+    #outpdf = os.path.join(outdir, f'ATAC_UMAP_bySample.{suffix}.{runtag}.pdf')
+    #plt.savefig(outpdf, bbox_inches='tight')
     plt.close(fig)
 
 def plot_umap_by_donor(adata, suffix, runtag, outdir, donor_colors=None, key='donorID'):
@@ -304,8 +327,8 @@ def plot_umap_by_donor(adata, suffix, runtag, outdir, donor_colors=None, key='do
     plt.subplots_adjust(right=0.7)
     outpng = os.path.join(outdir, f'ATAC_UMAP_byDonor.{suffix}.{runtag}.png')
     plt.savefig(outpng, bbox_inches='tight', dpi=800)
-    outpdf = os.path.join(outdir, f'ATAC_UMAP_byDonor.{suffix}.{runtag}.pdf')
-    plt.savefig(outpdf, bbox_inches='tight')
+    #outpdf = os.path.join(outdir, f'ATAC_UMAP_byDonor.{suffix}.{runtag}.pdf')
+    #plt.savefig(outpdf, bbox_inches='tight')
     plt.close(fig)
 
     
@@ -452,29 +475,6 @@ def plot_umap_with_QC(adata, suffix, runtag, outdir, sample_colors=None,
         plt.savefig(outpng, bbox_inches='tight', dpi=800)
         plt.close(fig)
 
-def assign_colors(keys, palette="tab10"):
-    """
-    Assign hex color codes from a matplotlib palette to an iterable of keys (sample/donor IDs).
-    Returns a dict: {key: hex_color}
-    """
-    keys = sorted(keys)
-    if isinstance(palette, str):
-        colors = plt.get_cmap(palette).colors
-    else:
-        colors = palette
-
-    def as_hex(c):
-        # If already a hex string, just return
-        if isinstance(c, str):
-            if c.startswith("#") and (len(c) == 7 or len(c) == 9): 
-                return c
-        return mcolors.to_hex(c)
-
-    hex_colors = [as_hex(c) for c in colors]
-
-    out = {k: hex_colors[i % len(hex_colors)] for i, k in enumerate(keys)}
-    return out
-
 def plot_cells_per_tissue_by_donor(adata, suffix, runtag, outdir, tissue_key="tissue", donor_key="donorID"):
     df = adata.obs.groupby([tissue_key, donor_key], observed=True).size().reset_index(name='n_cells')
     df_pivot = df.pivot(index=tissue_key, columns=donor_key, values='n_cells').fillna(0)
@@ -511,8 +511,8 @@ def plot_cells_per_tissue_by_donor(adata, suffix, runtag, outdir, tissue_key="ti
     plt.tight_layout(rect=[0, 0, 0.85, 1])
     outpng = os.path.join(outdir, f'ATAC_cellCount_perTissueByDonor.{suffix}.{runtag}.png')
     plt.savefig(outpng, dpi=300)
-    outpdf = os.path.join(outdir, f'ATAC_cellCount_perTissueByDonor.{suffix}.{runtag}.pdf')
-    plt.savefig(outpdf)
+    #outpdf = os.path.join(outdir, f'ATAC_cellCount_perTissueByDonor.{suffix}.{runtag}.pdf')
+    #plt.savefig(outpdf)
     plt.close()
     print(f"Figure saved as:\n  {outpng}\n  {outpdf}")
 
@@ -551,7 +551,7 @@ def plot_cells_per_donor_per_tissue(adata, suffix, runtag, outdir, tissue_key="t
     plt.tight_layout(rect=[0, 0, 0.85, 1])
     outpng = os.path.join(outdir, f'ATAC_cellCount_perDonorPerTissue.{suffix}.{runtag}.png')
     plt.savefig(outpng, dpi=300)
-    outpdf = os.path.join(outdir, f'ATAC_cellCount_perDonorPerTissue.{suffix}.{runtag}.pdf')
-    plt.savefig(outpdf)
+    #outpdf = os.path.join(outdir, f'ATAC_cellCount_perDonorPerTissue.{suffix}.{runtag}.pdf')
+    #plt.savefig(outpdf)
     plt.close()
     print(f"Figure saved as:\n  {outpng}\n  {outpdf}")
