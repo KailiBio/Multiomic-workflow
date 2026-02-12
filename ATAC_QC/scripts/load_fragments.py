@@ -6,6 +6,9 @@ Description:
     Process ATAC fragment files and save as h5ad (with QC and figures).
 """
 
+import warnings
+warnings.filterwarnings("ignore", category=FutureWarning)
+
 import os
 import sys
 import time
@@ -61,7 +64,6 @@ def process_fragments(row, config, barcode_dic_rna, overwrite=False):
             return
 
     data = snap.pp.import_data(
-        #snap.pp.import_fragments(
         fragment_file,
         chrom_sizes = snap.genome.hg38,
         file = output_h5ad,

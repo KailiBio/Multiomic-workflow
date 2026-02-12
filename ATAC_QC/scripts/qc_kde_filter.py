@@ -5,6 +5,9 @@ Author: Kaili Fan
 Description: Cell filtering and KDE plots for snATAC-seq samples.
 """
 
+import warnings
+warnings.filterwarnings("ignore", category=FutureWarning)
+
 import os
 import sys
 import argparse
@@ -74,7 +77,7 @@ def main(config_path, runtag):
             tissue_std = standardize_tissue_name(sample_tissue_dict[fileID])
             
             try:
-                h5ad_path = os.path.join(workdir, "atac_h5ad", f'{fileID}.raw.h5ad')
+                h5ad_path = os.path.join(output_h5ad_dir, f'{fileID}.raw.h5ad')
                 if not os.path.exists(h5ad_path):
                     print(f"[ERROR] No h5ad for {fileID} at {h5ad_path}.")
                     continue

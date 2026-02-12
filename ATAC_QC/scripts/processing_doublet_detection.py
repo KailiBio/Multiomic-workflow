@@ -5,6 +5,9 @@ Author: Kaili Fan
 Description: Perform doublet detection for snATAC-seq samples, with summary plots.
 """
 
+import warnings
+warnings.filterwarnings("ignore", category=FutureWarning)
+
 import os
 
 # set limits for resource usage

@@ -5,6 +5,9 @@ Author: Kaili Fan
 Description: Final clustering, doublet removal, and QC figure/statistics for snATAC-seq samples.
 """
 
+import warnings
+warnings.filterwarnings("ignore", category=FutureWarning)
+
 import os
 import sys
 import argparse
