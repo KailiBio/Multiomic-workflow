@@ -7,6 +7,8 @@ Description: Perform doublet detection for snATAC-seq samples, with summary plot
 
 import warnings
 warnings.filterwarnings("ignore", category=FutureWarning)
+warnings.filterwarnings("ignore", message="Transforming to str index.")
+warnings.filterwarnings("ignore", message="n_jobs value .* overridden to 1 by setting random_state. Use no seed for parallelism.")
 
 import os
 

@@ -7,6 +7,10 @@ Description: Concatenate per-sample AnnData, run joint embedding, clustering, an
 
 import warnings
 warnings.filterwarnings("ignore", category=FutureWarning)
+warnings.filterwarnings("ignore", message="Transforming to str index.")
+warnings.filterwarnings("ignore", message="n_jobs value .* overridden to 1 by setting random_state. Use no seed for parallelism.")
+warnings.filterwarnings("ignore", message=r"^`_import_from_c` is deprecated; use `_import_arrow_from_c` instead\.")
+
 
 import os
 import sys
@@ -17,7 +21,7 @@ import snapatac2 as snap
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 from atac_qc.utils import load_config, standardize_tissue_name
-from atac_qc.atac_plots import assign_colors, plot_umap_by_sample, plot_umap_by_donor, plot_umap_single_tissue_sample_by_side, plot_umap_per_tissue_by_sample_all, plot_umap_with_QC, plot_cells_per_tissue_by_donor, plot_cells_per_donor_per_tissue
+from atac_qc.atac_plots import assign_donor_colors, assign_colors, plot_umap_by_sample, plot_umap_by_donor, plot_umap_single_tissue_sample_by_side, plot_umap_per_tissue_by_sample_all, plot_umap_with_QC, plot_cells_per_tissue_by_donor, plot_cells_per_donor_per_tissue
 
 def collect_input_adatas(sample_list, h5ad_dir, runtag):
     """Get AnnData file paths and read them into memory."""
@@ -53,36 +57,20 @@ def update_dataset_metrics(adataset, gencode_gtf, n_threads):
 
 def assign_obs_colors(adata, sample_tissue_dict, config,
                       tissue_key='tissue', donor_key='donorID', sample_key='sampleID'):
-    
+
     samples = sorted(set(adata.obs[sample_key]))
-    tissues = sorted(set(adata.obs[tissue_key]))
-    donors = sorted(set(adata.obs[donor_key]))
-
-    my_color_palette = config["my_color_palette"]
-
-    # Sample colors
-    sample_colors = assign_colors(samples, palette=my_color_palette)
+    sample_colors = assign_colors(samples, palette=config["my_color_palette"])
     print("Sample colors assigned:", sample_colors)
 
-    # Tissue colors & Tissue color for each sample
-    config_tissue_colors = config['color'].get("tissue_colors")
-    palette_tissue_colors = assign_colors(tissues, palette=my_color_palette)    
-    if config_tissue_colors:
-        tissue_colors = {t: config_tissue_colors.get(t, palette_tissue_colors[t]) for t in tissues}
-        sample_tissue_colors = {s: config_tissue_colors.get(sample_tissue_dict[s], palette_tissue_colors[sample_tissue_dict[s]]) 
-                                for s in samples}
-    else:
-        tissue_colors = {t: config_tissue_colors[t] for t in tissues if t in config_tissue_colors}
-        sample_tissue_colors = {s: palette_tissue_colors[sample_tissue_dict[s]] for s in samples}
+    tissue_colors = assign_donor_colors(adata.obs, config['color'].get("tissue_colors"), 
+                                        key = tissue_key)
     print("tissue colors assigned:", tissue_colors)
+    
+    sample_tissue_colors = {s: tissue_colors.get(sample_tissue_dict[s], tissue_colors[sample_tissue_dict[s]]) 
+                                for s in samples}
 
-    # Donor colors
-    config_donor_colors = config['color'].get("donor_colors")
-    palette_donor_colors = assign_colors(donors, palette=my_color_palette)
-    if config_donor_colors:
-        donor_colors = {d: config_donor_colors.get(d, palette_donor_colors[d]) for d in donors}
-    else:
-        donor_colors = palette_donor_colors
+    donor_colors = assign_donor_colors(adata.obs, config['color'].get("donor_colors"), 
+                                        key = donor_key)
     print("Donor colors assigned:", donor_colors)
 
     # Store colors in adata.uns
@@ -90,7 +78,7 @@ def assign_obs_colors(adata, sample_tissue_dict, config,
     adata.uns[sample_key+'_colors'] = np.array([sample_colors[d] for d in adata.obs[sample_key].cat.categories])
     #
     adata.obs[tissue_key] = adata.obs[tissue_key].astype('category')
-    adata.uns[tissue_key+'_colors'] = np.array([palette_tissue_colors[d] for d in adata.obs[tissue_key].cat.categories])
+    adata.uns[tissue_key+'_colors'] = np.array([tissue_colors[d] for d in adata.obs[tissue_key].cat.categories])
     #
     adata.obs[donor_key] = adata.obs[donor_key].astype('category')
     adata.uns[donor_key+'_colors'] = np.array([donor_colors[d] for d in adata.obs[donor_key].cat.categories])
@@ -98,7 +86,7 @@ def assign_obs_colors(adata, sample_tissue_dict, config,
     return {
         'sample_colors': sample_colors,
         'sample_tissue_colors': sample_tissue_colors,
-        'tissue_colors': palette_tissue_colors,
+        'tissue_colors': tissue_colors,
         'donor_colors': donor_colors
     }
     
@@ -117,9 +105,12 @@ def save_merged_anndata(adataset, h5ad_dir, suffix, runtag, sample_tissue_dict,
     adata_merged.obs['tissue'] = adata_merged.obs['sampleID'].map(sample_tissue_dict)
 
     # Assign colors and save in adata.uns
+    print("Assigning colors...")
     if add_colors:
-        all_colors = assign_obs_colors(adata_merged, sample_tissue_dict=sample_tissue_dict, config=config,
-                          tissue_key='tissue', donor_key='donorID', sample_key='sampleID')
+        all_colors = assign_obs_colors(adata_merged, sample_tissue_dict=sample_tissue_dict,
+                                       config=config,
+                                       tissue_key='tissue', donor_key='donorID', sample_key='sampleID')
+    print("Finished assigning colors...")
 
     merged_h5ad_path = os.path.join(h5ad_dir, f"{suffix}.ATAC.{runtag}.h5ad")
     adata_merged.write(merged_h5ad_path)
@@ -176,7 +167,7 @@ def main(config_path, runtag):
     
     workdir = config['paths']['workdir']
     output_h5ad_dir = config['paths']['output_h5ad_dir']
-    outdir = os.path.join(workdir, f'doublet_detection.{runtag}')
+    outdir = os.path.join(workdir, f'postprocessing_check.{runtag}')
     os.makedirs(outdir, exist_ok=True)
     os.chdir(workdir)
     

@@ -7,6 +7,7 @@ Description: Cell filtering and KDE plots for snATAC-seq samples.
 
 import warnings
 warnings.filterwarnings("ignore", category=FutureWarning)
+warnings.filterwarnings("ignore", message="Transforming to str index.")
 
 import os
 import sys
@@ -27,7 +28,7 @@ def main(config_path, runtag):
     
     workdir = config['paths']['workdir']
     output_h5ad_dir = config['paths']['output_h5ad_dir']
-    outdir = os.path.join(workdir, "qc_filtering")
+    outdir = os.path.join(workdir, f"qc_filtering.{runtag}")
     os.makedirs(outdir, exist_ok=True)
     os.chdir(workdir)
 
@@ -90,18 +91,18 @@ def main(config_path, runtag):
                 x_cutoff = df_cutoff.loc[fileID, "num_fragment"]
                 y_cutoff = df_cutoff.loc[fileID, "TSS_enrichment_score"]
                 cutoff_str = f"QC cutoffs: n_fragment > {x_cutoff}, TSS_enrichment > {y_cutoff}"
-                passed_mask = snap.pp.filter_cells(
+                adata_qc = snap.pp.filter_cells(
                     adata, min_tsse=y_cutoff, min_counts=x_cutoff,
                     max_counts=100000, inplace=False, n_jobs=n_threads
                 )
-                passed_cells_str = f"Cells passing QC: {np.sum(passed_mask)}"
+                passed_cells_str = f"Cells passing QC: {len(adata_qc)}"
 
                 # Pre-filter plot
                 print("[INFO] Plotting pre-filter kde...")
                 snap.pp.filter_cells(adata, min_tsse=3, min_counts=100, max_counts=100000,
                                      inplace=True, n_jobs=n_threads)
                 plot_kde_filter(
-                    adata, x_cutoff, y_cutoff, f'{tissue_std}: {fileID}', 
+                    adata, x_cutoff, y_cutoff, f'{tissue_std}\n{fileID}', 
                     initial_cell_str, cutoff_str, passed_cells_str, pdf_before, show_cutoff_line=True
                 )
 
@@ -110,7 +111,7 @@ def main(config_path, runtag):
                 snap.pp.filter_cells(adata, min_tsse=y_cutoff, min_counts=x_cutoff,
                                      max_counts=100000, inplace=True, n_jobs=n_threads)
                 plot_kde_filter(
-                    adata, x_cutoff, y_cutoff, f'{tissue_std}: {fileID}', 
+                    adata, x_cutoff, y_cutoff, f'{tissue_std}\n{fileID}', 
                     initial_cell_str, cutoff_str, passed_cells_str, pdf_after, show_cutoff_line=False
                 )
 
