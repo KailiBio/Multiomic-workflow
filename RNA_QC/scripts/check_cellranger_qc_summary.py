@@ -5,6 +5,9 @@ Author: Kaili Fan
 Description: Summarizes and plots CellRanger QC results.
 """
 
+import warnings
+warnings.filterwarnings("ignore", category=FutureWarning)
+
 import os
 import sys
 import argparse
@@ -41,7 +44,7 @@ def plot_qc_metrics(summary_df, all_colors, tissue, outdir, suffix):
     """
     columns_to_plot = list(summary_df.columns[0:6]) + list(summary_df.columns[16:19])
     
-    fig, axes = plt.subplots(nrows=3, ncols=3, figsize=(15, 9))
+    fig, axes = plt.subplots(nrows=3, ncols=3, figsize=(35, 9))
     axes = axes.flatten()
     for i, col in enumerate(columns_to_plot):
         ax = axes[i]
@@ -53,7 +56,7 @@ def plot_qc_metrics(summary_df, all_colors, tissue, outdir, suffix):
             values = pd.to_numeric(values, errors='coerce') / 1_000_000
         elif col in ['Valid Barcodes', 'Sequencing Saturation', 'Fraction Reads in Cells']:
             values = values.apply(lambda x: float(str(x).replace('%', '').strip()) if isinstance(x, str) else x).fillna(0)
-        ax.barh(summary_df['donorID'], values, color=colors, height=0.5)
+        ax.barh(summary_df['sampleID'], values, color=colors, height=0.5)
 
         # add text
         for index, value in enumerate(values):

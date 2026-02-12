@@ -5,6 +5,9 @@ Author: Kaili Fan
 Description: Concatenate single-cell h5ad files for a given tissue, integrating sample- and Scrinvex-based information, and return a unified h5ad file.
 """
 
+import warnings
+warnings.filterwarnings("ignore", category=FutureWarning)
+
 import os
 import sys
 import argparse
@@ -12,7 +15,6 @@ import pandas as pd
 import scanpy as sc
 import anndata as ad
 import re
-import warnings
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 from rna_qc.utils import load_config, standardize_tissue_name
@@ -97,7 +99,7 @@ def run_per_tissue(working_df, tissue, input_dir, scrinvex_dir, output_h5ad_dir,
         if sampleID == "---":
             print("[INFO] missing data, skip.")
         else:
-            print(f"[INFO] Processing sample: {sampleID} (donor: {donorID}, batch: {batch_number})...")
+            print(f"[INFO] Processing sample: {sampleID} (donor: {donorID}, batch: {batch_number}, chanel: {chanel_number})...")
             try:
                 adata = load_cellranger_h5(input_dir, sampleID)
             except Exception as e:

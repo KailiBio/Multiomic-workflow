@@ -5,6 +5,9 @@ Author: Kaili Fan
 Description: Filters cells by user-provided (per sample) QC cutoffs, generates Upset plots, processes filtered data, and saves results.
 """
 
+import warnings
+warnings.filterwarnings("ignore", category=FutureWarning)
+
 import os
 import sys
 import argparse
@@ -13,11 +16,10 @@ import pandas as pd
 import scanpy as sc
 import anndata as ad
 import scipy.sparse
-import warnings
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 from rna_qc.utils import load_config, standardize_tissue_name
-from rna_qc.rna_plots import assign_donor_colors, move_figures_to_newdir, plot_upset, run_umap_clustering
+from rna_qc.rna_plots import assign_donor_colors, move_figures_to_newdir, plot_upset, run_umap_clustering, plot_doublet_hist
 
 def prepare_upset_summary_allQC(sample_data, QC_cutoff_dict, global_obs, default_cutoffs):
     sampleID = sample_data['sampleID'].iloc[0].strip()
@@ -146,7 +148,7 @@ def export_doublet_calls_by_sample(adata, QC_cutoff_dict, tissue, tissue_std, fi
         # plot the doublet distribution with filter cutoff
         plot_doublet_hist(
             adata=adata_sel, donor_col='sampleID', tissue=tissue, tissue_std=tissue_std,
-            figdir=figdir, key='sampleID', probability_midpoint=doublet_cutoff)
+            figdir=figdir, key='sampleID', probability_cutoff=doublet_cutoff)
 
 
 def filter_and_process_adata(adata, df, QC_cutoff_dict, tissue, tissue_std, log_file_dir, key):

@@ -5,6 +5,9 @@ Author: Kaili Fan
 Description: Cluster and re-assess QC metrics for scRNA-seq pipeline.
 """
 
+import warnings
+warnings.filterwarnings("ignore", category=FutureWarning)
+
 import os
 import sys
 import argparse

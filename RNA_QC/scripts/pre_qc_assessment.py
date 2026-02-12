@@ -5,6 +5,9 @@ Author: Kaili Fan
 Description: Computes QC metrics and runs doublet detection, generates plots for further QC filtering.
 """
 
+import warnings
+warnings.filterwarnings("ignore", category=FutureWarning)
+
 import os
 import sys
 import argparse
@@ -15,7 +18,6 @@ import scanpy as sc
 import scipy.sparse
 import logging
 from sklearn.mixture import BayesianGaussianMixture
-import warnings
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 from rna_qc.utils import load_config, standardize_tissue_name

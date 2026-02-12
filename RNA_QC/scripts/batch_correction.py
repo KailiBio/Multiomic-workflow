@@ -5,6 +5,9 @@ Author: Kaili Fan
 Description: Runs Harmony batch correction across donors.
 """
 
+import warnings
+warnings.filterwarnings("ignore", category=FutureWarning)
+
 import os
 import sys
 import argparse
@@ -16,7 +19,6 @@ import anndata as ad
 import matplotlib as mpl
 mpl.rcParams['pdf.fonttype'] = 42
 import matplotlib.pyplot as plt
-import warnings
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 from rna_qc.utils import load_config, standardize_tissue_name
@@ -77,8 +79,8 @@ def run_harmony_batch_correction(output_h5ad_dir, workdir, tissue, runtag, key="
     handles = [mpatches.Patch(color=c, label=l) for c, l in zip(colors, categories)]
     
     # Place the legend at the bottom center
-    # ncol=4 splits the list into 4 columns to make it wide instead of tall
-    fig.legend(handles=handles, loc='lower center', bbox_to_anchor=(0.5, 0.0), ncol=4, frameon=False)
+    #fig.legend(handles=handles, loc='lower center', bbox_to_anchor=(0.5, 0.0), ncol=4, frameon=False)
+    fig.legend(handles=handles, loc='center right', bbox_to_anchor=(1.02, 0.5), ncol=1, frameon=False)
 
     # 4. Adjust layout to leave space at the bottom
     fig.suptitle(f"{tissue}: Harmony Batch Correction", fontsize=16)
