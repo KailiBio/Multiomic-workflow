@@ -157,8 +157,8 @@ def run_per_tissue(tissue, working_df, output_h5ad_dir, config, runtag, outdir, 
     plot_umap_with_QC(adata_merged, tissue_std, runtag, outdir, sample_colors=all_colors['sample_tissue_colors'])
 
     print("[INFO] Plotting stat figures...")
-    plot_cells_per_tissue_by_donor(adata_merged, tissue_std, runtag, outdir)
-    plot_cells_per_donor_per_tissue(adata_merged, tissue_std, runtag, outdir)
+    plot_cells_per_tissue_by_donor(adata_merged, tissue_std, runtag, outdir, "tissue", "sampleID")
+    plot_cells_per_donor_per_tissue(adata_merged, tissue_std, runtag, outdir, "tissue", "sampleID")
 
     print(f"[DONE] Finished mergeing for tissue: {tissue}\n")
     

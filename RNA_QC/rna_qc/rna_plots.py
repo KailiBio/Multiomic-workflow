@@ -18,7 +18,31 @@ import shutil
 import warnings
 import scanpy as sc
 from scipy.stats import median_abs_deviation
+import matplotlib.patches as mpatches
 
+def assign_colors(keys, palette="tab10"):
+    """
+    Assign hex color codes from a matplotlib palette to an iterable of keys (sample/donor IDs).
+    Returns a dict: {key: hex_color}
+    """
+    keys = sorted(keys)
+    if isinstance(palette, str):
+        colors = plt.get_cmap(palette).colors
+    else:
+        colors = palette
+
+    def as_hex(c):
+        # If already a hex string, just return
+        if isinstance(c, str):
+            if c.startswith("#") and (len(c) == 7 or len(c) == 9): 
+                return c
+        return mcolors.to_hex(c)
+
+    hex_colors = [as_hex(c) for c in colors]
+
+    out = {k: hex_colors[i % len(hex_colors)] for i, k in enumerate(keys)}
+    return out
+    
 def assign_donor_colors(df, donor_col, key='donorID'):
     """
     Returns a {donor: color} dict for only donors in df[key].unique().
@@ -68,6 +92,9 @@ def plot_qc_violin(adata, metric, tissue, tissue_std, all_colors, metrics_with_c
             # All data
             sns.violinplot(y=all_data, ax=axes[0], color="gray", inner='box')
             axes[0].set_title(tissue_std)
+            axes[0].set_xlabel('')
+            axes[0].set_xticks([])
+            axes[0].set_xticklabels([])
             axes[0].set_ylabel(metric)
             axes[0].grid(False)
             
@@ -76,10 +103,25 @@ def plot_qc_violin(adata, metric, tissue, tissue_std, all_colors, metrics_with_c
                            palette=all_colors, hue=key, legend=False,
                            order=donor_order, inner='box')
 
-        axes[1].set_title(f'by {key}')
-        axes[1].set_xlabel('')
-        axes[1].tick_params(axis='x', rotation=0)
-        axes[1].grid(False)
+            axes[1].set_title(f'by {key}')
+            axes[1].set_xlabel('')
+            axes[1].set_xticks([])
+            axes[1].set_xticklabels([])
+            axes[1].tick_params(axis='x', rotation=0)
+            axes[1].grid(False)
+
+        # --- custom legend for sampleID colors ---
+        legend_handles = [
+            mpatches.Patch(color=color, label=sample)
+            for sample, color in all_colors.items()
+        ]
+        axes[1].legend(
+            handles=legend_handles,
+            title=key,                 
+            bbox_to_anchor=(1.05, 1),
+            loc='upper left',
+            borderaxespad=0.
+        )
         
         # Add cutoffs
         if metric in metrics_with_cutoffs:
@@ -127,7 +169,7 @@ def plot_qc_cumulative_distribution(adata, metrics, tissue, tissue_std, all_colo
             plt.savefig(os.path.join(figdir, f"RNA_QC_cumulative.by{key}.{tissue_std}.{metric}.png"), dpi=300, bbox_inches='tight')
             plt.close()
 
-def plot_doublet_hist(adata, donor_col, tissue, tissue_std, figdir, key, probability_midpoint=None):
+def plot_doublet_hist(adata, donor_col, tissue, tissue_std, figdir, key, probability_cutoff=None):
     for ID in adata.obs[key].unique():
         print(f"[INFO] Plotting doublet score & probability distribution for: {ID}...")
         doublet_scores = adata[adata.obs[key] == ID].obs['doublet_score']
@@ -136,10 +178,14 @@ def plot_doublet_hist(adata, donor_col, tissue, tissue_std, figdir, key, probabi
         if doublet_probabilities.isnull().all():
             print(f"[WARNING] No doublet probabilities for {ID}")
             continue
-        if probability_midpoint is None:
-            cutoff = np.round((doublet_probabilities.max()+doublet_probabilities.min())/2).round(1)
+        # check whether have given doublet cutoffs. if no, use midpoint
+        if probability_cutoff is None:
+            print(f"[INFO] using midpoint as doublet cutoff...")
+            cutoff = np.round((doublet_probabilities.max()+doublet_probabilities.min())/2,1)
         else:
-            cutoff = probability_midpoint
+            print(f"[INFO] using given doublet cutoff...")
+            cutoff = float(probability_cutoff)
+        print(f"[INFO] current doublet cutoff is {cutoff}.")
         doublet_mask = doublet_probabilities > cutoff
         
         bins = np.histogram_bin_edges(doublet_scores, bins=50)
@@ -213,7 +259,7 @@ def plot_upset(upset_data_summary, tissue, key, ID, tissue_std, adata, savepath)
     with warnings.catch_warnings():
         warnings.filterwarnings("ignore", category=FutureWarning)
         upsetplot.plot(upset_data_summary, show_counts=True, sort_by="cardinality")
-    plt.suptitle(f'{tissue} - {ID}: total N={len(adata[adata.obs[key] == ID, :].obs_names)}', fontsize=14)
+    plt.suptitle(f'{tissue} - {ID}\ntotal N={len(adata[adata.obs[key] == ID, :].obs_names)}', fontsize=14)
     with warnings.catch_warnings():
         warnings.filterwarnings("ignore", category=UserWarning)
         plt.tight_layout()
@@ -242,7 +288,7 @@ def plot_umap_by_ID(adata, tissue, tissue_std, figdir, all_colors, key):
     for i, ID in enumerate(IDs):
         adata_plot = adata[adata.obs[key] == ID, :]
         sc.pl.umap(adata_plot, color=['leiden'], ax=axes[0, i], show=False, save=False)
-        axes[0, i].set_title(f"{ID} N={len(adata_plot.obs_names)}")
+        axes[0, i].set_title(f"{ID}\nN={len(adata_plot.obs_names)}")
     fig.suptitle(f"{tissue}")
     plt.tight_layout()
     plt.savefig(os.path.join(figdir, f"UMAP_LeidenCluster_by{key}.{tissue_std}.png"), dpi=300, bbox_inches='tight')
