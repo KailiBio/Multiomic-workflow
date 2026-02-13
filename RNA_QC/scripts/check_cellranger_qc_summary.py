@@ -17,7 +17,7 @@ import matplotlib.colors as mcolors
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 from rna_qc.utils import load_config
-from rna_qc.rna_plots import assign_donor_colors
+from rna_qc.rna_plots import assign_donor_colors, assign_colors
 
 def load_cellranger_summary(sample_dict, datadir):
     """
@@ -131,8 +131,9 @@ def main(config_path):
     # Get donor color map
     #donor_colors = config['color'].get("donor_colors")
     #all_colors = assign_donor_colors(summary_df, donor_colors)
-    sample_colors = {}
-    all_colors = assign_donor_colors(summary_df, sample_colors, 'sampleID')
+    #sample_colors = {}
+    #all_colors = assign_donor_colors(summary_df, sample_colors, 'sampleID')
+    all_colors = assign_colors(sorted(set(summary_df['sampleID'])), palette=config["my_color_palette"])
     
 
     print("[INFO] Plotting general QC metrics...")

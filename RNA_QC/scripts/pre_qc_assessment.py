@@ -21,7 +21,7 @@ from sklearn.mixture import BayesianGaussianMixture
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 from rna_qc.utils import load_config, standardize_tissue_name
-from rna_qc.rna_plots import assign_donor_colors, move_figures_to_newdir, plot_qc_violin, plot_qc_jointplot, plot_qc_cumulative_distribution, plot_doublet_hist, clustering_umap
+from rna_qc.rna_plots import assign_colors, assign_donor_colors, move_figures_to_newdir, plot_qc_violin, plot_qc_jointplot, plot_qc_cumulative_distribution, plot_doublet_hist, clustering_umap
 
 def calculate_qc_metrics(adata):
     # calculate mt, ribo, hb
@@ -124,7 +124,7 @@ def compress_and_save(adata, output_h5ad_dir, tissue_std):
     print("[INFO] Saving h5ad...")
     adata.write(os.path.join(output_h5ad_dir, f'{tissue_std}_GEX.withQC.h5ad'))
 
-def run_per_tissue(working_df, tissue, output_h5ad_dir, outdir, donor_colors, scrinvex_dir, nmads, key = "sampleID"):
+def run_per_tissue(working_df, tissue, output_h5ad_dir, outdir, my_color_palette, scrinvex_dir, nmads, key = "sampleID"):
     tissue_std = standardize_tissue_name(tissue)
         
     adata_path = os.path.join(output_h5ad_dir, f"{tissue_std}_GEX.raw.h5ad")
@@ -141,11 +141,12 @@ def run_per_tissue(working_df, tissue, output_h5ad_dir, outdir, donor_colors, sc
 
     print(f'[INFO] all figure plots by {key}')
     if key == 'donorID':
-        all_colors = assign_donor_colors(working_df, donor_colors, key = key)
+        all_colors = assign_donor_colors(working_df, my_color_palette, key = key)
         print(f"use colors: {all_colors}")
     elif key == 'sampleID':
         sample_colors={}
-        all_colors = assign_donor_colors(working_df, sample_colors, key = 'rnaID')
+        #all_colors = assign_donor_colors(working_df, sample_colors, key = 'rnaID')
+        all_colors = assign_colors(sorted(set(working_df['rnaID'])), palette=my_color_palette)
         print(f"use colors: {all_colors}")
     else:
         print("[WARNING] need to edit for colors")
@@ -228,6 +229,7 @@ def main(config_path, nmads=5.0):
     tissue = config['params']['tissue']
 
     donor_colors = config['color'].get("donor_colors")
+    my_color_palette = config["my_color_palette"]
 
     sample_metadata = config['paths']['sample_metadata']
     df = pd.read_csv(sample_metadata, sep='\t', header=None, index_col=False,
@@ -242,7 +244,7 @@ def main(config_path, nmads=5.0):
 
             try:
                 working_df = df[df["tissue"] == tissue_name]
-                run_per_tissue(working_df, tissue_name, output_h5ad_dir, workdir, donor_colors,
+                run_per_tissue(working_df, tissue_name, output_h5ad_dir, workdir, my_color_palette,
                                scrinvex_dir, nmads, key = "sampleID")
             except Exception as e:
                 print(f"[ERROR] Encountered error for tissue {tissue_name}: {e}")
@@ -251,7 +253,7 @@ def main(config_path, nmads=5.0):
         
         try:
             working_df = df[df["tissue"] == tissue]
-            run_per_tissue(working_df, tissue, output_h5ad_dir, workdir, donor_colors, 
+            run_per_tissue(working_df, tissue, output_h5ad_dir, workdir, my_color_palette, 
                            scrinvex_dir, nmads, key = "sampleID")
         except Exception as e:
             print(f"[ERROR] Encountered error for tissue {tissue}: {e}")

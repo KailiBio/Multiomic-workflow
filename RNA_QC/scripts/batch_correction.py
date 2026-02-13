@@ -79,8 +79,8 @@ def run_harmony_batch_correction(output_h5ad_dir, workdir, tissue, runtag, key="
     handles = [mpatches.Patch(color=c, label=l) for c, l in zip(colors, categories)]
     
     # Place the legend at the bottom center
-    #fig.legend(handles=handles, loc='lower center', bbox_to_anchor=(0.5, 0.0), ncol=4, frameon=False)
-    fig.legend(handles=handles, loc='center right', bbox_to_anchor=(1.02, 0.5), ncol=1, frameon=False)
+    fig.legend(handles=handles, loc='lower center', bbox_to_anchor=(0.5, 0.0), ncol=2, frameon=False)
+    #fig.legend(handles=handles, loc='center right', bbox_to_anchor=(1.02, 0.5), ncol=1, frameon=False)
 
     # 4. Adjust layout to leave space at the bottom
     fig.suptitle(f"{tissue}: Harmony Batch Correction", fontsize=16)

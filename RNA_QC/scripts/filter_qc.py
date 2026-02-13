@@ -19,7 +19,7 @@ import scipy.sparse
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 from rna_qc.utils import load_config, standardize_tissue_name
-from rna_qc.rna_plots import assign_donor_colors, move_figures_to_newdir, plot_upset, run_umap_clustering, plot_doublet_hist
+from rna_qc.rna_plots import assign_colors, assign_donor_colors, move_figures_to_newdir, plot_upset, run_umap_clustering, plot_doublet_hist
 
 def prepare_upset_summary_allQC(sample_data, QC_cutoff_dict, global_obs, default_cutoffs):
     sampleID = sample_data['sampleID'].iloc[0].strip()
@@ -232,7 +232,7 @@ def compress_and_save_postqc_h5ad(adata, output_h5ad_dir, tissue_std, runtag):
     print("[INFO] Saving h5ad...")
     adata.write(os.path.join(output_h5ad_dir, f'{tissue_std}_GEX.filtered.{runtag}.h5ad'))
 
-def run_per_tissue(working_df, output_h5ad_dir, workdir, QC_cutoff, tissue, donor_colors, default_cutoffs, runtag,
+def run_per_tissue(working_df, output_h5ad_dir, workdir, QC_cutoff, tissue, my_color_palette, default_cutoffs, runtag,
                   key):
     tissue_std = standardize_tissue_name(tissue)
 
@@ -250,11 +250,12 @@ def run_per_tissue(working_df, output_h5ad_dir, workdir, QC_cutoff, tissue, dono
 
     print(f'[INFO] all figure plots by {key}')
     if key == 'donorID':
-        all_colors = assign_donor_colors(working_df, donor_colors, key = key)
+        all_colors = assign_donor_colors(working_df, my_color_palette, key = key)
         print(f"use colors: {all_colors}")
     elif key == 'sampleID':
         sample_colors={}
-        all_colors = assign_donor_colors(working_df, sample_colors, key = 'rnaID')
+        #all_colors = assign_donor_colors(working_df, sample_colors, key = 'rnaID')
+        all_colors = assign_colors(sorted(set(working_df['rnaID'])), palette=my_color_palette)
         print(f"use colors: {all_colors}")
     else:
         print("[WARNING] need to edit for colors")
@@ -337,6 +338,7 @@ def main(config_path, runtag):
     tissue = config['params']['tissue']
 
     donor_colors = config['color'].get("donor_colors")
+    my_color_palette = config["my_color_palette"]
 
     # Default QC cutoffs for fallback
     default_cutoffs = {
@@ -372,7 +374,7 @@ def main(config_path, runtag):
             try:
                 working_df = df[df["tissue"] == tissue_name]
                 QC_cutoff = df_cutoff_all[df_cutoff_all['Tissue'] == tissue_name]
-                run_per_tissue(working_df, output_h5ad_dir, workdir, QC_cutoff, tissue_name, donor_colors, default_cutoffs, runtag, "sampleID")
+                run_per_tissue(working_df, output_h5ad_dir, workdir, QC_cutoff, tissue_name, my_color_palette, default_cutoffs, runtag, "sampleID")
             except Exception as e:
                 print(f"[ERROR] QC filtering failed for {tissue_name}: {e}")
     else:
@@ -380,7 +382,7 @@ def main(config_path, runtag):
         try:
             working_df = df[df["tissue"] == tissue]
             QC_cutoff = df_cutoff_all[df_cutoff_all['Tissue'] == tissue]
-            run_per_tissue(working_df, output_h5ad_dir, workdir, QC_cutoff, tissue, donor_colors, default_cutoffs, runtag, "sampleID")
+            run_per_tissue(working_df, output_h5ad_dir, workdir, QC_cutoff, tissue, my_color_palette, default_cutoffs, runtag, "sampleID")
         except Exception as e:
             print(f"[ERROR] QC filtering failed for {tissue}: {e}")
 
