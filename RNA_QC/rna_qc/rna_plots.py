@@ -7,6 +7,7 @@ ATAC_QC plotting functions.
 
 import os
 import numpy as np
+import pandas as pd
 import matplotlib as mpl
 mpl.rcParams['pdf.fonttype'] = 42
 import matplotlib.pyplot as plt
@@ -71,14 +72,16 @@ def move_figures_to_newdir(output_figures_dir, old, new):
 def plot_qc_violin(adata, metric, tissue, tissue_std, all_colors, metrics_with_cutoffs, figdir, key, nmads, add_mad_lines=True):
     if metric in adata.obs:
         print(f"[INFO] Plotting violin for: {metric}...")
-        all_data = adata.obs[metric].copy()
+        all_data = pd.to_numeric(adata.obs[metric], errors='coerce').copy()
         df = adata.obs[[metric, key]].copy()
+        df[metric] = pd.to_numeric(df[metric], errors='coerce')
         donor_order = list(all_colors.keys())
         fig, axes = plt.subplots(1, 2, figsize=(2 * len(donor_order), 4), gridspec_kw={'width_ratios': [1, 3]}, sharey=True)
 
-        # --- compute MAD-based thresholds once ---
-        med = np.median(all_data)
-        mad = median_abs_deviation(all_data)
+        # --- compute MAD-based thresholds once (drop NaN/None) ---
+        clean_data = all_data.dropna()
+        med = np.median(clean_data)
+        mad = median_abs_deviation(clean_data)
         lower = med - nmads * mad
         upper = med + nmads * mad
 
@@ -123,8 +126,9 @@ def plot_qc_violin(adata, metric, tissue, tissue_std, all_colors, metrics_with_c
         # Add cutoffs
         if metric in metrics_with_cutoffs:
             for v in metrics_with_cutoffs[metric]:
-                axes[0].axhline(y=v, color='red', linestyle='--', linewidth=1)
-                axes[1].axhline(y=v, color='red', linestyle='--', linewidth=1)
+                if v is not None and np.isfinite(v):
+                    axes[0].axhline(y=v, color='red', linestyle='--', linewidth=1)
+                    axes[1].axhline(y=v, color='red', linestyle='--', linewidth=1)
 
         # --- add MAD-based lower/upper lines ---
         if add_mad_lines:

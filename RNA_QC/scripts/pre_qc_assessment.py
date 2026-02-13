@@ -163,10 +163,10 @@ def run_per_tissue(working_df, tissue, output_h5ad_dir, outdir, my_color_palette
     if 'pct_exon_reads' not in adata.obs:
         QC_metrics.remove('pct_exon_reads')
 
-    # Cutoff for percent exon reads
-    if scrinvex_dir != None:
-        Q75 = np.nanpercentile(adata.obs['pct_exon_reads'], 75)
-        Q25 = np.nanpercentile(adata.obs['pct_exon_reads'], 25)
+    # Cutoff for percent exon reads (check data, not config path)
+    if 'pct_exon_reads' in adata.obs and adata.obs['pct_exon_reads'].notna().any():
+        Q75 = np.nanpercentile(adata.obs['pct_exon_reads'].dropna(), 75)
+        Q25 = np.nanpercentile(adata.obs['pct_exon_reads'].dropna(), 25)
         percent_exon_cutoff = Q75 + 1.5 * (Q75 - Q25)
     else:
         percent_exon_cutoff = None
