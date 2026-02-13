@@ -481,10 +481,12 @@ def plot_cells_per_tissue_by_donor(adata, suffix, runtag, outdir, tissue_key="ti
     # Order tissues by total cell count
     df_pivot = df_pivot.loc[df_pivot.sum(axis=1).sort_values(ascending=False).index]
 
-    n_tissue = df_pivot.shape[0]
-    n_donor = df_pivot.shape[1]
-    fig_height = max(3, min(0.5*n_tissue, 20))
-    fig_width  = max(8, min(1.2 + 0.8*n_donor, 20))
+    #n_tissue = df_pivot.shape[0]
+    #n_donor = df_pivot.shape[1]
+    #fig_height = max(3, min(0.5*n_tissue, 20))
+    #fig_width  = max(8, min(1.2 + 0.8*n_donor, 20))
+    fig_height = 5
+    fig_width = 8
     
     # Get color list for donors, matching the donorID column order in the pivot
     donor_ids = df_pivot.columns.tolist()
@@ -504,8 +506,8 @@ def plot_cells_per_tissue_by_donor(adata, suffix, runtag, outdir, tissue_key="ti
     plt.title('Number of Cells per Tissue (colored by Donor)')
     plt.legend(
         title="Donor",
-        bbox_to_anchor=(1.05, 1),
-        loc='upper left',
+        bbox_to_anchor=(-.5, -0.15), #(1.05, 1),
+        loc='bottom center', #'upper left',
         labels=donor_ids
     )
     plt.tight_layout(rect=[0, 0, 0.85, 1])
@@ -514,7 +516,7 @@ def plot_cells_per_tissue_by_donor(adata, suffix, runtag, outdir, tissue_key="ti
     #outpdf = os.path.join(outdir, f'ATAC_cellCount_perTissueByDonor.{suffix}.{runtag}.pdf')
     #plt.savefig(outpdf)
     plt.close()
-    print(f"Figure saved as:\n  {outpng}\n  {outpdf}")
+    print(f"Figure saved as:\n  {outpng}")
 
 def plot_cells_per_donor_per_tissue(adata, suffix, runtag, outdir, tissue_key="tissue", donor_key="donorID"):
     df = adata.obs.groupby([tissue_key, donor_key], observed=True).size().reset_index(name='n_cells')
@@ -522,10 +524,13 @@ def plot_cells_per_donor_per_tissue(adata, suffix, runtag, outdir, tissue_key="t
     df_pivot = df.pivot(index=tissue_key, columns=donor_key, values='n_cells').fillna(0)
     df_pivot = df_pivot.loc[df_pivot.sum(axis=1).sort_values(ascending=False).index]
 
-    n_tissue = df_pivot.shape[0]
-    n_donor = df_pivot.shape[1]
-    fig_height = max(3, min(0.5*n_tissue, 20))   # At least 3, at most 20
-    fig_width  = max(8, min(1.2 + 0.8*n_donor, 20))  # At least 6, at most 20
+    #n_tissue = df_pivot.shape[0]
+    #n_donor = df_pivot.shape[1]
+    #fig_height = max(3, min(0.5*n_tissue, 20))   # At least 3, at most 20
+    #fig_width  = max(8, min(1.2 + 0.8*n_donor, 20))  # At least 6, at most 20
+    fig_height = 5
+    fig_width = 8
+    
     
     donor_ids = df_pivot.columns.tolist()
     donor_colors = adata.uns[donor_key + '_colors']
@@ -543,8 +548,8 @@ def plot_cells_per_donor_per_tissue(adata, suffix, runtag, outdir, tissue_key="t
     plt.title('Number of Cells per Donor in Each Tissue')
     plt.legend(
         title=donor_key,
-        bbox_to_anchor=(1.05, 1),
-        loc='upper left',
+        bbox_to_anchor=(-.5, -0.15), #(1.05, 1),
+        loc='bottom center', #'upper left',
         labels=donor_ids
     )
     
@@ -554,4 +559,4 @@ def plot_cells_per_donor_per_tissue(adata, suffix, runtag, outdir, tissue_key="t
     #outpdf = os.path.join(outdir, f'ATAC_cellCount_perDonorPerTissue.{suffix}.{runtag}.pdf')
     #plt.savefig(outpdf)
     plt.close()
-    print(f"Figure saved as:\n  {outpng}\n  {outpdf}")
+    print(f"Figure saved as:\n  {outpng}")
