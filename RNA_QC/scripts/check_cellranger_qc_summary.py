@@ -17,7 +17,7 @@ import matplotlib.colors as mcolors
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 from rna_qc.utils import load_config
-from rna_qc.rna_plots import assign_donor_colors
+from rna_qc.rna_plots import assign_colors, assign_donor_colors
 
 def load_cellranger_summary(sample_dict, datadir):
     """
