@@ -19,6 +19,26 @@ import warnings
 import scanpy as sc
 from scipy.stats import median_abs_deviation
 
+def assign_colors(keys, palette="tab10"):
+    """
+    Assign hex color codes from a matplotlib palette to an iterable of keys (sample/donor IDs).
+    Returns a dict: {key: hex_color}
+    """
+    keys = sorted(keys)
+    if isinstance(palette, str):
+        colors = plt.get_cmap(palette).colors
+    else:
+        colors = palette
+
+    def as_hex(c):
+        if isinstance(c, str):
+            if c.startswith("#") and (len(c) == 7 or len(c) == 9):
+                return c
+        return mcolors.to_hex(c)
+
+    hex_colors = [as_hex(c) for c in colors]
+    return {k: hex_colors[i % len(hex_colors)] for i, k in enumerate(keys)}
+
 def assign_donor_colors(df, donor_col, key='donorID'):
     """
     Returns a {donor: color} dict for only donors in df[key].unique().
