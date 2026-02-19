@@ -10,6 +10,7 @@ warnings.filterwarnings("ignore", category=FutureWarning)
 
 import os
 import sys
+import traceback
 import argparse
 import numpy as np
 import pandas as pd
@@ -377,6 +378,7 @@ def main(config_path, runtag):
                 run_per_tissue(working_df, output_h5ad_dir, workdir, QC_cutoff, tissue_name, my_color_palette, default_cutoffs, runtag, "sampleID")
             except Exception as e:
                 print(f"[ERROR] QC filtering failed for {tissue_name}: {e}")
+                traceback.print_exc()
     else:
         print(f"\n============== Processing tissue: {tissue} ==============")
         try:
@@ -385,6 +387,7 @@ def main(config_path, runtag):
             run_per_tissue(working_df, output_h5ad_dir, workdir, QC_cutoff, tissue, my_color_palette, default_cutoffs, runtag, "sampleID")
         except Exception as e:
             print(f"[ERROR] QC filtering failed for {tissue}: {e}")
+            traceback.print_exc()
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Run QC filtering, normalization, feature selection for scRNA-seq h5ad.")

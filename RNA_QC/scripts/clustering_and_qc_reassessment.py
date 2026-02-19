@@ -10,6 +10,7 @@ warnings.filterwarnings("ignore", category=FutureWarning)
 
 import os
 import sys
+import traceback
 import argparse
 import numpy as np
 import pandas as pd
@@ -189,6 +190,7 @@ def main(config_path, runtag, key, nmads=5.0):
                                runtag, nmads, key)
             except Exception as e:
                 print(f"[ERROR] QC re-assessment failed for {tissue_name}: {e}")
+                traceback.print_exc()
     else:
         print(f"\n========== Processing tissue: {tissue} ==========")
         
@@ -198,6 +200,7 @@ def main(config_path, runtag, key, nmads=5.0):
                            runtag, nmads, key)
         except Exception as e:
             print(f"[ERROR] QC re-assessment failed for {tissue}: {e}")
+            traceback.print_exc()
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Cluster and re-assess QC metrics for scRNA-seq h5ad.")

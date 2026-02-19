@@ -10,6 +10,7 @@ warnings.filterwarnings("ignore", category=FutureWarning)
 
 import os
 import sys
+import traceback
 import argparse
 import numpy as np
 import pandas as pd
@@ -128,6 +129,7 @@ def main(config_path, runtag):
                 run_harmony_batch_correction(output_h5ad_dir, workdir, tissue_name, runtag, key = "sampleID")
             except Exception as e:
                 print(f"[ERROR] Harmony batch correction failed for {tissue_name}: {e}")
+                traceback.print_exc()
     else:
         print(f"\n============== Processing tissue: {tissue} ==============")
         
@@ -135,6 +137,7 @@ def main(config_path, runtag):
             run_harmony_batch_correction(output_h5ad_dir, workdir, tissue, runtag, key = "sampleID")
         except Exception as e:
             print(f"[ERROR] Harmony batch correction failed for {tissue}: {e}")
+            traceback.print_exc()
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Run Harmony batch correction for scRNA-seq h5ad.")
