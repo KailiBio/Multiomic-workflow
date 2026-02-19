@@ -108,15 +108,12 @@ def run_per_tissue(workdir, output_h5ad_dir, qc_cutoff_tissue, tissue, my_color_
     
     print(f'[INFO] all figure plots by {key}')
     if key == 'donorID':
-        all_colors = assign_donor_colors(working_df, my_color_palette, key = key)
+        all_colors = assign_donor_colors(adata.obs, my_color_palette, key = key)
         print(f"use colors: {all_colors}")
     elif key == 'sampleID':
-        sample_colors={}
-        #all_colors = assign_donor_colors(working_df, sample_colors, key = 'rnaID')
-        all_colors = assign_colors(sorted(set(working_df['rnaID'])), palette=my_color_palette)
+        all_colors = assign_colors(sorted(adata.obs['sampleID'].unique()), palette=my_color_palette)
         print(f"use colors: {all_colors}")
     elif key == 'aliquotID':
-        aliquot_colors={}
         all_colors = assign_donor_colors(adata.obs, my_color_palette, key = 'aliquotID')
         print(f"use colors: {all_colors}")
     else:
