@@ -168,22 +168,41 @@ def filter_and_process_adata(adata, df, QC_cutoff_dict, tissue, tissue_std, log_
         log_lines.append(f'total cellbarcodes in {ID}: {len(adata_process.obs_names)}\n')
 
         cutoff = QC_cutoff_dict[ID]
+        n_before = len(adata_process)
 
         adata_process = adata_process[adata_process.obs['n_genes_by_counts'] > int(cutoff['Min_genes_in_cells']), :]
+        print(f"[INFO]   after Min_genes ({cutoff['Min_genes_in_cells']}): {n_before} -> {len(adata_process)} cells")
         adata_process = adata_process[adata_process.obs['n_genes_by_counts'] < int(cutoff['Max_genes_in_cells']), :]
+        print(f"[INFO]   after Max_genes ({cutoff['Max_genes_in_cells']}): -> {len(adata_process)} cells")
         adata_process = adata_process[adata_process.obs['total_counts'] < int(cutoff['Max_counts_in_cells']), :]
+        print(f"[INFO]   after Max_counts ({cutoff['Max_counts_in_cells']}): -> {len(adata_process)} cells")
         if cutoff['Max_percent_mt_in_cells'] != '---':
             adata_process = adata_process[adata_process.obs['pct_counts_mt'] < float(cutoff['Max_percent_mt_in_cells']), :]
+            print(f"[INFO]   after pct_mt ({cutoff['Max_percent_mt_in_cells']}): -> {len(adata_process)} cells")
         if cutoff['Max_percent_ribo_in_cells'] != '---':
             adata_process = adata_process[adata_process.obs['pct_counts_ribo'] < float(cutoff['Max_percent_ribo_in_cells']), :]
+            print(f"[INFO]   after pct_ribo ({cutoff['Max_percent_ribo_in_cells']}): -> {len(adata_process)} cells")
         if 'pct_exon_reads' in adata_process.obs:
             if cutoff['Exon_ratio_cutoffs'] != '---':
                 adata_process = adata_process[adata_process.obs['pct_exon_reads'] < float(cutoff['Exon_ratio_cutoffs']), :]
+                print(f"[INFO]   after Exon_ratio ({cutoff['Exon_ratio_cutoffs']}): -> {len(adata_process)} cells")
         if cutoff['MALAT1_CPM_cutoffs'] != '---':
-            adata_process = adata_process[adata_process.obs['MALAT1_CPM'] > int(cutoff['MALAT1_CPM_cutoffs']), :]
+            if adata_process.obs['MALAT1_CPM'].notna().any():
+                adata_process = adata_process[adata_process.obs['MALAT1_CPM'] > int(cutoff['MALAT1_CPM_cutoffs']), :]
+                print(f"[INFO]   after MALAT1_CPM min ({cutoff['MALAT1_CPM_cutoffs']}): -> {len(adata_process)} cells")
+            else:
+                print(f"[WARNING] Skipping MALAT1_CPM min filter for {ID}: all values are NaN (gene may not exist in reference)")
         if cutoff['MALAT1_CPM_max_cutoffs'] != '---':
-            adata_process = adata_process[adata_process.obs['MALAT1_CPM'] < int(cutoff['MALAT1_CPM_max_cutoffs']), :]
-        adata_process = adata_process[adata_process.obs['doublet_probabilities'] < float(cutoff['doublet_cutoffs']), :]
+            if adata_process.obs['MALAT1_CPM'].notna().any():
+                adata_process = adata_process[adata_process.obs['MALAT1_CPM'] < int(cutoff['MALAT1_CPM_max_cutoffs']), :]
+                print(f"[INFO]   after MALAT1_CPM max ({cutoff['MALAT1_CPM_max_cutoffs']}): -> {len(adata_process)} cells")
+            else:
+                print(f"[WARNING] Skipping MALAT1_CPM max filter for {ID}: all values are NaN")
+        # Doublet filter: keep cells with NaN probabilities (doublet detection may have failed)
+        doublet_mask = adata_process.obs['doublet_probabilities'] < float(cutoff['doublet_cutoffs'])
+        doublet_mask = doublet_mask | adata_process.obs['doublet_probabilities'].isna()
+        adata_process = adata_process[doublet_mask, :]
+        print(f"[INFO]   after doublet ({cutoff['doublet_cutoffs']}): -> {len(adata_process)} cells")
         log_lines.append(f'num of cellbarcodes after QC filtering in {ID}: {len(adata_process.obs_names)}\n\n')
         adata_filter = ad.concat([adata_process, adata_remain])
     log_lines.append(f'\nnum of cellbarcodes after QC filtering: {len(adata_filter.obs_names)}')
@@ -314,6 +333,8 @@ def run_per_tissue(working_df, output_h5ad_dir, workdir, QC_cutoff, tissue, my_c
     adata = adata_filt.copy()
 
     # 4. Filter genes with < min_cells, normalize, PCA, cluster, UMAP, save
+    if adata.n_obs == 0:
+        raise ValueError(f"No cells remaining after QC filtering for {tissue}. Check QC cutoffs.")
     sc.pp.filter_genes(adata, min_cells=int(QC_cutoff_dict[adata_filt.obs[key].unique()[0]]['Min_cells_for_genes']))
 
     # 5. normalization, feature selection, linear dimensional reduction
