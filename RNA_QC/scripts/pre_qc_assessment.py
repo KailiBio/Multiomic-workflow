@@ -10,6 +10,7 @@ warnings.filterwarnings("ignore", category=FutureWarning)
 
 import os
 import sys
+import traceback
 import argparse
 import numpy as np
 import pandas as pd
@@ -108,6 +109,7 @@ def run_doublet_detection(adata, donor_col, key):
             
         except Exception as e:
             print(f"[WARNING] Could not run doublet GMM for {ID}: {e}")
+            traceback.print_exc()
     
     if dfs:
         all_prob_df = pd.concat(dfs).set_index('obs_names')
@@ -248,6 +250,7 @@ def main(config_path, nmads=5.0):
                                scrinvex_dir, nmads, key = "sampleID")
             except Exception as e:
                 print(f"[ERROR] Encountered error for tissue {tissue_name}: {e}")
+                traceback.print_exc()
     else:
         print(f"\n========== Processing tissue: {tissue} ==========")
         
@@ -257,7 +260,8 @@ def main(config_path, nmads=5.0):
                            scrinvex_dir, nmads, key = "sampleID")
         except Exception as e:
             print(f"[ERROR] Encountered error for tissue {tissue}: {e}")
-            
+            traceback.print_exc()
+
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Run pre-QC metric/assessment for scRNA-seq h5ad.")
