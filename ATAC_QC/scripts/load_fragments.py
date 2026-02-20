@@ -63,9 +63,18 @@ def process_fragments(row, config, barcode_dic_rna, overwrite=False):
             print(f"Skipping {atacID}: output already exists.")
             return
 
+    # Load chrom sizes: use file from config if provided, otherwise fall back to hg38
+    chrom_sizes_file = config['references'].get('chrom_sizes', None)
+    if chrom_sizes_file and os.path.isfile(chrom_sizes_file):
+        print(f"[INFO] Loading chrom sizes from {chrom_sizes_file}")
+        chrom_sizes = snap.genome.Genome(chrom_sizes=chrom_sizes_file)
+    else:
+        print("[INFO] Using default hg38 chrom sizes")
+        chrom_sizes = snap.genome.hg38
+
     data = snap.pp.import_data(
         fragment_file,
-        chrom_sizes = snap.genome.hg38,
+        chrom_sizes = chrom_sizes,
         file = output_h5ad,
         min_num_fragments = min_fragments,
         sorted_by_barcode = False,
