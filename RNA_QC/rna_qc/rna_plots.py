@@ -169,12 +169,12 @@ def plot_qc_cumulative_distribution(adata, metrics, tissue, tissue_std, all_colo
             plt.savefig(os.path.join(figdir, f"RNA_QC_cumulative.by{key}.{tissue_std}.{metric}.png"), dpi=300, bbox_inches='tight')
             plt.close()
 
-def plot_doublet_hist(adata, donor_col, tissue, tissue_std, figdir, key, probability_cutoff=None):
+def plot_doublet_hist(adata, donor_col, tissue, tissue_std, figdir, key, probability_cutoff=None, stage=None):
     for ID in adata.obs[key].unique():
         print(f"[INFO] Plotting doublet score & probability distribution for: {ID}...")
         doublet_scores = adata[adata.obs[key] == ID].obs['doublet_score']
         doublet_probabilities = adata[adata.obs[key] == ID].obs['doublet_probabilities']
-        
+
         if doublet_probabilities.isnull().all():
             print(f"[WARNING] No doublet probabilities for {ID}")
             continue
@@ -187,7 +187,7 @@ def plot_doublet_hist(adata, donor_col, tissue, tissue_std, figdir, key, probabi
             cutoff = float(probability_cutoff)
         print(f"[INFO] current doublet cutoff is {cutoff}.")
         doublet_mask = doublet_probabilities > cutoff
-        
+
         bins = np.histogram_bin_edges(doublet_scores, bins=50)
         hist_non_doublets, _ = np.histogram(doublet_scores[~doublet_mask], bins=bins)
         hist_doublets, _ = np.histogram(doublet_scores[doublet_mask], bins=bins)
@@ -210,7 +210,8 @@ def plot_doublet_hist(adata, donor_col, tissue, tissue_std, figdir, key, probabi
         axes[1].grid(False)
         fig.suptitle(f'distribution of doublet scores and probability on {tissue}, {ID}', fontsize=14)
         plt.tight_layout()
-        plt.savefig(os.path.join(figdir, f"RNA_QC_doublet_hist.{tissue_std}-{ID}.png"), dpi=300, bbox_inches='tight')
+        stage_part = f".{stage}" if stage else ""
+        plt.savefig(os.path.join(figdir, f"RNA_QC_doublet_hist{stage_part}.{tissue_std}-{ID}.png"), dpi=300, bbox_inches='tight')
         plt.close(fig)
 
 def clustering_umap(adata, tissue, tissue_std, figdir, key):
