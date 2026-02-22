@@ -67,7 +67,12 @@ def process_fragments(row, config, barcode_dic_rna, overwrite=False):
     chrom_sizes_file = config['references'].get('chrom_sizes', None)
     if chrom_sizes_file and os.path.isfile(chrom_sizes_file):
         print(f"[INFO] Loading chrom sizes from {chrom_sizes_file}")
-        chrom_sizes = snap.genome.Genome(chrom_sizes=chrom_sizes_file)
+        chrom_sizes = {}
+        with open(chrom_sizes_file) as f:
+            for line in f:
+                parts = line.strip().split('\t')
+                if len(parts) >= 2:
+                    chrom_sizes[parts[0]] = int(parts[1])
     else:
         print("[INFO] Using default hg38 chrom sizes")
         chrom_sizes = snap.genome.hg38
