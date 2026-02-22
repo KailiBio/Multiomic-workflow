@@ -395,8 +395,8 @@ def plot_qc_metrics_violin_by_cluster(adata, tissue, tissue_std, figdir, feature
 
                 # Add MAD lines
                 if add_mad_lines:
-                    ax.axhline(y=lower, color="blue", linestyle="--", linewidth=1)
-                    ax.axhline(y=upper, color="blue", linestyle="--", linewidth=1)
+                    axes[i].axhline(y=lower, color="blue", linestyle="--", linewidth=1)
+                    axes[i].axhline(y=upper, color="blue", linestyle="--", linewidth=1)
                     
             plt.tight_layout()
             plt.savefig(os.path.join(figdir, f"QCmetric_bycluster.{tissue_std}-{key}.{feature}.png"), 

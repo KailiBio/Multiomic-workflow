@@ -60,8 +60,15 @@ def compute_mad_thresholds(adata, QC_cutoff_df, nmads, default_cutoffs):
     max_ribo = min(100, med + nmads * mad)
     QC_cutoff['Max_percent_ribo_in_cells'] = round(max_ribo, 2)
 
-    # --- Exon_ratio_cutoffs: keep as '---' (uses IQR fallback in filtering) ---
-    QC_cutoff['Exon_ratio_cutoffs'] = '---'
+    # --- Exon_ratio_cutoffs (upper bound) ---
+    if 'pct_exon_reads' in obs.columns and obs['pct_exon_reads'].notna().any():
+        vals = obs['pct_exon_reads'].dropna()
+        med = np.median(vals)
+        mad = median_abs_deviation(vals, nan_policy='omit')
+        exon_cutoff = round(min(100, med + nmads * mad), 2)
+        QC_cutoff['Exon_ratio_cutoffs'] = exon_cutoff
+    else:
+        QC_cutoff['Exon_ratio_cutoffs'] = '---'
 
     # --- MALAT1_CPM (Min lower bound, Max upper bound) ---
     if 'MALAT1_CPM' in obs.columns and obs['MALAT1_CPM'].notna().any():
@@ -82,6 +89,7 @@ def compute_mad_thresholds(adata, QC_cutoff_df, nmads, default_cutoffs):
     print(f"  Max_counts_in_cells:       {max_counts}")
     print(f"  Max_percent_mt_in_cells:   {QC_cutoff['Max_percent_mt_in_cells'].iloc[0]}")
     print(f"  Max_percent_ribo_in_cells: {QC_cutoff['Max_percent_ribo_in_cells'].iloc[0]}")
+    print(f"  Exon_ratio_cutoffs:        {QC_cutoff['Exon_ratio_cutoffs'].iloc[0]}")
     print(f"  MALAT1_CPM_cutoffs:        {QC_cutoff['MALAT1_CPM_cutoffs'].iloc[0]}")
     print(f"  MALAT1_CPM_max_cutoffs:    {QC_cutoff['MALAT1_CPM_max_cutoffs'].iloc[0]}")
 
