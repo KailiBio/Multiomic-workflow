@@ -113,12 +113,21 @@ def process_fragments(row, config, barcode_dic_rna, overwrite=False):
     print("[INFO] Calculating TSS enrichment score...")
     snap.metrics.tsse(data, gene_anno=gencode_gtf, n_jobs = n_threads)
 
+    # Verify tsse was computed
+    if 'tsse' not in data.obs.columns:
+        data.close()
+        os.remove(output_h5ad)
+        raise RuntimeError(
+            f"snap.metrics.tsse() did not produce 'tsse' column for {atacID}. "
+            f"Available obs columns: {list(data.obs.columns)}"
+        )
+
     print(f"[INFO] Adding sampleID: {atacID} to anndata object")
     data.obs['sampleID'] = [str(atacID) for bc in data.obs_names]
-    
+
     print(f"[INFO] Adding tissue: {tissue_std} to anndata object")
-    data.obs['sampleID'] = [tissue_std for bc in data.obs_names]
-    
+    data.obs['tissue'] = [tissue_std for bc in data.obs_names]
+
     data.close()
     print(f"Saved raw .h5ad to {output_h5ad}")
 
@@ -152,11 +161,16 @@ def main(config_path, overwrite=False):
 
     for i, (_, row) in enumerate(working_df.iterrows(), 1):
         print(f"\n========== Processing {row['atacID']} ({i}/{len(working_df)}) ==========")
-        
+
         try:
             process_fragments(row, config, barcode_dic_rna, overwrite=overwrite)
         except Exception as e:
-            print(f"[ERROR] Encountered error for tissue {row['atacID']}: {e}")
+            print(f"[ERROR] Encountered error for {row['atacID']}: {e}")
+            # Clean up partial h5ad so downstream steps don't find incomplete files
+            partial_h5ad = os.path.join(output_h5ad_dir, f"{row['atacID']}.raw.h5ad")
+            if os.path.exists(partial_h5ad):
+                os.remove(partial_h5ad)
+                print(f"[INFO] Removed partial h5ad: {partial_h5ad}")
             continue
 
 if __name__ == "__main__":
