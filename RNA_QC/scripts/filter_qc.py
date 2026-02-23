@@ -28,7 +28,8 @@ def compute_mad_thresholds(adata, QC_cutoff_df, nmads, default_cutoffs):
 
     Returns a modified copy of QC_cutoff_df where cell-level QC columns are
     replaced with MAD-derived values (identical across all rows/samples within
-    the tissue).  Metadata columns and doublet_cutoffs are preserved from the
+    the tissue).  Doublet cutoffs are computed per-sample since scrublet runs
+    independently per sample.  Metadata columns are preserved from the
     original Excel.
     """
     obs = adata.obs
@@ -83,6 +84,17 @@ def compute_mad_thresholds(adata, QC_cutoff_df, nmads, default_cutoffs):
         QC_cutoff['MALAT1_CPM_cutoffs'] = '---'
         QC_cutoff['MALAT1_CPM_max_cutoffs'] = '---'
 
+    # --- doublet_cutoffs (per-sample upper bound) ---
+    for idx, row in QC_cutoff.iterrows():
+        sample_id = row.get('rnaID', '')
+        sample_obs = obs[obs['sampleID'] == sample_id] if sample_id else obs
+        if len(sample_obs) > 0 and 'doublet_probabilities' in sample_obs.columns:
+            vals = sample_obs['doublet_probabilities'].dropna()
+            if len(vals) > 0:
+                med = np.median(vals)
+                mad_val = median_abs_deviation(vals, nan_policy='omit')
+                QC_cutoff.at[idx, 'doublet_cutoffs'] = round(med + nmads * mad_val, 4)
+
     print(f"[INFO] MAD-based thresholds (nmads={nmads}):")
     print(f"  Min_genes_in_cells:        {min_genes}")
     print(f"  Max_genes_in_cells:        {max_genes}")
@@ -92,6 +104,8 @@ def compute_mad_thresholds(adata, QC_cutoff_df, nmads, default_cutoffs):
     print(f"  Exon_ratio_cutoffs:        {QC_cutoff['Exon_ratio_cutoffs'].iloc[0]}")
     print(f"  MALAT1_CPM_cutoffs:        {QC_cutoff['MALAT1_CPM_cutoffs'].iloc[0]}")
     print(f"  MALAT1_CPM_max_cutoffs:    {QC_cutoff['MALAT1_CPM_max_cutoffs'].iloc[0]}")
+    for _, row in QC_cutoff.iterrows():
+        print(f"  doublet_cutoffs ({row.get('rnaID', '?')}): {row['doublet_cutoffs']}")
 
     return QC_cutoff, default_cutoffs
 
