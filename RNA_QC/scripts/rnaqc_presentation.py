@@ -673,11 +673,14 @@ def build_presentation(tmpdir, tissue_name, tissue_std, sample_ids, source_label
 # Entry-point flows
 # ---------------------------------------------------------------------------
 
-def process_gcs(gcs_path):
+def process_gcs(gcs_path, tissue=None):
     """GCS mode: download -> build -> upload (backwards compatible)."""
     gcs_base = gcs_path.rstrip("/") + "/"
     tissue_name = gcs_base.rstrip("/").split("/")[-1]
-    tissue_std = tissue_name.rsplit("_v", 1)[0]
+    if tissue:
+        tissue_std = standardize_tissue_name(tissue)
+    else:
+        tissue_std = tissue_name.rsplit("_v", 1)[0]
 
     with tempfile.TemporaryDirectory() as tmpdir:
         print(f"[INFO] Downloading figures from {gcs_base}...")
@@ -768,6 +771,9 @@ def main():
     parser.add_argument("--gcs",
                         help="GCS path to tissue directory or parent "
                              "(e.g. gs://bucket/rnaqc/ for all)")
+    parser.add_argument("--tissue",
+                        help="Tissue name (e.g. 'Liver - Left Lobe'). "
+                             "Overrides auto-detection from GCS path.")
     parser.add_argument("--output",
                         help="Output PPTX path (default: auto)")
     args = parser.parse_args()
@@ -780,7 +786,7 @@ def main():
         has_steps = any(re.match(r'^\d+_', os.path.basename(d.rstrip("/")))
                         for d in subdirs)
         if has_steps:
-            process_gcs(gcs_path)
+            process_gcs(gcs_path, tissue=args.tissue)
         else:
             process_gcs_parent(gcs_path)
     elif args.config:
