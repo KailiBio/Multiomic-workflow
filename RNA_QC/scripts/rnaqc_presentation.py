@@ -94,7 +94,10 @@ def extract_sample_ids_from_files(tmpdir, tissue_std):
     ``{tissue_std}-{sampleID}`` in their names.
     """
     sample_ids = set()
-    pattern = re.compile(re.escape(tissue_std) + r'-([^.]+)')
+    # tissue_std uses underscores (never hyphens), so the first '-' after it
+    # is always the sample-ID delimiter.  Require '.' or start-of-string
+    # before the tissue name to avoid substring false-positives.
+    pattern = re.compile(r'(?:^|\.)' + re.escape(tissue_std) + r'-([^.]+)')
     for root, _dirs, files in os.walk(tmpdir):
         for f in files:
             m = pattern.search(f)
@@ -139,11 +142,13 @@ def download_figures_and_stats(gcs_base, tmpdir):
         step_dir = os.path.join(tmpdir, step.replace("/", "_"))
         os.makedirs(step_dir, exist_ok=True)
         for ext in ["*.png", "*.txt"]:
-            subprocess.run(
+            result = subprocess.run(
                 ["gsutil", "-m", "-q", "cp",
                  gcs_base + step + "/" + ext, step_dir + "/"],
-                capture_output=True
+                capture_output=True, text=True
             )
+            if result.returncode != 0:
+                print(f"[WARNING] gsutil cp failed for {gcs_base}{step}/{ext} (may not exist yet)")
     return tmpdir
 
 

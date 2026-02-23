@@ -89,6 +89,7 @@ def compute_mad_thresholds(adata, QC_cutoff_df, nmads):
         QC_cutoff['doublet_cutoffs'] = 1.0  # safe default: keep all cells
     if 'doublet_probabilities' in obs.columns:
         for idx, row in QC_cutoff.iterrows():
+            # rnaID in QC_cutoff matches adata.obs['sampleID'] (set in concat_h5ad.py)
             sample_id = row.get('rnaID', '')
             sample_obs = obs[obs['sampleID'] == sample_id] if sample_id else obs
             if len(sample_obs) > 0:
