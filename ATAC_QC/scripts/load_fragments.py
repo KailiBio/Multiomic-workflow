@@ -106,10 +106,14 @@ def process_fragments(row, config, barcode_dic_rna, overwrite=False):
 
     # Figure and metrics
     print("[INFO] Plotting fragment size...")
-    snap.pl.frag_size_distr(
-        data, interactive=False,
-        out_file=output_fig
-    )
+    try:
+        snap.pl.frag_size_distr(
+            data, interactive=False,
+            out_file=output_fig
+        )
+    except Exception as e:
+        print(f"[WARNING] Fragment size plot failed (non-fatal): {e}")
+
     print("[INFO] Calculating TSS enrichment score...")
     snap.metrics.tsse(data, gene_anno=gencode_gtf, n_jobs = n_threads)
 
