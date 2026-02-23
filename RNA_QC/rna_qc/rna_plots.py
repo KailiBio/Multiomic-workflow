@@ -169,7 +169,7 @@ def plot_qc_cumulative_distribution(adata, metrics, tissue, tissue_std, all_colo
             plt.savefig(os.path.join(figdir, f"RNA_QC_cumulative.by{key}.{tissue_std}.{metric}.png"), dpi=300, bbox_inches='tight')
             plt.close()
 
-def plot_doublet_hist(adata, donor_col, tissue, tissue_std, figdir, key, probability_cutoff=None, stage=None):
+def plot_doublet_hist(adata, tissue, tissue_std, figdir, key, probability_cutoff=None, stage=None):
     for ID in adata.obs[key].unique():
         print(f"[INFO] Plotting doublet score & probability distribution for: {ID}...")
         doublet_scores = adata[adata.obs[key] == ID].obs['doublet_score']

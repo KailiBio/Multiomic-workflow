@@ -21,10 +21,17 @@ import glob as globmod
 
 import pandas as pd
 
-from pptx import Presentation
-from pptx.util import Inches, Pt, Emu
-from pptx.enum.text import PP_ALIGN
-from pptx.dml.color import RGBColor
+try:
+    from pptx import Presentation
+    from pptx.util import Inches, Pt, Emu
+    from pptx.enum.text import PP_ALIGN
+    from pptx.dml.color import RGBColor
+except ImportError as e:
+    raise SystemExit(
+        "Error: python-pptx and its dependencies (including Pillow) are required.\n"
+        "    pip install python-pptx Pillow\n"
+        f"Original error: {e}"
+    )
 
 # Import pipeline utilities when available (for local mode)
 try:
@@ -101,13 +108,27 @@ def extract_sample_ids_from_files(tmpdir, tissue_std):
 # ---------------------------------------------------------------------------
 
 def gsutil_ls(gcs_path):
-    """List GCS path contents."""
-    result = subprocess.run(
-        ["gsutil", "ls", gcs_path],
-        capture_output=True, text=True
-    )
+    """List GCS path contents.
+
+    Raises RuntimeError if gsutil is not available or the command fails.
+    """
+    try:
+        result = subprocess.run(
+            ["gsutil", "ls", gcs_path],
+            capture_output=True, text=True
+        )
+    except FileNotFoundError as e:
+        raise RuntimeError(
+            "Failed to run 'gsutil ls'. Ensure gsutil is installed and on your PATH."
+        ) from e
+
     if result.returncode != 0:
-        return []
+        stderr = result.stderr.strip()
+        msg = f"'gsutil ls' failed for '{gcs_path}' (exit code {result.returncode})."
+        if stderr:
+            msg += f" stderr: {stderr}"
+        raise RuntimeError(msg)
+
     return [line.strip() for line in result.stdout.strip().split("\n") if line.strip()]
 
 

@@ -210,7 +210,7 @@ def run_per_tissue(working_df, tissue, output_h5ad_dir, outdir, my_color_palette
 
     # Doublet detection
     run_doublet_detection(adata, all_colors, key)
-    plot_doublet_hist(adata, all_colors, tissue, tissue_std, figdir, key)
+    plot_doublet_hist(adata, tissue, tissue_std, figdir, key)
 
     # Clustering, UMAP, etc.
     clustering_umap(adata, tissue, tissue_std, figdir, key)

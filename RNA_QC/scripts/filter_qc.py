@@ -239,7 +239,7 @@ def export_doublet_calls_by_sample(adata, QC_cutoff_dict, tissue, tissue_std, fi
 
         # plot the doublet distribution with filter cutoff
         plot_doublet_hist(
-            adata=adata_sel, donor_col='sampleID', tissue=tissue, tissue_std=tissue_std,
+            adata=adata_sel, tissue=tissue, tissue_std=tissue_std,
             figdir=figdir, key='sampleID', probability_cutoff=doublet_cutoff, stage="filterqc")
 
 
