@@ -49,16 +49,16 @@ def compute_mad_thresholds(adata, QC_cutoff_df, nmads, default_cutoffs):
     max_counts = int(np.ceil(med + nmads * mad))
     QC_cutoff['Max_counts_in_cells'] = max_counts
 
-    # --- pct_counts_mt (Max) ---
+    # --- pct_counts_mt (Max, floor of 3%) ---
     med = np.median(obs['pct_counts_mt'])
     mad = median_abs_deviation(obs['pct_counts_mt'], nan_policy='omit')
-    max_mt = min(100, med + nmads * mad)
+    max_mt = min(100, max(3.0, med + nmads * mad))
     QC_cutoff['Max_percent_mt_in_cells'] = round(max_mt, 2)
 
-    # --- pct_counts_ribo (Max) ---
+    # --- pct_counts_ribo (Max, floor of 3%) ---
     med = np.median(obs['pct_counts_ribo'])
     mad = median_abs_deviation(obs['pct_counts_ribo'], nan_policy='omit')
-    max_ribo = min(100, med + nmads * mad)
+    max_ribo = min(100, max(3.0, med + nmads * mad))
     QC_cutoff['Max_percent_ribo_in_cells'] = round(max_ribo, 2)
 
     # --- Exon_ratio_cutoffs (upper bound) ---
@@ -85,15 +85,18 @@ def compute_mad_thresholds(adata, QC_cutoff_df, nmads, default_cutoffs):
         QC_cutoff['MALAT1_CPM_max_cutoffs'] = '---'
 
     # --- doublet_cutoffs (per-sample upper bound) ---
-    for idx, row in QC_cutoff.iterrows():
-        sample_id = row.get('rnaID', '')
-        sample_obs = obs[obs['sampleID'] == sample_id] if sample_id else obs
-        if len(sample_obs) > 0 and 'doublet_probabilities' in sample_obs.columns:
-            vals = sample_obs['doublet_probabilities'].dropna()
-            if len(vals) > 0:
-                med = np.median(vals)
-                mad_val = median_abs_deviation(vals, nan_policy='omit')
-                QC_cutoff.at[idx, 'doublet_cutoffs'] = round(med + nmads * mad_val, 4)
+    if 'doublet_cutoffs' not in QC_cutoff.columns:
+        QC_cutoff['doublet_cutoffs'] = 1.0  # safe default: keep all cells
+    if 'doublet_probabilities' in obs.columns:
+        for idx, row in QC_cutoff.iterrows():
+            sample_id = row.get('rnaID', '')
+            sample_obs = obs[obs['sampleID'] == sample_id] if sample_id else obs
+            if len(sample_obs) > 0:
+                vals = sample_obs['doublet_probabilities'].dropna()
+                if len(vals) > 0:
+                    med = np.median(vals)
+                    mad_val = median_abs_deviation(vals, nan_policy='omit')
+                    QC_cutoff.at[idx, 'doublet_cutoffs'] = round(med + nmads * mad_val, 4)
 
     print(f"[INFO] MAD-based thresholds (nmads={nmads}):")
     print(f"  Min_genes_in_cells:        {min_genes}")
@@ -303,23 +306,25 @@ def filter_and_process_adata(adata, df, QC_cutoff_dict, tissue, tissue_std, log_
         
     return adata_filter
 
-def downstream_process(adata, tissue_std, figdir, all_colors):
+def downstream_process(adata, tissue_std, figdir, all_colors, include_malat1=True):
     adata.layers["rawcounts"] = adata.X.copy()
-    
+
     sc.pp.normalize_total(adata)
     sc.pp.log1p(adata)
     sc.pp.highly_variable_genes(adata, flavor='seurat')
-    
+
     sc.pl.highly_variable_genes(adata, save=f'.highlyVariableGenes.filterqc.{tissue_std}.png', show=False)
     with warnings.catch_warnings():
-        warnings.filterwarnings("ignore", category=RuntimeWarning) 
+        warnings.filterwarnings("ignore", category=RuntimeWarning)
         sc.tl.pca(adata, svd_solver='arpack')
     sc.pl.pca_variance_ratio(adata, n_pcs=50, log=True, save=f'.var_ratio.filterqc.{tissue_std}.png', show=False)
-    
+
     # PCA colored by donorID/QC/batch
     pca_list = ["sampleID", "pct_counts_mt","pct_counts_ribo", "pct_exon_reads", "log10_MALAT1_CPM" ]
     if "pct_exon_reads" not in adata.obs:
         pca_list.remove('pct_exon_reads')
+    if not include_malat1 or "log10_MALAT1_CPM" not in adata.obs:
+        pca_list.remove('log10_MALAT1_CPM')
     sc.pl.pca(
         adata,
         color=pca_list,
@@ -404,6 +409,14 @@ def run_per_tissue(working_df, output_h5ad_dir, workdir, QC_cutoff, tissue, my_c
         for d in QC_cutoff_dict.values():
             d.pop('log10_MALAT1_CPM', None)
 
+    # Skip MALAT1 plots if all samples have both cutoffs set to '---'
+    all_malat1_skipped = all(
+        str(d.get('MALAT1_CPM_cutoffs', '---')) == '---' and str(d.get('MALAT1_CPM_max_cutoffs', '---')) == '---'
+        for d in QC_cutoff_dict.values()
+    )
+    if all_malat1_skipped and 'log10_MALAT1_CPM' in plotlist:
+        plotlist.remove('log10_MALAT1_CPM')
+
     # 1. Plot upset (all metrics and filtered only)
     print("[INFO] Generating upset plot...")
     for ID in filter_df[key].unique():
@@ -434,7 +447,7 @@ def run_per_tissue(working_df, output_h5ad_dir, workdir, QC_cutoff, tissue, my_c
 
     # 5. normalization, feature selection, linear dimensional reduction
     print("[INFO] Post-filter processing...")
-    downstream_process(adata, tissue_std, figdir, all_colors)
+    downstream_process(adata, tissue_std, figdir, all_colors, include_malat1=not all_malat1_skipped)
     run_umap_clustering(adata, tissue, tissue_std, figdir, plotlist)
 
     # Save output h5ad
