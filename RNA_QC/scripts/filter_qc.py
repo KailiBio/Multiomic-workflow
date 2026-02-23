@@ -47,8 +47,14 @@ def compute_mad_thresholds(adata, QC_cutoff_df, nmads):
     obs = adata.obs
     QC_cutoff = QC_cutoff_df.copy()
 
+    if QC_cutoff.empty:
+        raise ValueError(
+            "QC cutoff table is empty for this tissue. "
+            "Check that the tissue name in the config matches the Excel sheet."
+        )
+
     # --- n_genes_by_counts (Min and Max) ---
-    med = np.median(obs['n_genes_by_counts'])
+    med = np.nanmedian(obs['n_genes_by_counts'])
     mad = median_abs_deviation(obs['n_genes_by_counts'], nan_policy='omit')
     min_genes = int(max(0, np.floor(med - nmads * mad)))
     max_genes = int(np.ceil(med + nmads * mad))
@@ -56,19 +62,19 @@ def compute_mad_thresholds(adata, QC_cutoff_df, nmads):
     QC_cutoff['Max_genes_in_cells'] = max_genes
 
     # --- total_counts (Max) ---
-    med = np.median(obs['total_counts'])
+    med = np.nanmedian(obs['total_counts'])
     mad = median_abs_deviation(obs['total_counts'], nan_policy='omit')
     max_counts = int(np.ceil(med + nmads * mad))
     QC_cutoff['Max_counts_in_cells'] = max_counts
 
     # --- pct_counts_mt (Max, floor of 3%) ---
-    med = np.median(obs['pct_counts_mt'])
+    med = np.nanmedian(obs['pct_counts_mt'])
     mad = median_abs_deviation(obs['pct_counts_mt'], nan_policy='omit')
     max_mt = min(100, max(3.0, med + nmads * mad))
     QC_cutoff['Max_percent_mt_in_cells'] = round(max_mt, 2)
 
     # --- pct_counts_ribo (Max, floor of 3%) ---
-    med = np.median(obs['pct_counts_ribo'])
+    med = np.nanmedian(obs['pct_counts_ribo'])
     mad = median_abs_deviation(obs['pct_counts_ribo'], nan_policy='omit')
     max_ribo = min(100, max(3.0, med + nmads * mad))
     QC_cutoff['Max_percent_ribo_in_cells'] = round(max_ribo, 2)

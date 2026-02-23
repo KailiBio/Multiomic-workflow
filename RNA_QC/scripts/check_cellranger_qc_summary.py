@@ -45,8 +45,9 @@ def _is_pct_column(series):
 
 
 def _to_numeric(series):
-    """Convert a column to numeric, stripping '%' if present."""
-    return series.apply(lambda x: float(str(x).replace('%', '').replace(',', '').strip()) if isinstance(x, str) else x).fillna(0)
+    """Convert a column to numeric, stripping '%' and commas, coercing invalid values to 0."""
+    cleaned = series.astype(str).str.replace('%', '', regex=False).str.replace(',', '', regex=False).str.strip()
+    return pd.to_numeric(cleaned, errors='coerce').fillna(0)
 
 
 def plot_qc_metrics(summary_df, all_colors, tissue, outdir, suffix):
