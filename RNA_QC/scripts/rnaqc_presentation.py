@@ -770,8 +770,8 @@ def main():
         gcs_path = args.gcs.rstrip("/") + "/"
         contents = gsutil_ls(gcs_path)
         subdirs = [c for c in contents if c.endswith("/")]
-        has_steps = any("0_" in os.path.basename(d.rstrip("/")) or
-                        "1_" in os.path.basename(d.rstrip("/")) for d in subdirs)
+        has_steps = any(re.match(r'^\d+_', os.path.basename(d.rstrip("/")))
+                        for d in subdirs)
         if has_steps:
             process_gcs(gcs_path)
         else:

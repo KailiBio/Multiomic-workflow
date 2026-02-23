@@ -109,20 +109,12 @@ def compute_mad_thresholds(adata, QC_cutoff_df, nmads):
         QC_cutoff['MALAT1_CPM_cutoffs'] = '---'
         QC_cutoff['MALAT1_CPM_max_cutoffs'] = '---'
 
-    # --- doublet_cutoffs (per-sample upper bound) ---
+    # --- doublet_cutoffs (per-sample) ---
+    # Skip MAD for doublet: probability is bimodal (singlet peak + doublet peak),
+    # so median + nmads*MAD gives unstable thresholds.  Keep the value from the
+    # Excel cutoff table or Scrublet's own detection; default to 1.0 (keep all).
     if 'doublet_cutoffs' not in QC_cutoff.columns:
         QC_cutoff['doublet_cutoffs'] = 1.0  # safe default: keep all cells
-    if 'doublet_probabilities' in obs.columns:
-        for idx, row in QC_cutoff.iterrows():
-            # rnaID in QC_cutoff matches adata.obs['sampleID'] (set in concat_h5ad.py)
-            sample_id = row.get('rnaID', '')
-            sample_obs = obs[obs['sampleID'] == sample_id] if sample_id else obs
-            if len(sample_obs) > 0:
-                vals = sample_obs['doublet_probabilities'].dropna()
-                if len(vals) > 0:
-                    med = np.median(vals)
-                    mad_val = median_abs_deviation(vals, nan_policy='omit')
-                    QC_cutoff.at[idx, 'doublet_cutoffs'] = round(med + nmads * mad_val, 4)
 
     print(f"[INFO] MAD-based thresholds (nmads={nmads}):")
     print(f"  Min_genes_in_cells:        {min_genes}")
