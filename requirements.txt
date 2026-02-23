@@ -16,5 +16,6 @@ notebook
 scipy
 tqdm
 openpyxl
+pyyaml
 kaleido==0.2.1
 ipython

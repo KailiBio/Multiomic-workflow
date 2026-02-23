@@ -26,11 +26,23 @@ from rna_qc.rna_plots import assign_colors, assign_donor_colors, move_figures_to
 def compute_mad_thresholds(adata, QC_cutoff_df, nmads):
     """Compute MAD-based QC thresholds from all cells in the tissue (pooled).
 
-    Returns a modified copy of QC_cutoff_df where cell-level QC columns are
-    replaced with MAD-derived values (identical across all rows/samples within
-    the tissue).  Doublet cutoffs are computed per-sample since scrublet runs
-    independently per sample.  Metadata columns are preserved from the
-    original Excel.
+    Parameters
+    ----------
+    adata : AnnData
+        Annotated data with QC metrics in obs (n_genes_by_counts, total_counts,
+        pct_counts_mt, pct_counts_ribo, and optionally pct_exon_reads,
+        MALAT1_CPM, doublet_probabilities).
+    QC_cutoff_df : DataFrame
+        Per-sample QC cutoff table (from Excel). A copy is returned with
+        cell-level thresholds overwritten by MAD-derived values.
+    nmads : float
+        Number of MADs from the median for threshold computation.
+
+    Returns
+    -------
+    DataFrame
+        Modified copy of QC_cutoff_df. Cell-level thresholds are tissue-wide;
+        doublet cutoffs are per-sample (scrublet runs per sample).
     """
     obs = adata.obs
     QC_cutoff = QC_cutoff_df.copy()
@@ -64,22 +76,29 @@ def compute_mad_thresholds(adata, QC_cutoff_df, nmads):
     # --- Exon_ratio_cutoffs (upper bound) ---
     if 'pct_exon_reads' in obs.columns and obs['pct_exon_reads'].notna().any():
         vals = obs['pct_exon_reads'].dropna()
-        med = np.median(vals)
-        mad = median_abs_deviation(vals, nan_policy='omit')
-        exon_cutoff = round(min(100, med + nmads * mad), 2)
-        QC_cutoff['Exon_ratio_cutoffs'] = exon_cutoff
+        if len(vals) > 0:
+            med = np.median(vals)
+            mad = median_abs_deviation(vals, nan_policy='omit')
+            exon_cutoff = round(min(100, med + nmads * mad), 2)
+            QC_cutoff['Exon_ratio_cutoffs'] = exon_cutoff
+        else:
+            QC_cutoff['Exon_ratio_cutoffs'] = '---'
     else:
         QC_cutoff['Exon_ratio_cutoffs'] = '---'
 
     # --- MALAT1_CPM (Min lower bound, Max upper bound) ---
     if 'MALAT1_CPM' in obs.columns and obs['MALAT1_CPM'].notna().any():
         vals = obs['MALAT1_CPM'].dropna()
-        med = np.median(vals)
-        mad = median_abs_deviation(vals, nan_policy='omit')
-        malat1_min = int(max(0, np.floor(med - nmads * mad)))
-        malat1_max = int(np.ceil(med + nmads * mad))
-        QC_cutoff['MALAT1_CPM_cutoffs'] = malat1_min
-        QC_cutoff['MALAT1_CPM_max_cutoffs'] = malat1_max
+        if len(vals) > 0:
+            med = np.median(vals)
+            mad = median_abs_deviation(vals, nan_policy='omit')
+            malat1_min = int(max(0, np.floor(med - nmads * mad)))
+            malat1_max = int(np.ceil(med + nmads * mad))
+            QC_cutoff['MALAT1_CPM_cutoffs'] = malat1_min
+            QC_cutoff['MALAT1_CPM_max_cutoffs'] = malat1_max
+        else:
+            QC_cutoff['MALAT1_CPM_cutoffs'] = '---'
+            QC_cutoff['MALAT1_CPM_max_cutoffs'] = '---'
     else:
         QC_cutoff['MALAT1_CPM_cutoffs'] = '---'
         QC_cutoff['MALAT1_CPM_max_cutoffs'] = '---'
