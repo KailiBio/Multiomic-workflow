@@ -38,7 +38,13 @@ try:
     from rna_qc.utils import load_config, standardize_tissue_name
 except ImportError:
     # Fallback implementations for standalone use / GCS-only mode
-    import yaml
+    try:
+        import yaml
+    except ImportError:
+        raise SystemExit(
+            "Error: PyYAML is required for standalone mode.\n"
+            "    pip install pyyaml"
+        )
 
     def load_config(config_path):
         if not os.path.exists(config_path):

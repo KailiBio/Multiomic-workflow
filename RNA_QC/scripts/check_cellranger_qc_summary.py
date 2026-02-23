@@ -70,7 +70,7 @@ def plot_qc_metrics(summary_df, all_colors, tissue, outdir, suffix):
             is_pct = _is_pct_column(values)
 
             if col == 'Number of Reads':
-                values = pd.to_numeric(_to_numeric(values), errors='coerce') / 1_000_000
+                values = _to_numeric(values) / 1_000_000
             elif is_pct:
                 values = _to_numeric(values)
             else:
