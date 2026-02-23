@@ -23,7 +23,7 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')
 from rna_qc.utils import load_config, standardize_tissue_name
 from rna_qc.rna_plots import assign_colors, assign_donor_colors, move_figures_to_newdir, plot_upset, run_umap_clustering, plot_doublet_hist
 
-def compute_mad_thresholds(adata, QC_cutoff_df, nmads, default_cutoffs):
+def compute_mad_thresholds(adata, QC_cutoff_df, nmads):
     """Compute MAD-based QC thresholds from all cells in the tissue (pooled).
 
     Returns a modified copy of QC_cutoff_df where cell-level QC columns are
@@ -110,7 +110,7 @@ def compute_mad_thresholds(adata, QC_cutoff_df, nmads, default_cutoffs):
     for _, row in QC_cutoff.iterrows():
         print(f"  doublet_cutoffs ({row.get('rnaID', '?')}): {row['doublet_cutoffs']}")
 
-    return QC_cutoff, default_cutoffs
+    return QC_cutoff
 
 
 def prepare_upset_summary_allQC(sample_data, QC_cutoff_dict, global_obs, default_cutoffs):
@@ -361,7 +361,7 @@ def run_per_tissue(working_df, output_h5ad_dir, workdir, QC_cutoff, tissue, my_c
     os.makedirs(figdir, exist_ok=True)
 
     if use_mad:
-        QC_cutoff, _ = compute_mad_thresholds(adata, QC_cutoff, nmads, default_cutoffs)
+        QC_cutoff = compute_mad_thresholds(adata, QC_cutoff, nmads)
         mad_tsv = os.path.join(figdir, f"{tissue_std}_MAD_QC_cutoffs.nmads{nmads}.tsv")
         QC_cutoff.to_csv(mad_tsv, sep='\t', index=False)
         print(f"[INFO] MAD QC cutoffs written to {mad_tsv}")

@@ -16,10 +16,8 @@ import os
 import re
 import shutil
 import subprocess
-import sys
 import tempfile
 import glob as globmod
-from pathlib import Path
 
 import pandas as pd
 
@@ -66,14 +64,19 @@ def is_per_sample(filepath, sample_ids):
 
 
 def extract_sample_ids_from_config(config, tissue_std):
-    """Extract sample IDs (rnaID column) from the pipeline's sample_metadata TSV."""
+    """Extract sample IDs (rnaID column) from the pipeline's sample_metadata TSV.
+
+    Filters rows by matching standardized tissue name against ``tissue_std``.
+    """
     meta_path = config['paths']['sample_metadata']
-    tissue = config['params']['tissue']
+    tissue_config = config['params'].get('tissue', '---')
     df = pd.read_csv(meta_path, sep='\t', header=None, index_col=False,
                      names=["rnaID", "atacID", "species", "donorID",
                             "ageGroup", "gender", "tissue"])
-    if tissue != "---":
-        df = df[df['tissue'] == tissue]
+    if tissue_config != "---":
+        df = df[
+            df["tissue"].apply(lambda x: standardize_tissue_name(str(x))) == tissue_std
+        ]
     return set(df['rnaID'].dropna().tolist())
 
 
@@ -106,11 +109,6 @@ def gsutil_ls(gcs_path):
     if result.returncode != 0:
         return []
     return [line.strip() for line in result.stdout.strip().split("\n") if line.strip()]
-
-
-def gsutil_cp(src, dst):
-    """Copy from GCS."""
-    subprocess.run(["gsutil", "-q", "cp", src, dst], check=True)
 
 
 def download_figures_and_stats(gcs_base, tmpdir):
@@ -327,8 +325,12 @@ def add_text_slide(prs, title, text_content):
     txBox2 = slide.shapes.add_textbox(Inches(0.5), Inches(1.0), Inches(12), Inches(6))
     tf2 = txBox2.text_frame
     tf2.word_wrap = True
-    for line in text_content.strip().split("\n"):
-        p2 = tf2.add_paragraph()
+    lines = text_content.strip().split("\n")
+    for i, line in enumerate(lines):
+        if i == 0:
+            p2 = tf2.paragraphs[0]
+        else:
+            p2 = tf2.add_paragraph()
         p2.text = line
         p2.font.size = Pt(12)
         p2.font.name = "Courier New"
@@ -368,8 +370,12 @@ def add_two_column_text_slide(prs, title, text_content):
         tb = slide.shapes.add_textbox(left, Inches(1.0), Inches(6.0), Inches(6.0))
         tf2 = tb.text_frame
         tf2.word_wrap = True
-        for line in col_text.split("\n"):
-            p2 = tf2.add_paragraph()
+        lines = col_text.split("\n")
+        for i, line in enumerate(lines):
+            if i == 0:
+                p2 = tf2.paragraphs[0]
+            else:
+                p2 = tf2.add_paragraph()
             p2.text = line
             p2.font.size = Pt(11)
             p2.font.name = "Courier New"

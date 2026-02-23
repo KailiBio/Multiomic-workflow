@@ -74,6 +74,8 @@ def process_fragments(row, config, barcode_dic_rna, overwrite=False):
                 if len(parts) >= 2:
                     chrom_sizes[parts[0]] = int(parts[1])
     else:
+        if chrom_sizes_file:
+            print(f"[WARNING] Configured chrom_sizes file not found: {chrom_sizes_file}")
         print("[INFO] Using default hg38 chrom sizes")
         chrom_sizes = snap.genome.hg38
 
