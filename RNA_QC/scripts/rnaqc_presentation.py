@@ -26,6 +26,7 @@ try:
     from pptx.util import Inches, Pt, Emu
     from pptx.enum.text import PP_ALIGN
     from pptx.dml.color import RGBColor
+    from PIL import Image
 except ImportError as e:
     raise SystemExit(
         "Error: python-pptx and its dependencies (including Pillow) are required.\n"
@@ -294,7 +295,6 @@ def add_image_slide(prs, image_path, title="", max_height=Inches(6.2)):
         p.font.bold = True
         p.alignment = PP_ALIGN.CENTER
 
-    from PIL import Image
     with Image.open(image_path) as img:
         img_w, img_h = img.size
 
@@ -326,7 +326,6 @@ def add_two_images_slide(prs, img1, img2, title=""):
         p.font.bold = True
         p.alignment = PP_ALIGN.CENTER
 
-    from PIL import Image
     top = Inches(0.8) if title else Inches(0.3)
     max_w = Inches(6.2)
     max_h = Inches(6.0)

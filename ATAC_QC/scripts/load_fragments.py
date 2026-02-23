@@ -14,6 +14,7 @@ import sys
 import time
 import argparse
 import re
+import traceback
 import pandas as pd
 import snapatac2 as snap
 
@@ -172,6 +173,7 @@ def main(config_path, overwrite=False):
             process_fragments(row, config, barcode_dic_rna, overwrite=overwrite)
         except Exception as e:
             print(f"[ERROR] Encountered error for {row['atacID']}: {e}")
+            traceback.print_exc()
             # Clean up partial h5ad so downstream steps don't find incomplete files
             partial_h5ad = os.path.join(output_h5ad_dir, f"{row['atacID']}.raw.h5ad")
             if os.path.exists(partial_h5ad):
