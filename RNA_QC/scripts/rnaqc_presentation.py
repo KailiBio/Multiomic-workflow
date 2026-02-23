@@ -144,11 +144,18 @@ def gsutil_ls(gcs_path):
 
 def download_figures_and_stats(gcs_base, tmpdir):
     """Download all PNGs and TXT files from a tissue GCS directory."""
-    for step in ["0_cellranger_qc", "2_pre_qc/figures", "3_filter_qc/figures",
-                 "4_batch_correction/figures", "5_clustering/figures", "5_clustering"]:
+    steps = {
+        "0_cellranger_qc":          ["*.png"],
+        "2_pre_qc/figures":         ["*.png"],
+        "3_filter_qc/figures":      ["*.png", "*.txt", "*.tsv"],
+        "4_batch_correction/figures": ["*.png"],
+        "5_clustering/figures":     ["*.png"],
+        "5_clustering":             ["*.txt"],
+    }
+    for step, exts in steps.items():
         step_dir = os.path.join(tmpdir, step.replace("/", "_"))
         os.makedirs(step_dir, exist_ok=True)
-        for ext in ["*.png", "*.txt"]:
+        for ext in exts:
             result = subprocess.run(
                 ["gsutil", "-m", "-q", "cp",
                  gcs_base + step + "/" + ext, step_dir + "/"],
