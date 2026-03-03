@@ -507,7 +507,7 @@ def plot_cells_per_tissue_by_donor(adata, suffix, runtag, outdir, tissue_key="ti
     plt.legend(
         title="Donor",
         bbox_to_anchor=(-.5, -0.15), #(1.05, 1),
-        loc='bottom center', #'upper left',
+        loc='lower center', #'upper left',
         labels=donor_ids
     )
     plt.tight_layout(rect=[0, 0, 0.85, 1])
@@ -549,7 +549,7 @@ def plot_cells_per_donor_per_tissue(adata, suffix, runtag, outdir, tissue_key="t
     plt.legend(
         title=donor_key,
         bbox_to_anchor=(-.5, -0.15), #(1.05, 1),
-        loc='bottom center', #'upper left',
+        loc='lower center', #'upper left',
         labels=donor_ids
     )
     
