@@ -121,12 +121,12 @@ def process_fragments(row, config, barcode_dic_rna, overwrite=False):
     snap.metrics.tsse(data, gene_anno=gencode_gtf, n_jobs = n_threads)
 
     # Verify tsse was computed
-    if 'tsse' not in data.obs.columns:
+    if 'tsse' not in data.obs:
         data.close()
         os.remove(output_h5ad)
         raise RuntimeError(
             f"snap.metrics.tsse() did not produce 'tsse' column for {atacID}. "
-            f"Available obs columns: {list(data.obs.columns)}"
+            f"Available obs columns: {list(data.obs.keys())}"
         )
 
     print(f"[INFO] Adding sampleID: {atacID} to anndata object")
