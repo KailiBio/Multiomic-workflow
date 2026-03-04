@@ -27,15 +27,18 @@ def update_annotations(adata, cell_lineage, celltype_broad, celltype_fine):
     adata.obs['celltype_fine'] = adata.obs[celltype_fine]
     return adata
 
-def plot_cell_counts(adata, tissue_std, figdir):
-    donor_col = adata.uns.get('donorID_colors', {})
+def plot_cell_counts(adata, tissue_std, figdir, donor_color_palette):
+    #donor_col = adata.uns.get('donorID_colors', {})
 
     df = adata.obs[['donorID', 'leiden', 'cell_lineage', 'celltype_broad']]
-    
+
     # save the cell counts
     cell_count_matrix = df.pivot_table(index='celltype_broad', columns='donorID', aggfunc='size', fill_value=0)
     cell_count_matrix.to_csv(os.path.join(figdir, f'{tissue_std}_final_cell_counts.txt'), sep='\t')
 
+    donors = cell_count_matrix.columns
+    donor_col = [donor_color_palette.get(donor, "#808080") for donor in donors]
+    
     # number of cells, colored by donorID
     sns.set(style='whitegrid')
     ax = cell_count_matrix.plot(
@@ -80,14 +83,15 @@ def save_final_h5ad(adata, workdir, tissue_std):
     adata_final.write(final_h5ad_path)
     print(f"[INFO] Final h5ad saved to: {final_h5ad_path}")
 
-def run_per_tissue(workdir, tissue, cell_lineage, celltype_broad, celltype_fine):
+def run_per_tissue(workdir, tissue, cell_lineage, celltype_broad, celltype_fine, 
+                   donor_color_palette, out_h5ad_dir):
     
     tissue_std = standardize_tissue_name(tissue)
 
     # load h5ad
     print("[INFO] Loading anndata object...")
-    adata_path1 = os.path.join(workdir, "cell_annotation_auto", f"{tissue_std}_GEX.filtered.processes.autoAnnotated.updated.h5ad")
-    adata_path2 = os.path.join(workdir, "cell_annotation_auto", f"{tissue_std}_GEX.filtered.processes.autoAnnotated.h5ad")
+    adata_path1 = os.path.join(out_h5ad_dir, f"{tissue_std}_GEX.filtered.processes.cellAnnotated.h5ad")
+    adata_path2 = os.path.join(out_h5ad_dir, f"{tissue_std}_GEX.filtered.processes.autoAnnotated.h5ad")
     if os.path.exists(adata_path1):
         print(f"[INFO] loading adata from {adata_path1}")
         adata = sc.read_h5ad(adata_path1)
@@ -110,13 +114,13 @@ def run_per_tissue(workdir, tissue, cell_lineage, celltype_broad, celltype_fine)
     sc.pl.umap(adata, color='celltype_broad', frameon = False, show=False, save=f'.RNA_final.celltype_broad.{tissue_std}.png')
     sc.pl.umap(adata, color='celltype_fine', frameon = False, show=False, save=f'.RNA_final.celltype_fine.{tissue_std}.png')
 
-    plot_cell_counts(adata, tissue_std, figdir)
+    plot_cell_counts(adata, tissue_std, figdir, donor_color_palette)
 
     print("[INFO] Save files and figures...")
     # Save
-    save_final_h5ad(adata, figdir, tissue_std)
+    save_final_h5ad(adata, out_h5ad_dir, tissue_std)
     # Organize figures
-    move_figures_to_newdir(workdir, old="figures", new="final")
+    move_figures_to_newdir(workdir, old="figures", new="cell_annotation_final")
 
     print(f"[INFO] Completed generating final RNA h5ad for {tissue}.")
 
@@ -124,8 +128,9 @@ def main(config_path, cell_lineage, celltype_broad, celltype_fine):
     config = load_config(config_path)
     
     workdir = config['paths']['workdir']
-    
+    out_h5ad_dir = config['paths']['output_h5ad_dir']
     tissue = config['params']['tissue']
+    donor_color_palette = config["color"]['donor_colors']
 
     if tissue == "---":
         sample_metadata = config['paths']['sample_metadata']
@@ -138,13 +143,15 @@ def main(config_path, cell_lineage, celltype_broad, celltype_fine):
         for idx, tissue_name in enumerate(tissues, 1):
             print(f"\n========== Final annotation for tissue: {tissue_name} ({idx}/{len(tissues)}) ==========")
             try:
-                run_per_tissue(workdir, tissue_name, cell_lineage, celltype_broad, celltype_fine)
+                run_per_tissue(workdir, tissue_name, cell_lineage, celltype_broad, celltype_fine,
+                               donor_color_palette, out_h5ad_dir)
             except Exception as e:
                 print(f"[ERROR] Final h5ad generation failed for {tissue_name}: {e}")
     else:
         print(f"\n========== Final annotation for tissue: {tissue} ==========")
         try:
-            run_per_tissue(workdir, tissue, cell_lineage, celltype_broad, celltype_fine)
+            run_per_tissue(workdir, tissue, cell_lineage, celltype_broad, celltype_fine, 
+                           donor_color_palette, out_h5ad_dir)
         except Exception as e:
             print(f"[ERROR] Final h5ad generation failed for {tissue}: {e}")
 
