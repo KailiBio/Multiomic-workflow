@@ -8,6 +8,7 @@ Description:
 
 import warnings
 warnings.filterwarnings("ignore", category=FutureWarning)
+warnings.filterwarnings("ignore", category=DeprecationWarning)
 
 import os
 import sys
@@ -86,8 +87,8 @@ def process_fragments(row, config, barcode_dic_rna, overwrite=False):
 
     channel_search = re.search(r'-(\d+)$', atacID)
     batch_search = re.search(r'EXP(\d+)', atacID)
-    channel_number = channel_search.group(1) if channel_search else 'NA'
-    batch_number = batch_search.group(1) if batch_search else 'NA'
+    channel_number = channel_search.group(1) if channel_search else 'unknown'
+    batch_number = batch_search.group(1) if batch_search else 'unknown'
     data.obs_names = [f"{donorID}_{batch_number}_{channel_number}_{bc}" for bc in new_bc ]
 
     # Figure and metrics
