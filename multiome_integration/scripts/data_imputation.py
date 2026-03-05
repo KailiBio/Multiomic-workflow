@@ -4,6 +4,10 @@ Author: Kaili Fan
 Description: Joint scRNA/scATAC imputation with MultiVI
 """
 
+import warnings
+warnings.filterwarnings("ignore", category=FutureWarning)
+warnings.filterwarnings("ignore", category=DeprecationWarning)
+
 import os
 import sys
 import argparse
@@ -83,6 +87,16 @@ def generate_multivi_input(rna, atac, shared_cells, rna_only_cells, atac_only_ce
 
 def train_multivi(adata_mvi, tissue_std):
     print("[INFO] Setting up MULTIVI anndata ...")
+    print("  tissue:", tissue_std)
+    print("  shape before copy:", adata_mvi.shape, "| is_view:", adata_mvi.is_view)
+
+    if adata_mvi.is_view:
+        adata_mvi = adata_mvi.copy()
+        print("  made a copy; is_view now:", adata_mvi.is_view)
+
+    print("n_genes:", (adata_mvi.var["modality"] == "Gene Expression").sum())
+    print("n_regions:", (adata_mvi.var["modality"] == "Peaks").sum())
+
     scvi.model.MULTIVI.setup_anndata(adata_mvi, batch_key="modality")
     model = scvi.model.MULTIVI(
         adata_mvi,
@@ -147,6 +161,13 @@ def run_per_tissue(tissue, output_h5ad_dir, celltype_obs):
     rna_cells, atac_cells, shared_cells, rna_only_cells, atac_only_cells = process_overlap(rna, atac)
     adata_mvi = generate_multivi_input(
         rna, atac, shared_cells, rna_only_cells, atac_only_cells, celltype_obs)
+
+    print("Tissue:", tissue_std)
+    print("adata_mvi shape:", adata_mvi.shape)
+    print("obs columns:", adata_mvi.obs.columns.tolist())
+    print("var columns:", adata_mvi.var.columns.tolist())
+    print("unique adata_mvi.var['modality']:", adata_mvi.var["modality"].unique())
+
     model = train_multivi(adata_mvi, tissue_std)
     get_imputation_values(model, adata_mvi, output_h5ad_dir, tissue_std)
     print(f"[INFO] Done integration with {tissue}\n")

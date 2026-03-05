@@ -5,6 +5,10 @@ Author: Kaili Fan
 Description: Annotate ATAC cells via GLUE integrating scRNA and scATAC data.
 """
 
+import warnings
+warnings.filterwarnings("ignore", category=FutureWarning,
+                        message="Importing read_csv from `anndata` is deprecated")
+
 import os
 import sys
 import argparse
