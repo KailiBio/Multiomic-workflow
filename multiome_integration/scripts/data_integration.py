@@ -5,6 +5,10 @@ Author: Kaili Fan
 Description: Finalize MultiVI multiome integration; propagate metadata and layers, add imputed signal, split output.
 """
 
+import warnings
+warnings.filterwarnings("ignore", category=FutureWarning)
+warnings.filterwarnings("ignore", category=DeprecationWarning)
+
 import os
 import sys
 import argparse
