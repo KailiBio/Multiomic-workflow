@@ -17,6 +17,7 @@ import anndata as ad
 import scanpy as sc
 import snapatac2 as snap
 import scvi
+print("scvi-tools version:", scvi.__version__)
 import time
 scvi.settings.seed = 0
 import torch
@@ -63,7 +64,7 @@ def extract_rna_object(anndata_org, celllist, celltype_obs):
     anndata_extract.obsp.clear()
     return anndata_extract
 
-def generate_multivi_input(rna, atac, shared_cells, rna_only_cells, atac_only_cells, celltype_obs):
+def generate_multivi_input(rna, atac, shared_cells, rna_only_cells, atac_only_cells, celltype_obs, output_h5ad_dir, tissue_std):
     print("[INFO] Assembling MultiVI input AnnData ...")
     atac_shared = extract_atac_object(atac, shared_cells)
     rna_shared = extract_rna_object(rna, shared_cells, celltype_obs)
@@ -83,6 +84,7 @@ def generate_multivi_input(rna, atac, shared_cells, rna_only_cells, atac_only_ce
         adata_mvi.X = sparse.csr_matrix(adata_mvi.X)
         print("[INFO] Converted adata_mvi.X to sparse CSR matrix.")
     print(f"[INFO] MultiVI input shape: {adata_mvi.shape}")
+    adata_mvi.write(os.path.join(output_h5ad_dir,f'MultiVI_input.{tissue_std}.h5ad'))
     return adata_mvi
 
 def train_multivi(adata_mvi, tissue_std):
@@ -94,8 +96,12 @@ def train_multivi(adata_mvi, tissue_std):
         adata_mvi = adata_mvi.copy()
         print("  made a copy; is_view now:", adata_mvi.is_view)
 
-    print("n_genes:", (adata_mvi.var["modality"] == "Gene Expression").sum())
+    print("n_genes:", (adata_mvi.var["modality"] == "Gene expression").sum())
     print("n_regions:", (adata_mvi.var["modality"] == "Peaks").sum())
+
+    print("cell with both modality:", (adata_mvi.obs["modality"] == "paired").sum())
+    print("cell with RNA-only:", (adata_mvi.obs["modality"] == "expression").sum())
+    print("cell with ATAC-only:", (adata_mvi.obs["modality"] == "accessibility").sum())
 
     scvi.model.MULTIVI.setup_anndata(adata_mvi, batch_key="modality")
     model = scvi.model.MULTIVI(
@@ -159,8 +165,8 @@ def run_per_tissue(tissue, output_h5ad_dir, celltype_obs):
 
     print("[INFO] Integrating all data...")
     rna_cells, atac_cells, shared_cells, rna_only_cells, atac_only_cells = process_overlap(rna, atac)
-    adata_mvi = generate_multivi_input(
-        rna, atac, shared_cells, rna_only_cells, atac_only_cells, celltype_obs)
+    adata_mvi = generate_multivi_input(rna, atac, shared_cells, rna_only_cells, atac_only_cells, 
+                                       celltype_obs, output_h5ad_dir, tissue_std)
 
     print("Tissue:", tissue_std)
     print("adata_mvi shape:", adata_mvi.shape)

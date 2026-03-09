@@ -5,6 +5,9 @@ Author: Kaili Fan
 Description: Check overlapping cells between scRNA and scATAC for all samples in a tissue and generate Venn/bar plots.
 """
 
+import warnings
+warnings.filterwarnings("ignore", category=FutureWarning)
+
 import os
 import sys
 import argparse

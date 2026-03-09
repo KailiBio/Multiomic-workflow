@@ -5,6 +5,10 @@ Author: Kaili Fan
 Description: Identify consensus ATAC peaks (regulatory elements) from scATAC-seq data by cell type, with summary plots.
 """
 
+import warnings
+warnings.filterwarnings("ignore", category=FutureWarning)
+warnings.filterwarnings("ignore", category=DeprecationWarning)
+
 import os
 import sys
 import argparse

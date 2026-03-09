@@ -190,7 +190,9 @@ def annotate_and_merge(rna, atac, glue, output_h5ad_dir, tissue_std):
 def run_per_tissue(tissue_std, rna, atac, output_h5ad_dir, glue_output_dir, gtf, celltype_obs, n_features=50000):
     
     # Prepare
+    print("\nRNA...")
     rna_prepared = prepare_rna(rna, gtf, output_h5ad_dir, tissue_std, celltype_obs)
+    print("\nATAC...")
     atac_prepared = prepare_atac(atac, gtf, output_h5ad_dir, tissue_std, n_features=n_features)
 
     # Train GLUE & annotate
