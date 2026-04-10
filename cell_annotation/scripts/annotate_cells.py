@@ -152,7 +152,7 @@ def save_results(adata, out_dir, tissue_std):
     auto_cellannotation_df = adata.obs[annotation_cols].drop_duplicates().sort_values('leiden', key=lambda x: x.astype(int))
     auto_cellannotation_df.to_csv(os.path.join(out_dir, f'{tissue_std}_GEX.autoAnnotation.tsv'), sep='\t', index=False)
 
-def run_per_tissue(workdir, input_h5ad_file, tissue, marker_gene_list, skip_sctype=False):
+def run_per_tissue(workdir, input_h5ad_file, tissue, marker_gene_list, out_h5ad_dir, skip_sctype=False):
 
     tissue_std = standardize_tissue_name(tissue)
 
@@ -201,7 +201,7 @@ def run_per_tissue(workdir, input_h5ad_file, tissue, marker_gene_list, skip_scty
 
     print("[INFO] Save files and figures...")
     # 4. Save h5ad and annotation table
-    save_results(adata, figdir, tissue_std)
+    save_results(adata, out_h5ad_dir, tissue_std)
 
     # 5. Move figures
     move_figures_to_newdir(workdir, old="figures", new="cell_annotation_auto")
@@ -213,6 +213,7 @@ def main(config_path, skip_sctype=False):
 
     workdir = config['paths']['workdir']
     input_h5ad_file = config['paths']['input_h5ad_dir']
+    out_h5ad_dir = config['paths']['output_h5ad_dir']
     os.makedirs(workdir, exist_ok=True)
 
     # Load marker gene file
@@ -231,13 +232,13 @@ def main(config_path, skip_sctype=False):
         for idx, tissue_name in enumerate(tissues, 1):
             print(f"\n========== Annotating tissue: {tissue_name} ({idx}/{len(tissues)}) ==========")
             try:
-                run_per_tissue(workdir, input_h5ad_file, tissue_name, marker_gene_list, skip_sctype=skip_sctype)
+                run_per_tissue(workdir, input_h5ad_file, tissue_name, marker_gene_list, out_h5ad_dir, skip_sctype=skip_sctype)
             except Exception as e:
                 print(f"[ERROR] Cell annotation failed for {tissue_name}: {e}")
     else:
         print(f"\n========== Annotating tissue: {tissue} ==========")
         try:
-            run_per_tissue(workdir, input_h5ad_file, tissue, marker_gene_list, skip_sctype=skip_sctype)
+            run_per_tissue(workdir, input_h5ad_file, tissue, marker_gene_list, out_h5ad_dir, skip_sctype=skip_sctype)
         except Exception as e:
             print(f"[ERROR] Cell annotation failed for {tissue}: {e}")
 

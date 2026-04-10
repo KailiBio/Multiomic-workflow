@@ -1,6 +1,7 @@
 paths:
   workdir: /data/fankaili/scripts/multi-Omic_workflow/cell_annotation/test_output/
   input_h5ad_dir: /data/fankaili/scripts/multi-Omic_workflow/RNA_QC/test_output/rna_h5ad/Muscle_Quadriceps_GEX.filtered.processed.demo_run.h5ad
+  output_h5ad_dir: /data/fankaili/scripts/multi-Omic_workflow/RNA_QC/test_output/rna_h5ad/
   sample_metadata: /data/fankaili/scripts/multi-Omic_workflow/ATAC_QC/test_data/test_metatable.txt
   
 params:
@@ -10,3 +11,24 @@ params:
 annotation:
     marker_gene_file: /data/fankaili/scripts/multi-Omic_workflow/cell_annotation/test_data/test_marker_gene.xlsx
     sheet_name: test
+
+color:
+    tissue_colors:
+        "Brain - Cerebellum": "#EEEE00"
+        "Liver - Caudate Lobe": "#AABB66"
+        "Kidney": "#a32015"
+        "Liver - Left Lobe": "#AABB66"
+        "Lung - Left Cranial Lobe": "#99FF00"
+        "Muscle - Gastrocnemius": "#9191ff"
+        "Muscle - Quadriceps": "#5e5eff"
+        "Thyroid": "#006600"
+        "Adrenal Gland": "#33DD33"
+        "Adipose - Subcutaneous": "#1d8c46"
+    donor_colors:
+        DGTEX002: "#E73A2F"
+        DGTEX031: "#65c4ff"
+        DGTEX008: "#FBB30B"
+        DGTEX047: "#2E9E49"
+        DGTEX001: "#397AF2"
+        DGTEX027: "#8e02da"
+        DGTEX009: "#ea9c28"
