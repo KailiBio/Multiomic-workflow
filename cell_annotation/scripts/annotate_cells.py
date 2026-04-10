@@ -102,26 +102,58 @@ def run_sctype_annotation(adata, marker_gene_list):
         cl_type_value = cl_type['type'].iloc[0]
         adata.obs.loc[adata.obs['leiden'] == cluster, 'sctype_annotation'] = cl_type_value.rstrip()
 
-def plot_final_marker_dotplots(adata, tissue_std, valid_marker_genes):
-    # Dotplot for top HVGs (by sctype_annotation)
-    sc.pl.rank_genes_groups_dotplot(adata, groupby="sctype_annotation", standard_scale="var", n_genes=5,
+def plot_final_marker_dotplots(adata, tissue_std, valid_marker_genes, groupby):
+    # Dotplot for top HVGs by annotation
+    sc.pl.rank_genes_groups_dotplot(adata, groupby=groupby, standard_scale="var", n_genes=5,
                                     show=False, save=f'DEG2.{tissue_std}.png')
-    # Dotplot for provided markers by sctype_annotation
-    sc.pl.dotplot(adata, valid_marker_genes, groupby="sctype_annotation", standard_scale="var",
+    # Dotplot for provided markers by annotation
+    sc.pl.dotplot(adata, valid_marker_genes, groupby=groupby, standard_scale="var",
                   show=False, save=f'markerGenes2.{tissue_std}.png')
+
+def run_module_score_annotation(adata, valid_marker_genes, tissue_std):
+    print("[INFO] Computing module scores for each cell type...")
+    score_cols = []
+    for cell_type, genes in valid_marker_genes.items():
+        col_name = f"score_{cell_type}"
+        sc.tl.score_genes(adata, gene_list=genes, score_name=col_name)
+        score_cols.append((cell_type, col_name))
+
+    # Mean module score per cluster
+    cluster_scores = pd.DataFrame(index=adata.obs['leiden'].unique())
+    for cell_type, col_name in score_cols:
+        cluster_scores[cell_type] = adata.obs.groupby('leiden')[col_name].mean()
+
+    # Z-score normalize across clusters per cell type to find relative enrichment
+    cluster_scores_z = (cluster_scores - cluster_scores.mean()) / cluster_scores.std()
+    cluster_scores_z = cluster_scores_z.fillna(0)
+
+    # Per-cluster: assign by highest z-scored enrichment
+    cluster_to_type = cluster_scores_z.idxmax(axis=1).to_dict()
+    adata.obs['module_score_annotation'] = adata.obs['leiden'].map(cluster_to_type)
+
+    # Save both raw and z-scored module scores per cluster
+    figdir = os.path.join(os.getcwd(), 'figures')
+    cluster_scores.index.name = 'leiden'
+    cluster_scores.to_csv(os.path.join(figdir, f'module_scores_per_cluster.{tissue_std}.tsv'), sep='\t')
+    cluster_scores_z.index.name = 'leiden'
+    cluster_scores_z.to_csv(os.path.join(figdir, f'module_scores_zscore_per_cluster.{tissue_std}.tsv'), sep='\t')
+    print(f"[INFO] Module score cluster assignments:\n{pd.Series(cluster_to_type).to_string()}")
 
 def save_results(adata, out_dir, tissue_std):
     # Save AnnData
     os.makedirs(out_dir, exist_ok=True)
     out_h5ad = os.path.join(out_dir, f'{tissue_std}_GEX.filtered.processes.autoAnnotated.h5ad')
     adata.write(out_h5ad)
-    
-    # Save Main annotation table
-    auto_cellannotation_df = adata.obs[['leiden', 'sctype_annotation']].drop_duplicates()
+
+    # Save annotation tables
+    annotation_cols = ['leiden', 'module_score_annotation']
+    if 'sctype_annotation' in adata.obs.columns:
+        annotation_cols.append('sctype_annotation')
+    auto_cellannotation_df = adata.obs[annotation_cols].drop_duplicates().sort_values('leiden', key=lambda x: x.astype(int))
     auto_cellannotation_df.to_csv(os.path.join(out_dir, f'{tissue_std}_GEX.autoAnnotation.tsv'), sep='\t', index=False)
 
-def run_per_tissue(workdir, input_h5ad_file, tissue, marker_gene_list):
-    
+def run_per_tissue(workdir, input_h5ad_file, tissue, marker_gene_list, skip_sctype=False):
+
     tissue_std = standardize_tissue_name(tissue)
 
     # Load data
@@ -132,7 +164,7 @@ def run_per_tissue(workdir, input_h5ad_file, tissue, marker_gene_list):
 
     print("[INFO] Loading anndata object...")
     adata = sc.read_h5ad(adata_path)
-    
+
     figdir = os.path.join(workdir, 'figures')
     os.makedirs(figdir, exist_ok=True)
     os.chdir(workdir)
@@ -150,13 +182,22 @@ def run_per_tissue(workdir, input_h5ad_file, tissue, marker_gene_list):
     sc.pl.dotplot(adata, valid_marker_genes, groupby="leiden", standard_scale="var",
                   show=False, save=f'markerGenes.{tissue_std}.png')
 
-    # 3. ScType annotation
-    print("[INFO] Running scType for automatic cell annotation...")
-    load_sctype()
-    run_sctype_annotation(adata, marker_gene_list)
-    
-    sc.pl.umap(adata, color='sctype_annotation', frameon=False, show=False, save=f'.ScType_Annotation.{tissue_std}.png')
-    plot_final_marker_dotplots(adata, tissue_std, valid_marker_genes)
+    # 3. Module score annotation
+    run_module_score_annotation(adata, valid_marker_genes, tissue_std)
+    sc.pl.umap(adata, color='module_score_annotation', frameon=False, show=False,
+               save=f'.ModuleScore_Annotation.{tissue_std}.png')
+    plot_final_marker_dotplots(adata, tissue_std, valid_marker_genes, groupby='module_score_annotation')
+
+    # 4. ScType annotation
+    if not skip_sctype:
+        print("[INFO] Running scType for automatic cell annotation...")
+        load_sctype()
+        run_sctype_annotation(adata, marker_gene_list)
+
+        sc.pl.umap(adata, color='sctype_annotation', frameon=False, show=False, save=f'.ScType_Annotation.{tissue_std}.png')
+        plot_final_marker_dotplots(adata, tissue_std, valid_marker_genes, groupby='sctype_annotation')
+    else:
+        print("[INFO] Skipping scType annotation (--skip-sctype).")
 
     print("[INFO] Save files and figures...")
     # 4. Save h5ad and annotation table
@@ -167,41 +208,42 @@ def run_per_tissue(workdir, input_h5ad_file, tissue, marker_gene_list):
 
     print(f"[INFO] Completed annotation step for {tissue}.")
 
-def main(config_path):
+def main(config_path, skip_sctype=False):
     config = load_config(config_path)
-    
+
     workdir = config['paths']['workdir']
     input_h5ad_file = config['paths']['input_h5ad_dir']
     os.makedirs(workdir, exist_ok=True)
-        
+
     # Load marker gene file
     marker_gene_list = load_marker_genes(config)
-        
+
     tissue = config['params']['tissue']
-    
+
     if tissue == "---":
         sample_metadata = config['paths']['sample_metadata']
         df = pd.read_csv(sample_metadata, sep='\t', header=None,
             names=["rnaID", "atacID", "species", "donorID", "ageGroup", "gender", "tissue"])
-        
+
         tissues = sorted(df['tissue'].unique())
         print(f"[INFO] Annotating MULTIPLE tissues: {tissues}")
-        
+
         for idx, tissue_name in enumerate(tissues, 1):
             print(f"\n========== Annotating tissue: {tissue_name} ({idx}/{len(tissues)}) ==========")
             try:
-                run_per_tissue(workdir, input_h5ad_file, tissue_name, marker_gene_list)
+                run_per_tissue(workdir, input_h5ad_file, tissue_name, marker_gene_list, skip_sctype=skip_sctype)
             except Exception as e:
                 print(f"[ERROR] Cell annotation failed for {tissue_name}: {e}")
     else:
         print(f"\n========== Annotating tissue: {tissue} ==========")
         try:
-            run_per_tissue(workdir, input_h5ad_file, tissue, marker_gene_list)
+            run_per_tissue(workdir, input_h5ad_file, tissue, marker_gene_list, skip_sctype=skip_sctype)
         except Exception as e:
             print(f"[ERROR] Cell annotation failed for {tissue}: {e}")
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Cell annotation workflow for scRNA-seq h5ad.")
     parser.add_argument("config", help="YAML config with tissue/path/marker genes spec.")
+    parser.add_argument("--skip-sctype", action="store_true", help="Skip scType automatic annotation.")
     args = parser.parse_args()
-    main(args.config)
+    main(args.config, skip_sctype=args.skip_sctype)
