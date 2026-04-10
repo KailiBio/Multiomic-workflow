@@ -266,12 +266,13 @@ def main(config_path, nmads=5.0):
 
     # Load QC cutoff table (optional — used for red lines in pre-QC plots)
     df_cutoff_all = None
-    qc_cutoff_table = config['qc'].get('rna_qc_cutoff_table')
+    qc_config = config.get('qc', {})
+    qc_cutoff_table = qc_config.get('rna_qc_cutoff_table')
     if qc_cutoff_table and os.path.exists(qc_cutoff_table):
         print(f"[INFO] Loading QC cutoff table for pre-QC plots: {qc_cutoff_table}")
         if qc_cutoff_table.endswith('.xlsx') or qc_cutoff_table.endswith('.xls'):
             df_cutoff_all = pd.read_excel(qc_cutoff_table,
-                                          sheet_name=config['qc'].get('sheet_name', 0), engine='openpyxl')
+                                          sheet_name=qc_config.get('sheet_name', 0), engine='openpyxl')
         else:
             df_cutoff_all = pd.read_csv(qc_cutoff_table, sep='\t')
 
