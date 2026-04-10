@@ -160,7 +160,7 @@ def main(config_path, runtag, key, nmads=5.0):
     tissue = config['params']['tissue']
 
     donor_colors = config['color'].get("donor_colors")
-    my_color_palette = config["my_color_palette"]
+    my_color_palette = donor_colors if donor_colors else config["my_color_palette"]
     
     # Load qc cutoff table
     qc_cutoff_table = config['qc']['rna_qc_cutoff_table']

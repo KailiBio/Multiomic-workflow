@@ -46,11 +46,18 @@ def assign_colors(keys, palette="tab10"):
 def assign_donor_colors(df, donor_col, key='donorID'):
     """
     Returns a {donor: color} dict for only donors in df[key].unique().
+    donor_col can be a dict of {donor: color} or a list of colors (palette).
     For donors not in donor_col, assigns extra colors from a colormap.
     """
     donors_in_data = list(df[key].unique())
-    color_map = dict(donor_col) 
-    unknown_donors = [d for d in donors_in_data if d not in donor_col]
+
+    if isinstance(donor_col, dict):
+        color_map = dict(donor_col)
+    else:
+        # donor_col is a palette list — assign colors by index
+        color_map = {d: donor_col[i % len(donor_col)] for i, d in enumerate(donors_in_data)}
+
+    unknown_donors = [d for d in donors_in_data if d not in color_map]
 
     if unknown_donors:
         colormap = plt.cm.get_cmap('tab20', len(unknown_donors))

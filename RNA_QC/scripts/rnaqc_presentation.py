@@ -105,10 +105,13 @@ def extract_sample_ids_from_files(tmpdir, tissue_std):
     # is always the sample-ID delimiter.  Require '.' or start-of-string
     # before the tissue name to avoid substring false-positives.
     pattern = re.compile(r'(?:^|\.)' + re.escape(tissue_std) + r'-([^.]+)')
+    # Metadata field names that appear in filenames but are not sample IDs
+    _metadata_fields = {'sampleID', 'donorID', 'aliquotID', 'species',
+                        'tissue', 'ageGroup', 'gender'}
     for root, _dirs, files in os.walk(tmpdir):
         for f in files:
             m = pattern.search(f)
-            if m:
+            if m and m.group(1) not in _metadata_fields:
                 sample_ids.add(m.group(1))
     return sample_ids
 
@@ -688,7 +691,24 @@ def process_gcs(gcs_path, tissue=None):
 
         # Infer sample IDs from downloaded filenames
         sample_ids = extract_sample_ids_from_files(tmpdir, tissue_std)
+
+        # If no sample IDs found, try progressively shorter tissue prefixes.
+        # Handles folder names like "Brain_Cerebellum_yale_replication" where
+        # the filenames use just "Brain_Cerebellum" as the tissue prefix.
+        if not sample_ids and '_' in tissue_std:
+            candidate = tissue_std
+            while '_' in candidate:
+                candidate = candidate.rsplit('_', 1)[0]
+                sample_ids = extract_sample_ids_from_files(tmpdir, candidate)
+                if sample_ids:
+                    print(f"[INFO] Matched tissue prefix '{candidate}' "
+                          f"(folder: {tissue_name})")
+                    tissue_std = candidate
+                    break
+
         print(f"[INFO] Inferred {len(sample_ids)} sample IDs from filenames")
+        for sid in sorted(sample_ids):
+            print(f"[INFO]   - {sid}")
 
         pptx_path = build_presentation(
             tmpdir, tissue_name, tissue_std, sample_ids,
