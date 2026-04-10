@@ -23,28 +23,85 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')
 from rna_qc.utils import load_config, standardize_tissue_name
 from rna_qc.rna_plots import assign_colors, assign_donor_colors, move_figures_to_newdir, plot_upset, run_umap_clustering, plot_doublet_hist
 
-def compute_mad_thresholds(adata, QC_cutoff_df, nmads):
-    """Compute MAD-based QC thresholds from all cells in the tissue (pooled).
+def _compute_mad_for_sample(sample_obs, nmads):
+    """Compute MAD-based QC thresholds for a single sample's cells.
+
+    Returns a dict of threshold values.
+    """
+    thresholds = {}
+
+    # --- n_genes_by_counts (Min and Max) ---
+    med = np.nanmedian(sample_obs['n_genes_by_counts'])
+    mad = median_abs_deviation(sample_obs['n_genes_by_counts'], nan_policy='omit')
+    thresholds['Min_genes_in_cells'] = int(max(0, np.floor(med - nmads * mad)))
+    thresholds['Max_genes_in_cells'] = int(np.ceil(med + nmads * mad))
+
+    # --- total_counts (Max) ---
+    med = np.nanmedian(sample_obs['total_counts'])
+    mad = median_abs_deviation(sample_obs['total_counts'], nan_policy='omit')
+    thresholds['Max_counts_in_cells'] = int(np.ceil(med + nmads * mad))
+
+    # --- pct_counts_mt (Max, floor of 5%) ---
+    med = np.nanmedian(sample_obs['pct_counts_mt'])
+    mad = median_abs_deviation(sample_obs['pct_counts_mt'], nan_policy='omit')
+    thresholds['Max_percent_mt_in_cells'] = round(min(100, max(5.0, med + nmads * mad)), 2)
+
+    # --- pct_counts_ribo (Max, floor of 5%) ---
+    med = np.nanmedian(sample_obs['pct_counts_ribo'])
+    mad = median_abs_deviation(sample_obs['pct_counts_ribo'], nan_policy='omit')
+    thresholds['Max_percent_ribo_in_cells'] = round(min(100, max(5.0, med + nmads * mad)), 2)
+
+    # --- Exon_ratio_cutoffs (upper bound only, no lower MAD) ---
+    if 'pct_exon_reads' in sample_obs.columns and sample_obs['pct_exon_reads'].notna().any():
+        vals = sample_obs['pct_exon_reads'].dropna()
+        if len(vals) > 0:
+            Q75 = np.percentile(vals, 75)
+            Q25 = np.percentile(vals, 25)
+            thresholds['Exon_ratio_cutoffs'] = round(min(100, Q75 + 1.5 * (Q75 - Q25)), 2)
+        else:
+            thresholds['Exon_ratio_cutoffs'] = '---'
+    else:
+        thresholds['Exon_ratio_cutoffs'] = '---'
+
+    # --- MALAT1_CPM (Min lower bound, Max upper bound) ---
+    if 'MALAT1_CPM' in sample_obs.columns and sample_obs['MALAT1_CPM'].notna().any():
+        vals = sample_obs['MALAT1_CPM'].dropna()
+        if len(vals) > 0:
+            med = np.median(vals)
+            mad = median_abs_deviation(vals, nan_policy='omit')
+            thresholds['MALAT1_CPM_cutoffs'] = int(max(0, np.floor(med - nmads * mad)))
+            thresholds['MALAT1_CPM_max_cutoffs'] = int(np.ceil(med + nmads * mad))
+        else:
+            thresholds['MALAT1_CPM_cutoffs'] = '---'
+            thresholds['MALAT1_CPM_max_cutoffs'] = '---'
+    else:
+        thresholds['MALAT1_CPM_cutoffs'] = '---'
+        thresholds['MALAT1_CPM_max_cutoffs'] = '---'
+
+    return thresholds
+
+
+def compute_mad_thresholds(adata, QC_cutoff_df, nmads, key='sampleID'):
+    """Compute MAD-based QC thresholds per sample.
 
     Parameters
     ----------
     adata : AnnData
-        Annotated data with QC metrics in obs (n_genes_by_counts, total_counts,
-        pct_counts_mt, pct_counts_ribo, and optionally pct_exon_reads,
-        MALAT1_CPM, doublet_probabilities).
+        Annotated data with QC metrics in obs.
     QC_cutoff_df : DataFrame
         Per-sample QC cutoff table (from Excel). A copy is returned with
         cell-level thresholds overwritten by MAD-derived values.
     nmads : float
         Number of MADs from the median for threshold computation.
+    key : str
+        Column in adata.obs identifying samples (default: 'sampleID').
 
     Returns
     -------
     DataFrame
-        Modified copy of QC_cutoff_df. Cell-level thresholds are tissue-wide;
-        doublet cutoffs are per-sample (scrublet runs per sample).
+        Modified copy of QC_cutoff_df with per-sample MAD thresholds.
+        Doublet cutoffs are preserved from the Excel table.
     """
-    obs = adata.obs
     QC_cutoff = QC_cutoff_df.copy()
 
     if QC_cutoff.empty:
@@ -53,80 +110,31 @@ def compute_mad_thresholds(adata, QC_cutoff_df, nmads):
             "Check that the tissue name in the config matches the Excel sheet."
         )
 
-    # --- n_genes_by_counts (Min and Max) ---
-    med = np.nanmedian(obs['n_genes_by_counts'])
-    mad = median_abs_deviation(obs['n_genes_by_counts'], nan_policy='omit')
-    min_genes = int(max(0, np.floor(med - nmads * mad)))
-    max_genes = int(np.ceil(med + nmads * mad))
-    QC_cutoff['Min_genes_in_cells'] = min_genes
-    QC_cutoff['Max_genes_in_cells'] = max_genes
-
-    # --- total_counts (Max) ---
-    med = np.nanmedian(obs['total_counts'])
-    mad = median_abs_deviation(obs['total_counts'], nan_policy='omit')
-    max_counts = int(np.ceil(med + nmads * mad))
-    QC_cutoff['Max_counts_in_cells'] = max_counts
-
-    # --- pct_counts_mt (Max, floor of 3%) ---
-    med = np.nanmedian(obs['pct_counts_mt'])
-    mad = median_abs_deviation(obs['pct_counts_mt'], nan_policy='omit')
-    max_mt = min(100, max(3.0, med + nmads * mad))
-    QC_cutoff['Max_percent_mt_in_cells'] = round(max_mt, 2)
-
-    # --- pct_counts_ribo (Max, floor of 3%) ---
-    med = np.nanmedian(obs['pct_counts_ribo'])
-    mad = median_abs_deviation(obs['pct_counts_ribo'], nan_policy='omit')
-    max_ribo = min(100, max(3.0, med + nmads * mad))
-    QC_cutoff['Max_percent_ribo_in_cells'] = round(max_ribo, 2)
-
-    # --- Exon_ratio_cutoffs (upper bound) ---
-    if 'pct_exon_reads' in obs.columns and obs['pct_exon_reads'].notna().any():
-        vals = obs['pct_exon_reads'].dropna()
-        if len(vals) > 0:
-            med = np.median(vals)
-            mad = median_abs_deviation(vals, nan_policy='omit')
-            exon_cutoff = round(min(100, med + nmads * mad), 2)
-            QC_cutoff['Exon_ratio_cutoffs'] = exon_cutoff
-        else:
-            QC_cutoff['Exon_ratio_cutoffs'] = '---'
-    else:
-        QC_cutoff['Exon_ratio_cutoffs'] = '---'
-
-    # --- MALAT1_CPM (Min lower bound, Max upper bound) ---
-    if 'MALAT1_CPM' in obs.columns and obs['MALAT1_CPM'].notna().any():
-        vals = obs['MALAT1_CPM'].dropna()
-        if len(vals) > 0:
-            med = np.median(vals)
-            mad = median_abs_deviation(vals, nan_policy='omit')
-            malat1_min = int(max(0, np.floor(med - nmads * mad)))
-            malat1_max = int(np.ceil(med + nmads * mad))
-            QC_cutoff['MALAT1_CPM_cutoffs'] = malat1_min
-            QC_cutoff['MALAT1_CPM_max_cutoffs'] = malat1_max
-        else:
-            QC_cutoff['MALAT1_CPM_cutoffs'] = '---'
-            QC_cutoff['MALAT1_CPM_max_cutoffs'] = '---'
-    else:
-        QC_cutoff['MALAT1_CPM_cutoffs'] = '---'
-        QC_cutoff['MALAT1_CPM_max_cutoffs'] = '---'
-
-    # --- doublet_cutoffs (per-sample) ---
-    # Skip MAD for doublet: probability is bimodal (singlet peak + doublet peak),
-    # so median + nmads*MAD gives unstable thresholds.  Keep the value from the
-    # Excel cutoff table or Scrublet's own detection; default to 1.0 (keep all).
+    # Doublet cutoffs: keep from Excel (bimodal distribution makes MAD unstable)
     if 'doublet_cutoffs' not in QC_cutoff.columns:
-        QC_cutoff['doublet_cutoffs'] = 1.0  # safe default: keep all cells
+        QC_cutoff['doublet_cutoffs'] = 1.0
 
-    print(f"[INFO] MAD-based thresholds (nmads={nmads}):")
-    print(f"  Min_genes_in_cells:        {min_genes}")
-    print(f"  Max_genes_in_cells:        {max_genes}")
-    print(f"  Max_counts_in_cells:       {max_counts}")
-    print(f"  Max_percent_mt_in_cells:   {QC_cutoff['Max_percent_mt_in_cells'].iloc[0]}")
-    print(f"  Max_percent_ribo_in_cells: {QC_cutoff['Max_percent_ribo_in_cells'].iloc[0]}")
-    print(f"  Exon_ratio_cutoffs:        {QC_cutoff['Exon_ratio_cutoffs'].iloc[0]}")
-    print(f"  MALAT1_CPM_cutoffs:        {QC_cutoff['MALAT1_CPM_cutoffs'].iloc[0]}")
-    print(f"  MALAT1_CPM_max_cutoffs:    {QC_cutoff['MALAT1_CPM_max_cutoffs'].iloc[0]}")
-    for _, row in QC_cutoff.iterrows():
-        print(f"  doublet_cutoffs ({row.get('rnaID', '?')}): {row['doublet_cutoffs']}")
+    print(f"[INFO] Computing per-sample MAD thresholds (nmads={nmads}):")
+
+    for idx, row in QC_cutoff.iterrows():
+        sample_id = row['rnaID']
+        sample_mask = adata.obs[key] == sample_id if key in adata.obs.columns else adata.obs['rnaID'] == sample_id
+        sample_obs = adata.obs[sample_mask]
+
+        if len(sample_obs) == 0:
+            print(f"  [WARNING] No cells found for {sample_id} — skipping MAD")
+            continue
+
+        thresholds = _compute_mad_for_sample(sample_obs, nmads)
+        for col, val in thresholds.items():
+            QC_cutoff.at[idx, col] = val
+
+        print(f"  {sample_id} ({len(sample_obs)} cells):"
+              f" genes=[{thresholds['Min_genes_in_cells']}, {thresholds['Max_genes_in_cells']}],"
+              f" counts<{thresholds['Max_counts_in_cells']},"
+              f" mt<{thresholds['Max_percent_mt_in_cells']},"
+              f" ribo<{thresholds['Max_percent_ribo_in_cells']},"
+              f" doublet={row['doublet_cutoffs']}")
 
     return QC_cutoff
 
@@ -379,7 +387,7 @@ def run_per_tissue(working_df, output_h5ad_dir, workdir, QC_cutoff, tissue, my_c
     os.makedirs(figdir, exist_ok=True)
 
     if use_mad:
-        QC_cutoff = compute_mad_thresholds(adata, QC_cutoff, nmads)
+        QC_cutoff = compute_mad_thresholds(adata, QC_cutoff, nmads, key=key)
         mad_tsv = os.path.join(figdir, f"{tissue_std}_MAD_QC_cutoffs.nmads{nmads}.tsv")
         QC_cutoff.to_csv(mad_tsv, sep='\t', index=False)
         print(f"[INFO] MAD QC cutoffs written to {mad_tsv}")

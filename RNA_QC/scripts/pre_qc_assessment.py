@@ -126,7 +126,7 @@ def compress_and_save(adata, output_h5ad_dir, tissue_std):
     print("[INFO] Saving h5ad...")
     adata.write(os.path.join(output_h5ad_dir, f'{tissue_std}_GEX.withQC.h5ad'))
 
-def run_per_tissue(working_df, tissue, output_h5ad_dir, outdir, my_color_palette, scrinvex_dir, nmads, key = "sampleID"):
+def run_per_tissue(working_df, tissue, output_h5ad_dir, outdir, my_color_palette, scrinvex_dir, nmads, key = "sampleID", qc_cutoff_df=None):
     tissue_std = standardize_tissue_name(tissue)
         
     adata_path = os.path.join(output_h5ad_dir, f"{tissue_std}_GEX.raw.h5ad")
@@ -165,23 +165,50 @@ def run_per_tissue(working_df, tissue, output_h5ad_dir, outdir, my_color_palette
     if 'pct_exon_reads' not in adata.obs:
         QC_metrics.remove('pct_exon_reads')
 
-    # Cutoff for percent exon reads (check data, not config path)
-    if 'pct_exon_reads' in adata.obs and adata.obs['pct_exon_reads'].notna().any():
-        Q75 = np.nanpercentile(adata.obs['pct_exon_reads'].dropna(), 75)
-        Q25 = np.nanpercentile(adata.obs['pct_exon_reads'].dropna(), 25)
-        percent_exon_cutoff = Q75 + 1.5 * (Q75 - Q25)
-    else:
-        percent_exon_cutoff = None
+    # Build cutoff lines from Excel QC table if available, otherwise use defaults
+    if qc_cutoff_df is not None and not qc_cutoff_df.empty:
+        row = qc_cutoff_df.iloc[0]  # cutoffs are per-sample but use first row for tissue-wide lines
+        def _safe(val, transform=None):
+            if val == '---' or pd.isna(val):
+                return None
+            v = float(val)
+            return transform(v) if transform else v
 
-    # default cutoffs
-    metrics_with_cutoffs = {
-        'log10_n_genes_by_counts': [np.log10(200), np.log10(5000)],
-        'log10_total_counts': [np.log10(25000)],
-        'pct_counts_mt': [10],
-        'pct_counts_ribo': [10],
-        'pct_exon_reads': [percent_exon_cutoff],
-        'log10_MALAT1_CPM': [np.log10(10)]
-    }
+        min_genes = _safe(row.get('Min_genes_in_cells'), lambda v: np.log10(max(v, 1)))
+        max_genes = _safe(row.get('Max_genes_in_cells'), np.log10)
+        max_counts = _safe(row.get('Max_counts_in_cells'), np.log10)
+        max_mt = _safe(row.get('Max_percent_mt_in_cells'))
+        max_ribo = _safe(row.get('Max_percent_ribo_in_cells'))
+        exon_cutoff = _safe(row.get('Exon_ratio_cutoffs'))
+        malat1_min = _safe(row.get('MALAT1_CPM_cutoffs'), lambda v: np.log10(max(v, 1)))
+
+        metrics_with_cutoffs = {
+            'log10_n_genes_by_counts': [v for v in [min_genes, max_genes] if v is not None],
+            'log10_total_counts': [v for v in [max_counts] if v is not None],
+            'pct_counts_mt': [v for v in [max_mt] if v is not None],
+            'pct_counts_ribo': [v for v in [max_ribo] if v is not None],
+            'pct_exon_reads': [v for v in [exon_cutoff] if v is not None],
+            'log10_MALAT1_CPM': [v for v in [malat1_min] if v is not None],
+        }
+        print(f"[INFO] Pre-QC cutoff lines from Excel: {metrics_with_cutoffs}")
+    else:
+        # Fallback: default cutoffs
+        if 'pct_exon_reads' in adata.obs and adata.obs['pct_exon_reads'].notna().any():
+            Q75 = np.nanpercentile(adata.obs['pct_exon_reads'].dropna(), 75)
+            Q25 = np.nanpercentile(adata.obs['pct_exon_reads'].dropna(), 25)
+            percent_exon_cutoff = Q75 + 1.5 * (Q75 - Q25)
+        else:
+            percent_exon_cutoff = None
+
+        metrics_with_cutoffs = {
+            'log10_n_genes_by_counts': [np.log10(200), np.log10(5000)],
+            'log10_total_counts': [np.log10(25000)],
+            'pct_counts_mt': [10],
+            'pct_counts_ribo': [10],
+            'pct_exon_reads': [percent_exon_cutoff],
+            'log10_MALAT1_CPM': [np.log10(10)]
+        }
+        print("[INFO] Pre-QC cutoff lines using defaults (no Excel cutoffs provided)")
     for metric in QC_metrics:
         plot_qc_violin(adata, metric, tissue, tissue_std, all_colors, metrics_with_cutoffs, figdir, key, nmads=nmads, add_mad_lines=True)
 
@@ -236,28 +263,41 @@ def main(config_path, nmads=5.0):
     sample_metadata = config['paths']['sample_metadata']
     df = pd.read_csv(sample_metadata, sep='\t', header=None, index_col=False,
                      names=["rnaID", "atacID", "species", "donorID", "ageGroup", "gender", "tissue"])
-    
+
+    # Load QC cutoff table (optional — used for red lines in pre-QC plots)
+    df_cutoff_all = None
+    qc_cutoff_table = config['qc'].get('rna_qc_cutoff_table')
+    if qc_cutoff_table and os.path.exists(qc_cutoff_table):
+        print(f"[INFO] Loading QC cutoff table for pre-QC plots: {qc_cutoff_table}")
+        if qc_cutoff_table.endswith('.xlsx') or qc_cutoff_table.endswith('.xls'):
+            df_cutoff_all = pd.read_excel(qc_cutoff_table,
+                                          sheet_name=config['qc'].get('sheet_name', 0), engine='openpyxl')
+        else:
+            df_cutoff_all = pd.read_csv(qc_cutoff_table, sep='\t')
+
     if tissue == "---":
         tissues = sorted(df["tissue"].unique())
         print(f"[INFO] Running analysis for MULTIPLE tissues: {tissues}")
-        
+
         for idx, tissue_name in enumerate(tissues, 1):
             print(f"\n============== Processing tissue: {tissue_name} ({idx}/{len(tissues)}) ==============")
 
             try:
                 working_df = df[df["tissue"] == tissue_name]
+                qc_cutoff = df_cutoff_all[df_cutoff_all['Tissue'] == tissue_name] if df_cutoff_all is not None else None
                 run_per_tissue(working_df, tissue_name, output_h5ad_dir, workdir, my_color_palette,
-                               scrinvex_dir, nmads, key = "sampleID")
+                               scrinvex_dir, nmads, key="sampleID", qc_cutoff_df=qc_cutoff)
             except Exception as e:
                 print(f"[ERROR] Encountered error for tissue {tissue_name}: {e}")
                 traceback.print_exc()
     else:
         print(f"\n========== Processing tissue: {tissue} ==========")
-        
+
         try:
             working_df = df[df["tissue"] == tissue]
-            run_per_tissue(working_df, tissue, output_h5ad_dir, workdir, my_color_palette, 
-                           scrinvex_dir, nmads, key = "sampleID")
+            qc_cutoff = df_cutoff_all[df_cutoff_all['Tissue'] == tissue] if df_cutoff_all is not None else None
+            run_per_tissue(working_df, tissue, output_h5ad_dir, workdir, my_color_palette,
+                           scrinvex_dir, nmads, key="sampleID", qc_cutoff_df=qc_cutoff)
         except Exception as e:
             print(f"[ERROR] Encountered error for tissue {tissue}: {e}")
             traceback.print_exc()
