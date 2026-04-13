@@ -26,20 +26,26 @@ from rna_qc.rna_plots import assign_colors, assign_donor_colors, move_figures_to
 def _compute_mad_for_sample(sample_obs, nmads):
     """Compute MAD-based QC thresholds for a single sample's cells.
 
+    Count metrics (n_genes_by_counts, total_counts) use log1p-transformed
+    values for MAD computation (standard practice for right-skewed count
+    data; see OSCA, Luecken & Theis 2019). Percentage metrics use raw values.
+
     Returns a dict of threshold values.
     """
     thresholds = {}
 
-    # --- n_genes_by_counts (Min and Max) ---
-    med = np.nanmedian(sample_obs['n_genes_by_counts'])
-    mad = median_abs_deviation(sample_obs['n_genes_by_counts'], nan_policy='omit')
-    thresholds['Min_genes_in_cells'] = int(max(0, np.floor(med - nmads * mad)))
-    thresholds['Max_genes_in_cells'] = int(np.ceil(med + nmads * mad))
+    # --- n_genes_by_counts (Min and Max, log-scale MAD) ---
+    log_vals = np.log1p(sample_obs['n_genes_by_counts'].dropna())
+    med = np.nanmedian(log_vals)
+    mad = median_abs_deviation(log_vals, nan_policy='omit')
+    thresholds['Min_genes_in_cells'] = int(max(0, np.floor(np.expm1(med - nmads * mad))))
+    thresholds['Max_genes_in_cells'] = int(np.ceil(np.expm1(med + nmads * mad)))
 
-    # --- total_counts (Max) ---
-    med = np.nanmedian(sample_obs['total_counts'])
-    mad = median_abs_deviation(sample_obs['total_counts'], nan_policy='omit')
-    thresholds['Max_counts_in_cells'] = int(np.ceil(med + nmads * mad))
+    # --- total_counts (Max, log-scale MAD) ---
+    log_vals = np.log1p(sample_obs['total_counts'].dropna())
+    med = np.nanmedian(log_vals)
+    mad = median_abs_deviation(log_vals, nan_policy='omit')
+    thresholds['Max_counts_in_cells'] = int(np.ceil(np.expm1(med + nmads * mad)))
 
     # --- pct_counts_mt (Max, floor of 5%) ---
     med = np.nanmedian(sample_obs['pct_counts_mt'])
@@ -63,14 +69,15 @@ def _compute_mad_for_sample(sample_obs, nmads):
     else:
         thresholds['Exon_ratio_cutoffs'] = '---'
 
-    # --- MALAT1_CPM (Min lower bound, Max upper bound) ---
+    # --- MALAT1_CPM (Min lower bound, Max upper bound, log-scale MAD) ---
     if 'MALAT1_CPM' in sample_obs.columns and sample_obs['MALAT1_CPM'].notna().any():
         vals = sample_obs['MALAT1_CPM'].dropna()
         if len(vals) > 0:
-            med = np.median(vals)
-            mad = median_abs_deviation(vals, nan_policy='omit')
-            thresholds['MALAT1_CPM_cutoffs'] = int(max(0, np.floor(med - nmads * mad)))
-            thresholds['MALAT1_CPM_max_cutoffs'] = int(np.ceil(med + nmads * mad))
+            log_vals = np.log1p(vals)
+            med = np.median(log_vals)
+            mad = median_abs_deviation(log_vals, nan_policy='omit')
+            thresholds['MALAT1_CPM_cutoffs'] = int(max(0, np.floor(np.expm1(med - nmads * mad))))
+            thresholds['MALAT1_CPM_max_cutoffs'] = int(np.ceil(np.expm1(med + nmads * mad)))
         else:
             thresholds['MALAT1_CPM_cutoffs'] = '---'
             thresholds['MALAT1_CPM_max_cutoffs'] = '---'

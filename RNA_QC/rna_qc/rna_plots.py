@@ -20,6 +20,26 @@ import scanpy as sc
 from scipy.stats import median_abs_deviation
 import matplotlib.patches as mpatches
 
+# Count metrics use log1p-transformed MAD (right-skewed distributions).
+# Percentage metrics use raw MAD.
+_LOG_MAD_METRICS = {'n_genes_by_counts', 'total_counts', 'MALAT1_CPM', 'MALAT1_max_CPM'}
+
+
+def _compute_mad_bounds(values, nmads, use_log):
+    """Compute MAD-based lower/upper bounds, optionally on log1p scale."""
+    clean = values.dropna()
+    if len(clean) == 0:
+        return np.nan, np.nan
+    if use_log:
+        log_vals = np.log1p(clean)
+        med = np.median(log_vals)
+        mad = median_abs_deviation(log_vals)
+        return np.expm1(med - nmads * mad), np.expm1(med + nmads * mad)
+    else:
+        med = np.median(clean)
+        mad = median_abs_deviation(clean)
+        return med - nmads * mad, med + nmads * mad
+
 def assign_colors(keys, palette="tab10"):
     """
     Assign hex color codes from a matplotlib palette to an iterable of keys (sample/donor IDs).
@@ -86,11 +106,7 @@ def plot_qc_violin(adata, metric, tissue, tissue_std, all_colors, metrics_with_c
         fig, axes = plt.subplots(1, 2, figsize=(2 * len(donor_order), 4), gridspec_kw={'width_ratios': [1, 3]}, sharey=True)
 
         # --- compute MAD-based thresholds once (drop NaN/None) ---
-        clean_data = all_data.dropna()
-        med = np.median(clean_data)
-        mad = median_abs_deviation(clean_data)
-        lower = med - nmads * mad
-        upper = med + nmads * mad
+        lower, upper = _compute_mad_bounds(all_data, nmads, use_log=metric in _LOG_MAD_METRICS)
 
         # catch warnings specifically for the plotting block to silence divide by zero/overflow
         with warnings.catch_warnings():
@@ -346,11 +362,7 @@ def plot_qc_metrics_violin_by_cluster(adata, tissue, tissue_std, figdir, feature
         fig, ax = plt.subplots(figsize=(12, 4))
 
         # Compute MAD thresholds from all cells for this feature
-        values = dfqc[feature].dropna()
-        med = np.median(values)
-        mad = median_abs_deviation(values)
-        lower = med - nmads * mad
-        upper = med + nmads * mad
+        lower, upper = _compute_mad_bounds(dfqc[feature], nmads, use_log=feature in _LOG_MAD_METRICS)
         
         with warnings.catch_warnings():
             warnings.simplefilter("ignore")
@@ -379,11 +391,7 @@ def plot_qc_metrics_violin_by_cluster(adata, tissue, tissue_std, figdir, feature
             y_min, y_max = dfqc[feature].min(), dfqc[feature].max()
 
             # Compute global MAD thresholds for this feature
-            values = dfqc[feature].dropna()
-            med = np.median(values)
-            mad = median_abs_deviation(values)
-            lower = med - nmads * mad
-            upper = med + nmads * mad
+            lower, upper = _compute_mad_bounds(dfqc[feature], nmads, use_log=feature in _LOG_MAD_METRICS)
             
             for i, ID in enumerate(adata.obs[key].unique()):
                 df_plot = dfqc[dfqc[key] == ID]
