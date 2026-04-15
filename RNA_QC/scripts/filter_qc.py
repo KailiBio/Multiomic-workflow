@@ -88,8 +88,8 @@ def _compute_mad_for_sample(sample_obs, nmads):
     return thresholds
 
 
-def compute_mad_thresholds(adata, QC_cutoff_df, nmads, key='sampleID'):
-    """Compute MAD-based QC thresholds per sample.
+def compute_mad_thresholds(adata, QC_cutoff_df, nmads, key='sampleID', scope='per-sample'):
+    """Compute MAD-based QC thresholds.
 
     Parameters
     ----------
@@ -102,11 +102,15 @@ def compute_mad_thresholds(adata, QC_cutoff_df, nmads, key='sampleID'):
         Number of MADs from the median for threshold computation.
     key : str
         Column in adata.obs identifying samples (default: 'sampleID').
+    scope : str
+        'per-sample' computes MAD per sample (default).
+        'per-tissue' computes MAD across all cells and applies uniform
+        thresholds (more robust, standard practice per OSCA/Luecken & Theis).
 
     Returns
     -------
     DataFrame
-        Modified copy of QC_cutoff_df with per-sample MAD thresholds.
+        Modified copy of QC_cutoff_df with MAD thresholds.
         Doublet cutoffs are preserved from the Excel table.
     """
     QC_cutoff = QC_cutoff_df.copy()
@@ -121,27 +125,44 @@ def compute_mad_thresholds(adata, QC_cutoff_df, nmads, key='sampleID'):
     if 'doublet_cutoffs' not in QC_cutoff.columns:
         QC_cutoff['doublet_cutoffs'] = 1.0
 
-    print(f"[INFO] Computing per-sample MAD thresholds (nmads={nmads}):")
+    if scope == 'per-tissue':
+        # Compute thresholds once from all cells in the tissue
+        thresholds = _compute_mad_for_sample(adata.obs, nmads)
 
-    for idx, row in QC_cutoff.iterrows():
-        sample_id = row['rnaID']
-        sample_mask = adata.obs[key] == sample_id if key in adata.obs.columns else adata.obs['rnaID'] == sample_id
-        sample_obs = adata.obs[sample_mask]
-
-        if len(sample_obs) == 0:
-            print(f"  [WARNING] No cells found for {sample_id} — skipping MAD")
-            continue
-
-        thresholds = _compute_mad_for_sample(sample_obs, nmads)
-        for col, val in thresholds.items():
-            QC_cutoff.at[idx, col] = val
-
-        print(f"  {sample_id} ({len(sample_obs)} cells):"
-              f" genes=[{thresholds['Min_genes_in_cells']}, {thresholds['Max_genes_in_cells']}],"
+        print(f"[INFO] Computing tissue-wide MAD thresholds (nmads={nmads}, {adata.n_obs} cells):")
+        print(f"  genes=[{thresholds['Min_genes_in_cells']}, {thresholds['Max_genes_in_cells']}],"
               f" counts<{thresholds['Max_counts_in_cells']},"
               f" mt<{thresholds['Max_percent_mt_in_cells']},"
-              f" ribo<{thresholds['Max_percent_ribo_in_cells']},"
-              f" doublet={row['doublet_cutoffs']}")
+              f" ribo<{thresholds['Max_percent_ribo_in_cells']}]")
+
+        # Apply same thresholds to every sample row
+        for idx, row in QC_cutoff.iterrows():
+            for col, val in thresholds.items():
+                QC_cutoff.at[idx, col] = val
+            print(f"  {row['rnaID']}: doublet={row['doublet_cutoffs']}")
+    else:
+        # Compute thresholds per sample
+        print(f"[INFO] Computing per-sample MAD thresholds (nmads={nmads}):")
+
+        for idx, row in QC_cutoff.iterrows():
+            sample_id = row['rnaID']
+            sample_mask = adata.obs[key] == sample_id if key in adata.obs.columns else adata.obs['rnaID'] == sample_id
+            sample_obs = adata.obs[sample_mask]
+
+            if len(sample_obs) == 0:
+                print(f"  [WARNING] No cells found for {sample_id} — skipping MAD")
+                continue
+
+            thresholds = _compute_mad_for_sample(sample_obs, nmads)
+            for col, val in thresholds.items():
+                QC_cutoff.at[idx, col] = val
+
+            print(f"  {sample_id} ({len(sample_obs)} cells):"
+                  f" genes=[{thresholds['Min_genes_in_cells']}, {thresholds['Max_genes_in_cells']}],"
+                  f" counts<{thresholds['Max_counts_in_cells']},"
+                  f" mt<{thresholds['Max_percent_mt_in_cells']},"
+                  f" ribo<{thresholds['Max_percent_ribo_in_cells']},"
+                  f" doublet={row['doublet_cutoffs']}")
 
     return QC_cutoff
 
@@ -379,7 +400,7 @@ def compress_and_save_postqc_h5ad(adata, output_h5ad_dir, tissue_std, runtag):
     adata.write(os.path.join(output_h5ad_dir, f'{tissue_std}_GEX.filtered.{runtag}.h5ad'))
 
 def run_per_tissue(working_df, output_h5ad_dir, workdir, QC_cutoff, tissue, my_color_palette, default_cutoffs, runtag,
-                  key, use_mad=False, nmads=5.0):
+                  key, use_mad=False, nmads=5.0, mad_scope='per-sample'):
     tissue_std = standardize_tissue_name(tissue)
 
     adata_path = os.path.join(output_h5ad_dir, f"{tissue_std}_GEX.withQC.h5ad")
@@ -394,7 +415,7 @@ def run_per_tissue(working_df, output_h5ad_dir, workdir, QC_cutoff, tissue, my_c
     os.makedirs(figdir, exist_ok=True)
 
     if use_mad:
-        QC_cutoff = compute_mad_thresholds(adata, QC_cutoff, nmads, key=key)
+        QC_cutoff = compute_mad_thresholds(adata, QC_cutoff, nmads, key=key, scope=mad_scope)
         mad_tsv = os.path.join(figdir, f"{tissue_std}_MAD_QC_cutoffs.nmads{nmads}.tsv")
         QC_cutoff.to_csv(mad_tsv, sep='\t', index=False)
         print(f"[INFO] MAD QC cutoffs written to {mad_tsv}")
@@ -492,7 +513,7 @@ def run_per_tissue(working_df, output_h5ad_dir, workdir, QC_cutoff, tissue, my_c
     print(f"[INFO] Finished QC filtering and post-processing for {tissue}.")
 
 
-def main(config_path, runtag, use_mad=False, nmads=5.0):
+def main(config_path, runtag, use_mad=False, nmads=5.0, mad_scope='per-sample'):
     config = load_config(config_path)
 
     workdir = config['paths']['workdir']
@@ -537,7 +558,7 @@ def main(config_path, runtag, use_mad=False, nmads=5.0):
             try:
                 working_df = df[df["tissue"] == tissue_name]
                 QC_cutoff = df_cutoff_all[df_cutoff_all['Tissue'] == tissue_name]
-                run_per_tissue(working_df, output_h5ad_dir, workdir, QC_cutoff, tissue_name, my_color_palette, default_cutoffs, runtag, "sampleID", use_mad=use_mad, nmads=nmads)
+                run_per_tissue(working_df, output_h5ad_dir, workdir, QC_cutoff, tissue_name, my_color_palette, default_cutoffs, runtag, "sampleID", use_mad=use_mad, nmads=nmads, mad_scope=mad_scope)
             except Exception as e:
                 print(f"[ERROR] QC filtering failed for {tissue_name}: {e}")
                 traceback.print_exc()
@@ -546,7 +567,7 @@ def main(config_path, runtag, use_mad=False, nmads=5.0):
         try:
             working_df = df[df["tissue"] == tissue]
             QC_cutoff = df_cutoff_all[df_cutoff_all['Tissue'] == tissue]
-            run_per_tissue(working_df, output_h5ad_dir, workdir, QC_cutoff, tissue, my_color_palette, default_cutoffs, runtag, "sampleID", use_mad=use_mad, nmads=nmads)
+            run_per_tissue(working_df, output_h5ad_dir, workdir, QC_cutoff, tissue, my_color_palette, default_cutoffs, runtag, "sampleID", use_mad=use_mad, nmads=nmads, mad_scope=mad_scope)
         except Exception as e:
             print(f"[ERROR] QC filtering failed for {tissue}: {e}")
             traceback.print_exc()
@@ -559,5 +580,7 @@ if __name__ == "__main__":
                         help="Use MAD-based thresholds instead of Excel cutoffs for cell QC metrics")
     parser.add_argument("--nmads", type=float, default=5.0,
                         help="Number of MADs from median for threshold computation (default: 5.0)")
+    parser.add_argument("--mad-scope", choices=["per-sample", "per-tissue"], default="per-sample",
+                        help="Compute MAD per sample or across all cells in the tissue (default: per-sample)")
     args = parser.parse_args()
-    main(args.config, args.runtag, use_mad=args.use_mad, nmads=args.nmads)
+    main(args.config, args.runtag, use_mad=args.use_mad, nmads=args.nmads, mad_scope=args.mad_scope)

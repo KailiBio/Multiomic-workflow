@@ -140,8 +140,8 @@ def run_per_tissue(workdir, output_h5ad_dir, qc_cutoff_tissue, tissue, my_color_
     ((adata.obs["log10_MALAT1_CPM"] == np.inf) | (adata.obs["log10_MALAT1_CPM"] == -np.inf)).all()):
         qc_metrics.remove("log10_MALAT1_CPM")
     plot_umap_highlight_by_qc_metrics(adata, tissue, tissue_std, figdir, qc_metrics, key)
-    plot_qc_metrics_violin_by_cluster(adata, tissue, tissue_std, figdir, qc_metrics[1:], key, 
-                                      nmads, add_mad_lines=True)
+    plot_qc_metrics_violin_by_cluster(adata, tissue, tissue_std, figdir, qc_metrics[1:], key,
+                                      nmads, add_mad_lines=False)
     
     # Save outputs
     save_stats(adata, figdir, tissue_std, runtag)
