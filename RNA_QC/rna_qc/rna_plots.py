@@ -96,7 +96,7 @@ def move_figures_to_newdir(output_figures_dir, old, new):
     if os.path.exists(old_path):
         os.rename(old_path, new_path)
 
-def plot_qc_violin(adata, metric, tissue, tissue_std, all_colors, metrics_with_cutoffs, figdir, key, nmads, add_mad_lines=True):
+def plot_qc_violin(adata, metric, tissue, tissue_std, all_colors, metrics_with_cutoffs, figdir, key, nmads, add_mad_lines=True, mad_scope='per-sample'):
     if metric in adata.obs:
         print(f"[INFO] Plotting violin for: {metric}...")
         all_data = pd.to_numeric(adata.obs[metric], errors='coerce').copy()
@@ -105,8 +105,9 @@ def plot_qc_violin(adata, metric, tissue, tissue_std, all_colors, metrics_with_c
         donor_order = list(all_colors.keys())
         fig, axes = plt.subplots(1, 2, figsize=(2 * len(donor_order), 4), gridspec_kw={'width_ratios': [1, 3]}, sharey=True)
 
-        # --- compute MAD-based thresholds once (drop NaN/None) ---
-        lower, upper = _compute_mad_bounds(all_data, nmads, use_log=metric in _LOG_MAD_METRICS)
+        # --- compute tissue-wide MAD thresholds (always used for left panel) ---
+        use_log = metric in _LOG_MAD_METRICS
+        lower, upper = _compute_mad_bounds(all_data, nmads, use_log=use_log)
 
         # catch warnings specifically for the plotting block to silence divide by zero/overflow
         with warnings.catch_warnings():
@@ -155,9 +156,25 @@ def plot_qc_violin(adata, metric, tissue, tissue_std, all_colors, metrics_with_c
 
         # --- add MAD-based lower/upper lines ---
         if add_mad_lines:
-            for ax in axes:
-                ax.axhline(y=lower, color='blue', linestyle='--', linewidth=1, label='MAD lower')
-                ax.axhline(y=upper, color='blue', linestyle='--', linewidth=1, label='MAD upper')
+            # Left panel: tissue-wide MAD lines
+            axes[0].axhline(y=lower, color='blue', linestyle='--', linewidth=1, label='MAD lower')
+            axes[0].axhline(y=upper, color='blue', linestyle='--', linewidth=1, label='MAD upper')
+
+            if mad_scope == 'per-sample':
+                # Right panel: per-sample MAD segments under each violin
+                for i, sample in enumerate(donor_order):
+                    sample_vals = df.loc[df[key] == sample, metric]
+                    s_lower, s_upper = _compute_mad_bounds(sample_vals, nmads, use_log=use_log)
+                    if np.isfinite(s_lower):
+                        axes[1].plot([i - 0.4, i + 0.4], [s_lower, s_lower],
+                                     color='blue', linestyle='--', linewidth=1)
+                    if np.isfinite(s_upper):
+                        axes[1].plot([i - 0.4, i + 0.4], [s_upper, s_upper],
+                                     color='blue', linestyle='--', linewidth=1)
+            else:
+                # Right panel: tissue-wide MAD lines (same as left)
+                axes[1].axhline(y=lower, color='blue', linestyle='--', linewidth=1)
+                axes[1].axhline(y=upper, color='blue', linestyle='--', linewidth=1)
         
         fig.suptitle(f'{metric} on {tissue}', fontsize=14)
         plt.tight_layout()

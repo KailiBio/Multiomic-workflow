@@ -126,7 +126,7 @@ def compress_and_save(adata, output_h5ad_dir, tissue_std):
     print("[INFO] Saving h5ad...")
     adata.write(os.path.join(output_h5ad_dir, f'{tissue_std}_GEX.withQC.h5ad'))
 
-def run_per_tissue(working_df, tissue, output_h5ad_dir, outdir, my_color_palette, scrinvex_dir, nmads, key = "sampleID", qc_cutoff_df=None):
+def run_per_tissue(working_df, tissue, output_h5ad_dir, outdir, my_color_palette, scrinvex_dir, nmads, key = "sampleID", qc_cutoff_df=None, mad_scope='per-sample'):
     tissue_std = standardize_tissue_name(tissue)
         
     adata_path = os.path.join(output_h5ad_dir, f"{tissue_std}_GEX.raw.h5ad")
@@ -210,7 +210,7 @@ def run_per_tissue(working_df, tissue, output_h5ad_dir, outdir, my_color_palette
         }
         print("[INFO] Pre-QC cutoff lines using defaults (no Excel cutoffs provided)")
     for metric in QC_metrics:
-        plot_qc_violin(adata, metric, tissue, tissue_std, all_colors, metrics_with_cutoffs, figdir, key, nmads=nmads, add_mad_lines=True)
+        plot_qc_violin(adata, metric, tissue, tissue_std, all_colors, metrics_with_cutoffs, figdir, key, nmads=nmads, add_mad_lines=True, mad_scope=mad_scope)
 
     # Joint scatter gene/cell counts
     plot_qc_jointplot(
@@ -248,7 +248,7 @@ def run_per_tissue(working_df, tissue, output_h5ad_dir, outdir, my_color_palette
     move_figures_to_newdir(outdir, old="figures", new="pre_qc_assessment")
     print(f"[INFO] RNA QC pre-assessment complete for {tissue}.")
 
-def main(config_path, nmads=5.0):
+def main(config_path, nmads=5.0, mad_scope='per-sample'):
     config = load_config(config_path)
 
     workdir = config['paths']['workdir']
@@ -287,7 +287,7 @@ def main(config_path, nmads=5.0):
                 working_df = df[df["tissue"] == tissue_name]
                 qc_cutoff = df_cutoff_all[df_cutoff_all['Tissue'] == tissue_name] if df_cutoff_all is not None else None
                 run_per_tissue(working_df, tissue_name, output_h5ad_dir, workdir, my_color_palette,
-                               scrinvex_dir, nmads, key="sampleID", qc_cutoff_df=qc_cutoff)
+                               scrinvex_dir, nmads, key="sampleID", qc_cutoff_df=qc_cutoff, mad_scope=mad_scope)
             except Exception as e:
                 print(f"[ERROR] Encountered error for tissue {tissue_name}: {e}")
                 traceback.print_exc()
@@ -298,7 +298,7 @@ def main(config_path, nmads=5.0):
             working_df = df[df["tissue"] == tissue]
             qc_cutoff = df_cutoff_all[df_cutoff_all['Tissue'] == tissue] if df_cutoff_all is not None else None
             run_per_tissue(working_df, tissue, output_h5ad_dir, workdir, my_color_palette,
-                           scrinvex_dir, nmads, key="sampleID", qc_cutoff_df=qc_cutoff)
+                           scrinvex_dir, nmads, key="sampleID", qc_cutoff_df=qc_cutoff, mad_scope=mad_scope)
         except Exception as e:
             print(f"[ERROR] Encountered error for tissue {tissue}: {e}")
             traceback.print_exc()
@@ -309,6 +309,8 @@ if __name__ == "__main__":
     parser.add_argument("config", help="YAML config file describing tissue, paths, etc.")
     parser.add_argument("--nmads", type=float, default=5.0,
                         help="number of MADs from the median used to define cutoffs (default: 5).")
-    
+    parser.add_argument("--mad-scope", choices=["per-sample", "per-tissue"], default="per-sample",
+                        help="Show per-sample or per-tissue MAD lines on violin plots (default: per-sample).")
+
     args = parser.parse_args()
-    main(args.config, nmads=args.nmads)
+    main(args.config, nmads=args.nmads, mad_scope=args.mad_scope)
