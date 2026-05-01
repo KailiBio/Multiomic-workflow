@@ -147,34 +147,41 @@ def plot_qc_violin(adata, metric, tissue, tissue_std, all_colors, metrics_with_c
             borderaxespad=0.
         )
         
-        # Add cutoffs
-        if metric in metrics_with_cutoffs:
-            for v in metrics_with_cutoffs[metric]:
-                if v is not None and np.isfinite(v):
-                    axes[0].axhline(y=v, color='red', linestyle='--', linewidth=1)
-                    axes[1].axhline(y=v, color='red', linestyle='--', linewidth=1)
+        # Cutoff bounds for this metric: dict with optional 'lower'/'upper' keys.
+        bounds = metrics_with_cutoffs.get(metric, {}) or {}
+        has_lower = bounds.get('lower') is not None and np.isfinite(bounds.get('lower'))
+        has_upper = bounds.get('upper') is not None and np.isfinite(bounds.get('upper'))
 
-        # --- add MAD-based lower/upper lines ---
+        # Red cutoff lines
+        if has_lower:
+            axes[0].axhline(y=bounds['lower'], color='red', linestyle='--', linewidth=1)
+            axes[1].axhline(y=bounds['lower'], color='red', linestyle='--', linewidth=1)
+        if has_upper:
+            axes[0].axhline(y=bounds['upper'], color='red', linestyle='--', linewidth=1)
+            axes[1].axhline(y=bounds['upper'], color='red', linestyle='--', linewidth=1)
+
+        # MAD lines — only on sides where a cutoff exists
         if add_mad_lines:
-            # Left panel: tissue-wide MAD lines
-            axes[0].axhline(y=lower, color='blue', linestyle='--', linewidth=1, label='MAD lower')
-            axes[0].axhline(y=upper, color='blue', linestyle='--', linewidth=1, label='MAD upper')
+            if has_lower:
+                axes[0].axhline(y=lower, color='blue', linestyle='--', linewidth=1, label='MAD lower')
+            if has_upper:
+                axes[0].axhline(y=upper, color='blue', linestyle='--', linewidth=1, label='MAD upper')
 
             if mad_scope == 'per-sample':
-                # Right panel: per-sample MAD segments under each violin
                 for i, sample in enumerate(donor_order):
                     sample_vals = df.loc[df[key] == sample, metric]
                     s_lower, s_upper = _compute_mad_bounds(sample_vals, nmads, use_log=use_log)
-                    if np.isfinite(s_lower):
+                    if has_lower and np.isfinite(s_lower):
                         axes[1].plot([i - 0.4, i + 0.4], [s_lower, s_lower],
                                      color='blue', linestyle='--', linewidth=1)
-                    if np.isfinite(s_upper):
+                    if has_upper and np.isfinite(s_upper):
                         axes[1].plot([i - 0.4, i + 0.4], [s_upper, s_upper],
                                      color='blue', linestyle='--', linewidth=1)
             else:
-                # Right panel: tissue-wide MAD lines (same as left)
-                axes[1].axhline(y=lower, color='blue', linestyle='--', linewidth=1)
-                axes[1].axhline(y=upper, color='blue', linestyle='--', linewidth=1)
+                if has_lower:
+                    axes[1].axhline(y=lower, color='blue', linestyle='--', linewidth=1)
+                if has_upper:
+                    axes[1].axhline(y=upper, color='blue', linestyle='--', linewidth=1)
         
         fig.suptitle(f'{metric} on {tissue}', fontsize=14)
         plt.tight_layout()

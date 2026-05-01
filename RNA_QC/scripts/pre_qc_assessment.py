@@ -158,12 +158,19 @@ def run_per_tissue(working_df, tissue, output_h5ad_dir, outdir, my_color_palette
     
     # Violin plots for cell QC
     QC_metrics = ['log10_n_genes_by_counts', 'log10_total_counts', 'pct_counts_in_top_50_genes',
-                  'pct_counts_mt', 'pct_counts_ribo', 'pct_counts_hb', 'pct_exon_reads', 
+                  'pct_counts_mt', 'pct_counts_ribo', 'pct_counts_hb', 'pct_exon_reads',
                   'log10_MALAT1_CPM']
     if 'pct_exon_reads' not in adata.obs:
         QC_metrics.remove('pct_exon_reads')
+    if ('log10_MALAT1_CPM' not in adata.obs or
+        adata.obs['log10_MALAT1_CPM'].isnull().all() or
+        ((adata.obs['log10_MALAT1_CPM'] == np.inf) | (adata.obs['log10_MALAT1_CPM'] == -np.inf)).all()):
+        QC_metrics.remove('log10_MALAT1_CPM')
+        print("[INFO] Skipping MALAT1 plots — gene absent from reference or all values NaN/inf.")
 
-    # Build cutoff lines from Excel QC table if available, otherwise use defaults
+    # Build cutoff bounds from Excel QC table if available, otherwise use defaults.
+    # Each metric maps to {'lower': v_or_None, 'upper': v_or_None}; MAD lines are
+    # drawn only on sides where a cutoff exists.
     if qc_cutoff_df is not None and not qc_cutoff_df.empty:
         row = qc_cutoff_df.iloc[0]  # cutoffs are per-sample but use first row for tissue-wide lines
         def _safe(val, transform=None):
@@ -172,21 +179,16 @@ def run_per_tissue(working_df, tissue, output_h5ad_dir, outdir, my_color_palette
             v = float(val)
             return transform(v) if transform else v
 
-        min_genes = _safe(row.get('Min_genes_in_cells'), lambda v: np.log10(max(v, 1)))
-        max_genes = _safe(row.get('Max_genes_in_cells'), np.log10)
-        max_counts = _safe(row.get('Max_counts_in_cells'), np.log10)
-        max_mt = _safe(row.get('Max_percent_mt_in_cells'))
-        max_ribo = _safe(row.get('Max_percent_ribo_in_cells'))
-        exon_cutoff = _safe(row.get('Exon_ratio_cutoffs'))
-        malat1_min = _safe(row.get('MALAT1_CPM_cutoffs'), lambda v: np.log10(max(v, 1)))
-
         metrics_with_cutoffs = {
-            'log10_n_genes_by_counts': [v for v in [min_genes, max_genes] if v is not None],
-            'log10_total_counts': [v for v in [max_counts] if v is not None],
-            'pct_counts_mt': [v for v in [max_mt] if v is not None],
-            'pct_counts_ribo': [v for v in [max_ribo] if v is not None],
-            'pct_exon_reads': [v for v in [exon_cutoff] if v is not None],
-            'log10_MALAT1_CPM': [v for v in [malat1_min] if v is not None],
+            'log10_n_genes_by_counts': {
+                'lower': _safe(row.get('Min_genes_in_cells'), lambda v: np.log10(max(v, 1))),
+                'upper': _safe(row.get('Max_genes_in_cells'), np.log10),
+            },
+            'log10_total_counts': {'upper': _safe(row.get('Max_counts_in_cells'), np.log10)},
+            'pct_counts_mt': {'upper': _safe(row.get('Max_percent_mt_in_cells'))},
+            'pct_counts_ribo': {'upper': _safe(row.get('Max_percent_ribo_in_cells'))},
+            'pct_exon_reads': {'upper': _safe(row.get('Exon_ratio_cutoffs'))},
+            'log10_MALAT1_CPM': {'lower': _safe(row.get('MALAT1_CPM_cutoffs'), lambda v: np.log10(max(v, 1)))},
         }
         print(f"[INFO] Pre-QC cutoff lines from Excel: {metrics_with_cutoffs}")
     else:
@@ -199,12 +201,12 @@ def run_per_tissue(working_df, tissue, output_h5ad_dir, outdir, my_color_palette
             percent_exon_cutoff = None
 
         metrics_with_cutoffs = {
-            'log10_n_genes_by_counts': [np.log10(200), np.log10(5000)],
-            'log10_total_counts': [np.log10(25000)],
-            'pct_counts_mt': [10],
-            'pct_counts_ribo': [10],
-            'pct_exon_reads': [percent_exon_cutoff],
-            'log10_MALAT1_CPM': [np.log10(10)]
+            'log10_n_genes_by_counts': {'lower': np.log10(200), 'upper': np.log10(5000)},
+            'log10_total_counts': {'upper': np.log10(25000)},
+            'pct_counts_mt': {'upper': 10},
+            'pct_counts_ribo': {'upper': 10},
+            'pct_exon_reads': {'upper': percent_exon_cutoff},
+            'log10_MALAT1_CPM': {'lower': np.log10(10)},
         }
         print("[INFO] Pre-QC cutoff lines using defaults (no Excel cutoffs provided)")
     for metric in QC_metrics:
