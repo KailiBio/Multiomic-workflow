@@ -107,15 +107,12 @@ def run_per_tissue(workdir, output_h5ad_dir, qc_cutoff_tissue, tissue, my_color_
     
     print(f'[INFO] all figure plots by {key}')
     if key == 'donorID':
-        all_colors = assign_colors(sorted(set(adata.obs[key])), palette=my_color_palette)
+        all_colors = assign_donor_colors(adata.obs, my_color_palette, key = key)
         print(f"use colors: {all_colors}")
     elif key == 'sampleID':
-        sample_colors={}
-        #all_colors = assign_donor_colors(working_df, sample_colors, key = 'rnaID')
-        all_colors = assign_colors(sorted(set(adata.obs[key])), palette=my_color_palette)
+        all_colors = assign_colors(sorted(adata.obs['sampleID'].unique()), palette=my_color_palette)
         print(f"use colors: {all_colors}")
     elif key == 'aliquotID':
-        aliquot_colors={}
         all_colors = assign_donor_colors(adata.obs, my_color_palette, key = 'aliquotID')
         print(f"use colors: {all_colors}")
     else:
@@ -142,8 +139,8 @@ def run_per_tissue(workdir, output_h5ad_dir, qc_cutoff_tissue, tissue, my_color_
     ((adata.obs["log10_MALAT1_CPM"] == np.inf) | (adata.obs["log10_MALAT1_CPM"] == -np.inf)).all()):
         qc_metrics.remove("log10_MALAT1_CPM")
     plot_umap_highlight_by_qc_metrics(adata, tissue, tissue_std, figdir, qc_metrics, key)
-    plot_qc_metrics_violin_by_cluster(adata, tissue, tissue_std, figdir, qc_metrics[1:], key, 
-                                      nmads, add_mad_lines=True)
+    plot_qc_metrics_violin_by_cluster(adata, tissue, tissue_std, figdir, qc_metrics[1:], key,
+                                      nmads, add_mad_lines=False)
     
     # Save outputs
     save_stats(adata, figdir, tissue_std, runtag)
@@ -162,7 +159,7 @@ def main(config_path, runtag, key, nmads=5.0):
     tissue = config['params']['tissue']
 
     donor_colors = config['color'].get("donor_colors")
-    my_color_palette = config["my_color_palette"]
+    my_color_palette = donor_colors if donor_colors else config["my_color_palette"]
     
     # Load qc cutoff table
     qc_cutoff_table = config['qc']['rna_qc_cutoff_table']
