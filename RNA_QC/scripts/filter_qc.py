@@ -16,155 +16,10 @@ import pandas as pd
 import scanpy as sc
 import anndata as ad
 import scipy.sparse
-from scipy.stats import median_abs_deviation
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 from rna_qc.utils import load_config, standardize_tissue_name
 from rna_qc.rna_plots import assign_colors, assign_donor_colors, move_figures_to_newdir, plot_upset, run_umap_clustering, plot_doublet_hist
-
-def _compute_mad_for_sample(sample_obs, nmads):
-    """Compute MAD-based QC thresholds for a single sample's cells.
-
-    Count metrics (n_genes_by_counts, total_counts) use log1p-transformed
-    values for MAD computation (standard practice for right-skewed count
-    data; see OSCA, Luecken & Theis 2019). Percentage metrics use raw values.
-
-    Returns a dict of threshold values.
-    """
-    thresholds = {}
-
-    # --- n_genes_by_counts (Min and Max, log-scale MAD) ---
-    log_vals = np.log1p(sample_obs['n_genes_by_counts'].dropna())
-    med = np.nanmedian(log_vals)
-    mad = median_abs_deviation(log_vals, nan_policy='omit')
-    thresholds['Min_genes_in_cells'] = int(max(0, np.floor(np.expm1(med - nmads * mad))))
-    thresholds['Max_genes_in_cells'] = int(np.ceil(np.expm1(med + nmads * mad)))
-
-    # --- total_counts (Max, log-scale MAD) ---
-    log_vals = np.log1p(sample_obs['total_counts'].dropna())
-    med = np.nanmedian(log_vals)
-    mad = median_abs_deviation(log_vals, nan_policy='omit')
-    thresholds['Max_counts_in_cells'] = int(np.ceil(np.expm1(med + nmads * mad)))
-
-    # --- pct_counts_mt (Max, floor of 5%) ---
-    med = np.nanmedian(sample_obs['pct_counts_mt'])
-    mad = median_abs_deviation(sample_obs['pct_counts_mt'], nan_policy='omit')
-    thresholds['Max_percent_mt_in_cells'] = round(min(100, max(5.0, med + nmads * mad)), 2)
-
-    # --- pct_counts_ribo (Max, floor of 5%) ---
-    med = np.nanmedian(sample_obs['pct_counts_ribo'])
-    mad = median_abs_deviation(sample_obs['pct_counts_ribo'], nan_policy='omit')
-    thresholds['Max_percent_ribo_in_cells'] = round(min(100, max(5.0, med + nmads * mad)), 2)
-
-    # --- Exon_ratio_cutoffs (upper bound only, no lower MAD) ---
-    if 'pct_exon_reads' in sample_obs.columns and sample_obs['pct_exon_reads'].notna().any():
-        vals = sample_obs['pct_exon_reads'].dropna()
-        if len(vals) > 0:
-            Q75 = np.percentile(vals, 75)
-            Q25 = np.percentile(vals, 25)
-            thresholds['Exon_ratio_cutoffs'] = round(min(100, Q75 + 1.5 * (Q75 - Q25)), 2)
-        else:
-            thresholds['Exon_ratio_cutoffs'] = '---'
-    else:
-        thresholds['Exon_ratio_cutoffs'] = '---'
-
-    # --- MALAT1_CPM (Min lower bound, Max upper bound, log-scale MAD) ---
-    if 'MALAT1_CPM' in sample_obs.columns and sample_obs['MALAT1_CPM'].notna().any():
-        vals = sample_obs['MALAT1_CPM'].dropna()
-        if len(vals) > 0:
-            log_vals = np.log1p(vals)
-            med = np.median(log_vals)
-            mad = median_abs_deviation(log_vals, nan_policy='omit')
-            thresholds['MALAT1_CPM_cutoffs'] = int(max(0, np.floor(np.expm1(med - nmads * mad))))
-            thresholds['MALAT1_CPM_max_cutoffs'] = int(np.ceil(np.expm1(med + nmads * mad)))
-        else:
-            thresholds['MALAT1_CPM_cutoffs'] = '---'
-            thresholds['MALAT1_CPM_max_cutoffs'] = '---'
-    else:
-        thresholds['MALAT1_CPM_cutoffs'] = '---'
-        thresholds['MALAT1_CPM_max_cutoffs'] = '---'
-
-    return thresholds
-
-
-def compute_mad_thresholds(adata, QC_cutoff_df, nmads, key='sampleID', scope='per-sample'):
-    """Compute MAD-based QC thresholds.
-
-    Parameters
-    ----------
-    adata : AnnData
-        Annotated data with QC metrics in obs.
-    QC_cutoff_df : DataFrame
-        Per-sample QC cutoff table (from Excel). A copy is returned with
-        cell-level thresholds overwritten by MAD-derived values.
-    nmads : float
-        Number of MADs from the median for threshold computation.
-    key : str
-        Column in adata.obs identifying samples (default: 'sampleID').
-    scope : str
-        'per-sample' computes MAD per sample (default).
-        'per-tissue' computes MAD across all cells and applies uniform
-        thresholds (more robust, standard practice per OSCA/Luecken & Theis).
-
-    Returns
-    -------
-    DataFrame
-        Modified copy of QC_cutoff_df with MAD thresholds.
-        Doublet cutoffs are preserved from the Excel table.
-    """
-    QC_cutoff = QC_cutoff_df.copy()
-
-    if QC_cutoff.empty:
-        raise ValueError(
-            "QC cutoff table is empty for this tissue. "
-            "Check that the tissue name in the config matches the Excel sheet."
-        )
-
-    # Doublet cutoffs: keep from Excel (bimodal distribution makes MAD unstable)
-    if 'doublet_cutoffs' not in QC_cutoff.columns:
-        QC_cutoff['doublet_cutoffs'] = 1.0
-
-    if scope == 'per-tissue':
-        # Compute thresholds once from all cells in the tissue
-        thresholds = _compute_mad_for_sample(adata.obs, nmads)
-
-        print(f"[INFO] Computing tissue-wide MAD thresholds (nmads={nmads}, {adata.n_obs} cells):")
-        print(f"  genes=[{thresholds['Min_genes_in_cells']}, {thresholds['Max_genes_in_cells']}],"
-              f" counts<{thresholds['Max_counts_in_cells']},"
-              f" mt<{thresholds['Max_percent_mt_in_cells']},"
-              f" ribo<{thresholds['Max_percent_ribo_in_cells']}]")
-
-        # Apply same thresholds to every sample row
-        for idx, row in QC_cutoff.iterrows():
-            for col, val in thresholds.items():
-                QC_cutoff.at[idx, col] = val
-            print(f"  {row['rnaID']}: doublet={row['doublet_cutoffs']}")
-    else:
-        # Compute thresholds per sample
-        print(f"[INFO] Computing per-sample MAD thresholds (nmads={nmads}):")
-
-        for idx, row in QC_cutoff.iterrows():
-            sample_id = row['rnaID']
-            sample_mask = adata.obs[key] == sample_id if key in adata.obs.columns else adata.obs['rnaID'] == sample_id
-            sample_obs = adata.obs[sample_mask]
-
-            if len(sample_obs) == 0:
-                print(f"  [WARNING] No cells found for {sample_id} — skipping MAD")
-                continue
-
-            thresholds = _compute_mad_for_sample(sample_obs, nmads)
-            for col, val in thresholds.items():
-                QC_cutoff.at[idx, col] = val
-
-            print(f"  {sample_id} ({len(sample_obs)} cells):"
-                  f" genes=[{thresholds['Min_genes_in_cells']}, {thresholds['Max_genes_in_cells']}],"
-                  f" counts<{thresholds['Max_counts_in_cells']},"
-                  f" mt<{thresholds['Max_percent_mt_in_cells']},"
-                  f" ribo<{thresholds['Max_percent_ribo_in_cells']},"
-                  f" doublet={row['doublet_cutoffs']}")
-
-    return QC_cutoff
-
 
 def prepare_upset_summary_allQC(sample_data, QC_cutoff_dict, global_obs, default_cutoffs):
     sampleID = sample_data['sampleID'].iloc[0].strip()
@@ -292,8 +147,8 @@ def export_doublet_calls_by_sample(adata, QC_cutoff_dict, tissue, tissue_std, fi
 
         # plot the doublet distribution with filter cutoff
         plot_doublet_hist(
-            adata=adata_sel, tissue=tissue, tissue_std=tissue_std,
-            figdir=figdir, key='sampleID', probability_cutoff=doublet_cutoff, stage="filterqc")
+            adata=adata_sel, donor_col='sampleID', tissue=tissue, tissue_std=tissue_std,
+            figdir=figdir, key='sampleID', probability_cutoff=doublet_cutoff)
 
 
 def filter_and_process_adata(adata, df, QC_cutoff_dict, tissue, tissue_std, log_file_dir, key):
@@ -312,41 +167,22 @@ def filter_and_process_adata(adata, df, QC_cutoff_dict, tissue, tissue_std, log_
         log_lines.append(f'total cellbarcodes in {ID}: {len(adata_process.obs_names)}\n')
 
         cutoff = QC_cutoff_dict[ID]
-        n_before = len(adata_process)
 
         adata_process = adata_process[adata_process.obs['n_genes_by_counts'] > int(cutoff['Min_genes_in_cells']), :]
-        print(f"[INFO]   after Min_genes ({cutoff['Min_genes_in_cells']}): {n_before} -> {len(adata_process)} cells")
         adata_process = adata_process[adata_process.obs['n_genes_by_counts'] < int(cutoff['Max_genes_in_cells']), :]
-        print(f"[INFO]   after Max_genes ({cutoff['Max_genes_in_cells']}): -> {len(adata_process)} cells")
         adata_process = adata_process[adata_process.obs['total_counts'] < int(cutoff['Max_counts_in_cells']), :]
-        print(f"[INFO]   after Max_counts ({cutoff['Max_counts_in_cells']}): -> {len(adata_process)} cells")
         if cutoff['Max_percent_mt_in_cells'] != '---':
             adata_process = adata_process[adata_process.obs['pct_counts_mt'] < float(cutoff['Max_percent_mt_in_cells']), :]
-            print(f"[INFO]   after pct_mt ({cutoff['Max_percent_mt_in_cells']}): -> {len(adata_process)} cells")
         if cutoff['Max_percent_ribo_in_cells'] != '---':
             adata_process = adata_process[adata_process.obs['pct_counts_ribo'] < float(cutoff['Max_percent_ribo_in_cells']), :]
-            print(f"[INFO]   after pct_ribo ({cutoff['Max_percent_ribo_in_cells']}): -> {len(adata_process)} cells")
         if 'pct_exon_reads' in adata_process.obs:
             if cutoff['Exon_ratio_cutoffs'] != '---':
                 adata_process = adata_process[adata_process.obs['pct_exon_reads'] < float(cutoff['Exon_ratio_cutoffs']), :]
-                print(f"[INFO]   after Exon_ratio ({cutoff['Exon_ratio_cutoffs']}): -> {len(adata_process)} cells")
         if cutoff['MALAT1_CPM_cutoffs'] != '---':
-            if adata_process.obs['MALAT1_CPM'].notna().any():
-                adata_process = adata_process[adata_process.obs['MALAT1_CPM'] > int(cutoff['MALAT1_CPM_cutoffs']), :]
-                print(f"[INFO]   after MALAT1_CPM min ({cutoff['MALAT1_CPM_cutoffs']}): -> {len(adata_process)} cells")
-            else:
-                print(f"[WARNING] Skipping MALAT1_CPM min filter for {ID}: all values are NaN (gene may not exist in reference)")
+            adata_process = adata_process[adata_process.obs['MALAT1_CPM'] > int(cutoff['MALAT1_CPM_cutoffs']), :]
         if cutoff['MALAT1_CPM_max_cutoffs'] != '---':
-            if adata_process.obs['MALAT1_CPM'].notna().any():
-                adata_process = adata_process[adata_process.obs['MALAT1_CPM'] < int(cutoff['MALAT1_CPM_max_cutoffs']), :]
-                print(f"[INFO]   after MALAT1_CPM max ({cutoff['MALAT1_CPM_max_cutoffs']}): -> {len(adata_process)} cells")
-            else:
-                print(f"[WARNING] Skipping MALAT1_CPM max filter for {ID}: all values are NaN")
-        # Doublet filter: keep cells with NaN probabilities (doublet detection may have failed)
-        doublet_mask = adata_process.obs['doublet_probabilities'] < float(cutoff['doublet_cutoffs'])
-        doublet_mask = doublet_mask | adata_process.obs['doublet_probabilities'].isna()
-        adata_process = adata_process[doublet_mask, :]
-        print(f"[INFO]   after doublet ({cutoff['doublet_cutoffs']}): -> {len(adata_process)} cells")
+            adata_process = adata_process[adata_process.obs['MALAT1_CPM'] < int(cutoff['MALAT1_CPM_max_cutoffs']), :]
+        adata_process = adata_process[adata_process.obs['doublet_probabilities'] < float(cutoff['doublet_cutoffs']), :]
         log_lines.append(f'num of cellbarcodes after QC filtering in {ID}: {len(adata_process.obs_names)}\n\n')
         adata_filter = ad.concat([adata_process, adata_remain])
     log_lines.append(f'\nnum of cellbarcodes after QC filtering: {len(adata_filter.obs_names)}')
@@ -359,25 +195,23 @@ def filter_and_process_adata(adata, df, QC_cutoff_dict, tissue, tissue_std, log_
         
     return adata_filter
 
-def downstream_process(adata, tissue_std, figdir, all_colors, include_malat1=True):
+def downstream_process(adata, tissue_std, figdir, all_colors):
     adata.layers["rawcounts"] = adata.X.copy()
-
+    
     sc.pp.normalize_total(adata)
     sc.pp.log1p(adata)
     sc.pp.highly_variable_genes(adata, flavor='seurat')
-
+    
     sc.pl.highly_variable_genes(adata, save=f'.highlyVariableGenes.filterqc.{tissue_std}.png', show=False)
     with warnings.catch_warnings():
-        warnings.filterwarnings("ignore", category=RuntimeWarning)
+        warnings.filterwarnings("ignore", category=RuntimeWarning) 
         sc.tl.pca(adata, svd_solver='arpack')
     sc.pl.pca_variance_ratio(adata, n_pcs=50, log=True, save=f'.var_ratio.filterqc.{tissue_std}.png', show=False)
-
+    
     # PCA colored by donorID/QC/batch
     pca_list = ["sampleID", "pct_counts_mt","pct_counts_ribo", "pct_exon_reads", "log10_MALAT1_CPM" ]
     if "pct_exon_reads" not in adata.obs:
         pca_list.remove('pct_exon_reads')
-    if not include_malat1 or "log10_MALAT1_CPM" not in adata.obs:
-        pca_list.remove('log10_MALAT1_CPM')
     sc.pl.pca(
         adata,
         color=pca_list,
@@ -399,7 +233,7 @@ def compress_and_save_postqc_h5ad(adata, output_h5ad_dir, tissue_std, runtag):
     adata.write(os.path.join(output_h5ad_dir, f'{tissue_std}_GEX.filtered.{runtag}.h5ad'))
 
 def run_per_tissue(working_df, output_h5ad_dir, workdir, QC_cutoff, tissue, my_color_palette, default_cutoffs, runtag,
-                  key, use_mad=False, nmads=5.0, mad_scope='per-sample'):
+                  key):
     tissue_std = standardize_tissue_name(tissue)
 
     adata_path = os.path.join(output_h5ad_dir, f"{tissue_std}_GEX.withQC.h5ad")
@@ -412,13 +246,6 @@ def run_per_tissue(working_df, output_h5ad_dir, workdir, QC_cutoff, tissue, my_c
 
     figdir = os.path.join(workdir, 'figures')
     os.makedirs(figdir, exist_ok=True)
-
-    if use_mad:
-        QC_cutoff = compute_mad_thresholds(adata, QC_cutoff, nmads, key=key, scope=mad_scope)
-        mad_tsv = os.path.join(figdir, f"{tissue_std}_MAD_QC_cutoffs.nmads{nmads}.tsv")
-        QC_cutoff.to_csv(mad_tsv, sep='\t', index=False)
-        print(f"[INFO] MAD QC cutoffs written to {mad_tsv}")
-
     os.chdir(workdir)
 
     print(f'[INFO] all figure plots by {key}')
@@ -462,14 +289,6 @@ def run_per_tissue(working_df, output_h5ad_dir, workdir, QC_cutoff, tissue, my_c
         for d in QC_cutoff_dict.values():
             d.pop('log10_MALAT1_CPM', None)
 
-    # Skip MALAT1 plots if all samples have both cutoffs set to '---'
-    all_malat1_skipped = all(
-        str(d.get('MALAT1_CPM_cutoffs', '---')) == '---' and str(d.get('MALAT1_CPM_max_cutoffs', '---')) == '---'
-        for d in QC_cutoff_dict.values()
-    )
-    if all_malat1_skipped and 'log10_MALAT1_CPM' in plotlist:
-        plotlist.remove('log10_MALAT1_CPM')
-
     # 1. Plot upset (all metrics and filtered only)
     print("[INFO] Generating upset plot...")
     for ID in filter_df[key].unique():
@@ -494,13 +313,11 @@ def run_per_tissue(working_df, output_h5ad_dir, workdir, QC_cutoff, tissue, my_c
     adata = adata_filt.copy()
 
     # 4. Filter genes with < min_cells, normalize, PCA, cluster, UMAP, save
-    if adata.n_obs == 0:
-        raise ValueError(f"No cells remaining after QC filtering for {tissue}. Check QC cutoffs.")
     sc.pp.filter_genes(adata, min_cells=int(QC_cutoff_dict[adata_filt.obs[key].unique()[0]]['Min_cells_for_genes']))
 
     # 5. normalization, feature selection, linear dimensional reduction
     print("[INFO] Post-filter processing...")
-    downstream_process(adata, tissue_std, figdir, all_colors, include_malat1=not all_malat1_skipped)
+    downstream_process(adata, tissue_std, figdir, all_colors)
     run_umap_clustering(adata, tissue, tissue_std, figdir, plotlist)
 
     # Save output h5ad
@@ -512,7 +329,7 @@ def run_per_tissue(working_df, output_h5ad_dir, workdir, QC_cutoff, tissue, my_c
     print(f"[INFO] Finished QC filtering and post-processing for {tissue}.")
 
 
-def main(config_path, runtag, use_mad=False, nmads=5.0, mad_scope='per-sample'):
+def main(config_path, runtag):
     config = load_config(config_path)
 
     workdir = config['paths']['workdir']
@@ -557,7 +374,7 @@ def main(config_path, runtag, use_mad=False, nmads=5.0, mad_scope='per-sample'):
             try:
                 working_df = df[df["tissue"] == tissue_name]
                 QC_cutoff = df_cutoff_all[df_cutoff_all['Tissue'] == tissue_name]
-                run_per_tissue(working_df, output_h5ad_dir, workdir, QC_cutoff, tissue_name, my_color_palette, default_cutoffs, runtag, "sampleID", use_mad=use_mad, nmads=nmads, mad_scope=mad_scope)
+                run_per_tissue(working_df, output_h5ad_dir, workdir, QC_cutoff, tissue_name, my_color_palette, default_cutoffs, runtag, "sampleID")
             except Exception as e:
                 print(f"[ERROR] QC filtering failed for {tissue_name}: {e}")
     else:
@@ -565,7 +382,7 @@ def main(config_path, runtag, use_mad=False, nmads=5.0, mad_scope='per-sample'):
         try:
             working_df = df[df["tissue"] == tissue]
             QC_cutoff = df_cutoff_all[df_cutoff_all['Tissue'] == tissue]
-            run_per_tissue(working_df, output_h5ad_dir, workdir, QC_cutoff, tissue, my_color_palette, default_cutoffs, runtag, "sampleID", use_mad=use_mad, nmads=nmads, mad_scope=mad_scope)
+            run_per_tissue(working_df, output_h5ad_dir, workdir, QC_cutoff, tissue, my_color_palette, default_cutoffs, runtag, "sampleID")
         except Exception as e:
             print(f"[ERROR] QC filtering failed for {tissue}: {e}")
 
@@ -573,11 +390,5 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Run QC filtering, normalization, feature selection for scRNA-seq h5ad.")
     parser.add_argument("config", help="YAML config file describing tissue, paths, etc.")
     parser.add_argument("runtag", help="Tag for this run (e.g. round3 or v1)")
-    parser.add_argument("--use-mad", action="store_true",
-                        help="Use MAD-based thresholds instead of Excel cutoffs for cell QC metrics")
-    parser.add_argument("--nmads", type=float, default=5.0,
-                        help="Number of MADs from median for threshold computation (default: 5.0)")
-    parser.add_argument("--mad-scope", choices=["per-sample", "per-tissue"], default="per-sample",
-                        help="Compute MAD per sample or across all cells in the tissue (default: per-sample)")
     args = parser.parse_args()
-    main(args.config, args.runtag, use_mad=args.use_mad, nmads=args.nmads, mad_scope=args.mad_scope)
+    main(args.config, args.runtag)

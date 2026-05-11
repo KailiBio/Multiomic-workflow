@@ -86,12 +86,6 @@ def main(config_path, runtag):
                 print("[INFO] Loading anndata object...")
                 adata = ad.read_h5ad(h5ad_path)
 
-                if 'tsse' not in adata.obs.columns:
-                    print(f"[ERROR] 'tsse' column missing from {h5ad_path}. "
-                          f"This usually means load_fragments failed for this sample. "
-                          f"Re-run load_fragments with --overwrite.")
-                    continue
-
                 print("[INFO] Calculating initial number...")
                 initial_cell_str = f"Initial cell barcodes: {len(adata.obs_names)}"
                 x_cutoff = df_cutoff.loc[fileID, "num_fragment"]

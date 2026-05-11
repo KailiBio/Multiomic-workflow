@@ -20,26 +20,6 @@ import scanpy as sc
 from scipy.stats import median_abs_deviation
 import matplotlib.patches as mpatches
 
-# Count metrics use log1p-transformed MAD (right-skewed distributions).
-# Percentage metrics use raw MAD.
-_LOG_MAD_METRICS = {'n_genes_by_counts', 'total_counts', 'MALAT1_CPM', 'MALAT1_max_CPM'}
-
-
-def _compute_mad_bounds(values, nmads, use_log):
-    """Compute MAD-based lower/upper bounds, optionally on log1p scale."""
-    clean = values.dropna()
-    if len(clean) == 0:
-        return np.nan, np.nan
-    if use_log:
-        log_vals = np.log1p(clean)
-        med = np.median(log_vals)
-        mad = median_abs_deviation(log_vals)
-        return np.expm1(med - nmads * mad), np.expm1(med + nmads * mad)
-    else:
-        med = np.median(clean)
-        mad = median_abs_deviation(clean)
-        return med - nmads * mad, med + nmads * mad
-
 def assign_colors(keys, palette="tab10"):
     """
     Assign hex color codes from a matplotlib palette to an iterable of keys (sample/donor IDs).
@@ -66,18 +46,11 @@ def assign_colors(keys, palette="tab10"):
 def assign_donor_colors(df, donor_col, key='donorID'):
     """
     Returns a {donor: color} dict for only donors in df[key].unique().
-    donor_col can be a dict of {donor: color} or a list of colors (palette).
     For donors not in donor_col, assigns extra colors from a colormap.
     """
     donors_in_data = list(df[key].unique())
-
-    if isinstance(donor_col, dict):
-        color_map = dict(donor_col)
-    else:
-        # donor_col is a palette list — assign colors by index
-        color_map = {d: donor_col[i % len(donor_col)] for i, d in enumerate(donors_in_data)}
-
-    unknown_donors = [d for d in donors_in_data if d not in color_map]
+    color_map = dict(donor_col) 
+    unknown_donors = [d for d in donors_in_data if d not in donor_col]
 
     if unknown_donors:
         colormap = plt.cm.get_cmap('tab20', len(unknown_donors))
@@ -96,7 +69,7 @@ def move_figures_to_newdir(output_figures_dir, old, new):
     if os.path.exists(old_path):
         os.rename(old_path, new_path)
 
-def plot_qc_violin(adata, metric, tissue, tissue_std, all_colors, metrics_with_cutoffs, figdir, key, nmads, add_mad_lines=True, mad_scope='per-sample'):
+def plot_qc_violin(adata, metric, tissue, tissue_std, all_colors, metrics_with_cutoffs, figdir, key, nmads, add_mad_lines=True):
     if metric in adata.obs:
         print(f"[INFO] Plotting violin for: {metric}...")
         all_data = pd.to_numeric(adata.obs[metric], errors='coerce').copy()
@@ -105,9 +78,12 @@ def plot_qc_violin(adata, metric, tissue, tissue_std, all_colors, metrics_with_c
         donor_order = list(all_colors.keys())
         fig, axes = plt.subplots(1, 2, figsize=(2 * len(donor_order), 4), gridspec_kw={'width_ratios': [1, 3]}, sharey=True)
 
-        # --- compute tissue-wide MAD thresholds (always used for left panel) ---
-        use_log = metric in _LOG_MAD_METRICS
-        lower, upper = _compute_mad_bounds(all_data, nmads, use_log=use_log)
+        # --- compute MAD-based thresholds once (drop NaN/None) ---
+        clean_data = all_data.dropna()
+        med = np.median(clean_data)
+        mad = median_abs_deviation(clean_data)
+        lower = med - nmads * mad
+        upper = med + nmads * mad
 
         # catch warnings specifically for the plotting block to silence divide by zero/overflow
         with warnings.catch_warnings():
@@ -147,41 +123,18 @@ def plot_qc_violin(adata, metric, tissue, tissue_std, all_colors, metrics_with_c
             borderaxespad=0.
         )
         
-        # Cutoff bounds for this metric: dict with optional 'lower'/'upper' keys.
-        bounds = metrics_with_cutoffs.get(metric, {}) or {}
-        has_lower = bounds.get('lower') is not None and np.isfinite(bounds.get('lower'))
-        has_upper = bounds.get('upper') is not None and np.isfinite(bounds.get('upper'))
+        # Add cutoffs
+        if metric in metrics_with_cutoffs:
+            for v in metrics_with_cutoffs[metric]:
+                if v is not None and np.isfinite(v):
+                    axes[0].axhline(y=v, color='red', linestyle='--', linewidth=1)
+                    axes[1].axhline(y=v, color='red', linestyle='--', linewidth=1)
 
-        # Red cutoff lines
-        if has_lower:
-            axes[0].axhline(y=bounds['lower'], color='red', linestyle='--', linewidth=1)
-            axes[1].axhline(y=bounds['lower'], color='red', linestyle='--', linewidth=1)
-        if has_upper:
-            axes[0].axhline(y=bounds['upper'], color='red', linestyle='--', linewidth=1)
-            axes[1].axhline(y=bounds['upper'], color='red', linestyle='--', linewidth=1)
-
-        # MAD lines — only on sides where a cutoff exists
+        # --- add MAD-based lower/upper lines ---
         if add_mad_lines:
-            if has_lower:
-                axes[0].axhline(y=lower, color='blue', linestyle='--', linewidth=1, label='MAD lower')
-            if has_upper:
-                axes[0].axhline(y=upper, color='blue', linestyle='--', linewidth=1, label='MAD upper')
-
-            if mad_scope == 'per-sample':
-                for i, sample in enumerate(donor_order):
-                    sample_vals = df.loc[df[key] == sample, metric]
-                    s_lower, s_upper = _compute_mad_bounds(sample_vals, nmads, use_log=use_log)
-                    if has_lower and np.isfinite(s_lower):
-                        axes[1].plot([i - 0.4, i + 0.4], [s_lower, s_lower],
-                                     color='blue', linestyle='--', linewidth=1)
-                    if has_upper and np.isfinite(s_upper):
-                        axes[1].plot([i - 0.4, i + 0.4], [s_upper, s_upper],
-                                     color='blue', linestyle='--', linewidth=1)
-            else:
-                if has_lower:
-                    axes[1].axhline(y=lower, color='blue', linestyle='--', linewidth=1)
-                if has_upper:
-                    axes[1].axhline(y=upper, color='blue', linestyle='--', linewidth=1)
+            for ax in axes:
+                ax.axhline(y=lower, color='blue', linestyle='--', linewidth=1, label='MAD lower')
+                ax.axhline(y=upper, color='blue', linestyle='--', linewidth=1, label='MAD upper')
         
         fig.suptitle(f'{metric} on {tissue}', fontsize=14)
         plt.tight_layout()
@@ -216,12 +169,12 @@ def plot_qc_cumulative_distribution(adata, metrics, tissue, tissue_std, all_colo
             plt.savefig(os.path.join(figdir, f"RNA_QC_cumulative.by{key}.{tissue_std}.{metric}.png"), dpi=300, bbox_inches='tight')
             plt.close()
 
-def plot_doublet_hist(adata, tissue, tissue_std, figdir, key, probability_cutoff=None, stage=None):
+def plot_doublet_hist(adata, donor_col, tissue, tissue_std, figdir, key, probability_cutoff=None):
     for ID in adata.obs[key].unique():
         print(f"[INFO] Plotting doublet score & probability distribution for: {ID}...")
         doublet_scores = adata[adata.obs[key] == ID].obs['doublet_score']
         doublet_probabilities = adata[adata.obs[key] == ID].obs['doublet_probabilities']
-
+        
         if doublet_probabilities.isnull().all():
             print(f"[WARNING] No doublet probabilities for {ID}")
             continue
@@ -234,7 +187,7 @@ def plot_doublet_hist(adata, tissue, tissue_std, figdir, key, probability_cutoff
             cutoff = float(probability_cutoff)
         print(f"[INFO] current doublet cutoff is {cutoff}.")
         doublet_mask = doublet_probabilities > cutoff
-
+        
         bins = np.histogram_bin_edges(doublet_scores, bins=50)
         hist_non_doublets, _ = np.histogram(doublet_scores[~doublet_mask], bins=bins)
         hist_doublets, _ = np.histogram(doublet_scores[doublet_mask], bins=bins)
@@ -257,8 +210,7 @@ def plot_doublet_hist(adata, tissue, tissue_std, figdir, key, probability_cutoff
         axes[1].grid(False)
         fig.suptitle(f'distribution of doublet scores and probability on {tissue}, {ID}', fontsize=14)
         plt.tight_layout()
-        stage_part = f".{stage}" if stage else ""
-        plt.savefig(os.path.join(figdir, f"RNA_QC_doublet_hist{stage_part}.{tissue_std}-{ID}.png"), dpi=300, bbox_inches='tight')
+        plt.savefig(os.path.join(figdir, f"RNA_QC_doublet_hist.{tissue_std}-{ID}.png"), dpi=300, bbox_inches='tight')
         plt.close(fig)
 
 def clustering_umap(adata, tissue, tissue_std, figdir, key):
@@ -386,7 +338,11 @@ def plot_qc_metrics_violin_by_cluster(adata, tissue, tissue_std, figdir, feature
         fig, ax = plt.subplots(figsize=(12, 4))
 
         # Compute MAD thresholds from all cells for this feature
-        lower, upper = _compute_mad_bounds(dfqc[feature], nmads, use_log=feature in _LOG_MAD_METRICS)
+        values = dfqc[feature].dropna()
+        med = np.median(values)
+        mad = median_abs_deviation(values)
+        lower = med - nmads * mad
+        upper = med + nmads * mad
         
         with warnings.catch_warnings():
             warnings.simplefilter("ignore")
@@ -415,7 +371,11 @@ def plot_qc_metrics_violin_by_cluster(adata, tissue, tissue_std, figdir, feature
             y_min, y_max = dfqc[feature].min(), dfqc[feature].max()
 
             # Compute global MAD thresholds for this feature
-            lower, upper = _compute_mad_bounds(dfqc[feature], nmads, use_log=feature in _LOG_MAD_METRICS)
+            values = dfqc[feature].dropna()
+            med = np.median(values)
+            mad = median_abs_deviation(values)
+            lower = med - nmads * mad
+            upper = med + nmads * mad
             
             for i, ID in enumerate(adata.obs[key].unique()):
                 df_plot = dfqc[dfqc[key] == ID]
@@ -434,8 +394,8 @@ def plot_qc_metrics_violin_by_cluster(adata, tissue, tissue_std, figdir, feature
 
                 # Add MAD lines
                 if add_mad_lines:
-                    axes[i].axhline(y=lower, color="blue", linestyle="--", linewidth=1)
-                    axes[i].axhline(y=upper, color="blue", linestyle="--", linewidth=1)
+                    ax.axhline(y=lower, color="blue", linestyle="--", linewidth=1)
+                    ax.axhline(y=upper, color="blue", linestyle="--", linewidth=1)
                     
             plt.tight_layout()
             plt.savefig(os.path.join(figdir, f"QCmetric_bycluster.{tissue_std}-{key}.{feature}.png"), 
