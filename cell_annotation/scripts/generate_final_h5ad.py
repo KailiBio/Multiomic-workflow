@@ -19,12 +19,20 @@ import seaborn as sns
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 from cell_annotation.utils import load_config, standardize_tissue_name, move_figures_to_newdir
 
-def update_annotations(adata, cell_lineage, celltype_broad, celltype_fine):
+def update_annotations(adata, cell_lineage, celltype_broad, celltype_fine, celltype_refine=None):
     if 'leiden_new' in adata.obs_names:
         adata.obs['leiden'] = adata.obs['leiden_new']
     adata.obs['cell_lineage'] = adata.obs[cell_lineage]
     adata.obs['celltype_broad'] = adata.obs[celltype_broad]
     adata.obs['celltype_fine'] = adata.obs[celltype_fine]
+    
+    # Optional refined cell type
+    if celltype_refine is not None:
+        if celltype_refine in adata.obs.columns:
+            adata.obs['celltype_refine'] = adata.obs[celltype_refine]
+        else:
+            print(f"[WARN] celltype_refine column '{celltype_refine}' not found in adata.obs; skipping.")
+
     return adata
 
 def plot_cell_counts(adata, tissue_std, figdir, donor_color_palette):
@@ -65,26 +73,35 @@ def save_final_h5ad(adata, workdir, tissue_std):
     adata_final = adata.copy()
     # Clean obs/var/uns
     obs_keep = ['tissue', 'sampleID', 'donorID', 'cellbarcode', 
-                'total_counts', 'n_genes', 'n_genes_by_counts', 'log10_total_counts', 'log10_n_genes_by_counts',
-                'total_counts_mt', 'pct_counts_mt', 'total_counts_ribo', 'pct_counts_ribo', 'total_counts_hb', 
-                'pct_counts_hb', 'pct_exon_reads',  'MALAT1_CPM', 'log10_MALAT1_CPM', 
+                'total_counts', 'n_genes', 'n_genes_by_counts', 
+                'log10_total_counts', 'log10_n_genes_by_counts',
+                'total_counts_mt', 'pct_counts_mt', 
+                'total_counts_ribo', 'pct_counts_ribo', 
+                'total_counts_hb', 'pct_counts_hb', 
+                'pct_exon_reads',  'MALAT1_CPM', 'log10_MALAT1_CPM', 
                 'doublet_score', 'predicted_doublet', 'doublet_probabilities', 
                 'leiden', 'cell_lineage', 'celltype_broad', 'celltype_fine']
+    # If celltype_refine exists, keep it as well
+    if 'celltype_refine' in adata_final.obs.columns:
+        obs_keep.append('celltype_refine')
     adata_final.obs = adata_final.obs[obs_keep]
+    
     var_keep = ['gene_ids', 'total_counts', 'n_cells', 'n_cells_by_counts', 'mean_counts',
                 'feature_types', 'genome', 'mt', 'ribo', 'hb', 'pct_dropout_by_counts',
                 'highly_variable', 'means', 'dispersions', 'dispersions_norm']
     adata_final.var = adata_final.var[var_keep]
+    
     uns_keep = ['dendrogram_leiden', 'donorID_colors', 'hvg', 'leiden', 'leiden_colors',
                 'log1p', 'neighbors', 'pca', 'rank_genes_groups', 'umap',]
     adata_final.uns = {k: adata_final.uns[k] for k in uns_keep if k in adata_final.uns}
+    
     # save the final .h5ad
     final_h5ad_path = os.path.join(workdir, f"{tissue_std}.GEX.final.h5ad")
     adata_final.write(final_h5ad_path)
     print(f"[INFO] Final h5ad saved to: {final_h5ad_path}")
 
 def run_per_tissue(workdir, tissue, cell_lineage, celltype_broad, celltype_fine, 
-                   donor_color_palette, out_h5ad_dir):
+                   donor_color_palette, out_h5ad_dir, celltype_refine=None):
     
     tissue_std = standardize_tissue_name(tissue)
 
@@ -124,7 +141,7 @@ def run_per_tissue(workdir, tissue, cell_lineage, celltype_broad, celltype_fine,
 
     print(f"[INFO] Completed generating final RNA h5ad for {tissue}.")
 
-def main(config_path, cell_lineage, celltype_broad, celltype_fine):
+def main(config_path, cell_lineage, celltype_broad, celltype_fine, celltype_refine=None):
     config = load_config(config_path)
     
     workdir = config['paths']['workdir']
@@ -144,14 +161,14 @@ def main(config_path, cell_lineage, celltype_broad, celltype_fine):
             print(f"\n========== Final annotation for tissue: {tissue_name} ({idx}/{len(tissues)}) ==========")
             try:
                 run_per_tissue(workdir, tissue_name, cell_lineage, celltype_broad, celltype_fine,
-                               donor_color_palette, out_h5ad_dir)
+                               donor_color_palette, out_h5ad_dir, celltype_refine=celltype_refine)
             except Exception as e:
                 print(f"[ERROR] Final h5ad generation failed for {tissue_name}: {e}")
     else:
         print(f"\n========== Final annotation for tissue: {tissue} ==========")
         try:
             run_per_tissue(workdir, tissue, cell_lineage, celltype_broad, celltype_fine, 
-                           donor_color_palette, out_h5ad_dir)
+                           donor_color_palette, out_h5ad_dir, celltype_refine=celltype_refine)
         except Exception as e:
             print(f"[ERROR] Final h5ad generation failed for {tissue}: {e}")
 
@@ -161,5 +178,8 @@ if __name__ == "__main__":
     parser.add_argument("cell_lineage", help="obs name for final cell lineage")
     parser.add_argument("celltype_broad", help="obs name for final broad annotation")
     parser.add_argument("celltype_fine", help="obs name for final fine annotation")
+    parser.add_argument("--celltype_refine", 
+                        help="obs name for refined cell type annotation (optional)",
+                        default=None)
     args = parser.parse_args()
-    main(args.config, args.cell_lineage, args.celltype_broad, args.celltype_fine)
+    main(args.config, args.cell_lineage, args.celltype_broad, args.celltype_fine, args.celltype_refine)
