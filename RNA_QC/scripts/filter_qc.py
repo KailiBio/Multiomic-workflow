@@ -167,6 +167,22 @@ def compute_mad_thresholds(adata, QC_cutoff_df, nmads, key='sampleID', scope='pe
     return QC_cutoff
 
 
+def _doublet_metric_col(cutoff_row):
+    """obs column to threshold for doublets, mirroring the ATAC
+    `use_double_probability_filter` toggle in the QC cutoff table:
+      'Yes' (default) -> GMM `doublet_probabilities`
+      'No'            -> absolute scrublet `doublet_score`
+    Both columns are written to .obs by pre_qc_assessment, so this is a
+    metric switch only — no extra computation.
+    """
+    try:
+        val = cutoff_row.get('use_double_probability_filter', 'Yes')
+    except AttributeError:
+        val = 'Yes'
+    use_prob = str(val).strip().lower() not in ('no', 'false', '0', 'nan', '')
+    return 'doublet_probabilities' if use_prob else 'doublet_score'
+
+
 def prepare_upset_summary_allQC(sample_data, QC_cutoff_dict, global_obs, default_cutoffs):
     sampleID = sample_data['sampleID'].iloc[0].strip()
 
@@ -205,7 +221,8 @@ def prepare_upset_summary_allQC(sample_data, QC_cutoff_dict, global_obs, default
     else:
         mask_MALAT1_max_CPM = sample_data['MALAT1_max_CPM'] > int(QC_cutoff_dict[sampleID]['MALAT1_CPM_max_cutoffs'])
 
-    mask_doublets = sample_data['doublet_probabilities'] > float(QC_cutoff_dict[sampleID]['doublet_cutoffs'])
+    _dcol = _doublet_metric_col(QC_cutoff_dict[sampleID])
+    mask_doublets = sample_data[_dcol] > float(QC_cutoff_dict[sampleID]['doublet_cutoffs'])
     # Indices
     condition_indices = {
         'Min_genes': sample_data.index[mask_min_genes],
@@ -235,7 +252,8 @@ def prepare_upset_summary_filteredQC(sample_df, QC_cutoff_dict):
     mask_min_genes   = sample_df['n_genes_by_counts'] < int(cond['Min_genes_in_cells'])
     mask_max_genes   = sample_df['n_genes_by_counts'] > int(cond['Max_genes_in_cells'])
     mask_max_counts  = sample_df['total_counts'] > int(cond['Max_counts_in_cells'])
-    mask_doublets    = sample_df['doublet_probabilities'] > float(cond['doublet_cutoffs'])
+    _dcol = _doublet_metric_col(cond)
+    mask_doublets    = sample_df[_dcol] > float(cond['doublet_cutoffs'])
     # Optional
     condition_indices = {
         'Min_genes': mask_min_genes,
@@ -284,7 +302,8 @@ def export_doublet_calls_by_sample(adata, QC_cutoff_dict, tissue, tissue_std, fi
         
         adata_sel = adata[adata.obs['sampleID'] == sampleID, :].copy()
         df_doublet = adata_sel.obs[['doublet_score', 'doublet_probabilities']].copy()
-        df_doublet['doublet_call'] = df_doublet['doublet_probabilities'].apply(
+        _dcol = _doublet_metric_col(cutoff)
+        df_doublet['doublet_call'] = df_doublet[_dcol].apply(
             lambda x: 'yes' if x > doublet_cutoff else 'no'
         )
         
@@ -343,9 +362,10 @@ def filter_and_process_adata(adata, df, QC_cutoff_dict, tissue, tissue_std, log_
                 print(f"[INFO]   after MALAT1_CPM max ({cutoff['MALAT1_CPM_max_cutoffs']}): -> {len(adata_process)} cells")
             else:
                 print(f"[WARNING] Skipping MALAT1_CPM max filter for {ID}: all values are NaN")
-        # Doublet filter: keep cells with NaN probabilities (doublet detection may have failed)
-        doublet_mask = adata_process.obs['doublet_probabilities'] < float(cutoff['doublet_cutoffs'])
-        doublet_mask = doublet_mask | adata_process.obs['doublet_probabilities'].isna()
+        # Doublet filter: keep cells with NaN metric (doublet detection may have failed)
+        _dcol = _doublet_metric_col(cutoff)
+        doublet_mask = adata_process.obs[_dcol] < float(cutoff['doublet_cutoffs'])
+        doublet_mask = doublet_mask | adata_process.obs[_dcol].isna()
         adata_process = adata_process[doublet_mask, :]
         print(f"[INFO]   after doublet ({cutoff['doublet_cutoffs']}): -> {len(adata_process)} cells")
         log_lines.append(f'num of cellbarcodes after QC filtering in {ID}: {len(adata_process.obs_names)}\n\n')
