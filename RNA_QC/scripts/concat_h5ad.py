@@ -76,11 +76,20 @@ def extract_chanel_number(sampleID):
     match = re.search(r'-(\d+)$', str(sampleID))
     return match.group(1) if match else "unknown"
     
-def reindex_obs_names(adata, donorID, batch_number, chanel_number):
-    """Update cell barcodes for global uniqueness as donorID_batch_chancel_cellbarcode."""
+def reindex_obs_names(adata, donorID, batch_number, chanel_number, sampleID):
+    """Update cell barcodes for global uniqueness, prefixing with the full sampleID.
+
+    Prefixing with sampleID (rather than donorID_batch_channel) guarantees
+    uniqueness when two samples share donor/batch/channel and differ only by a
+    token the parser ignores -- e.g. EXP02-Tile1-GEX-01 vs EXP02-Tile2-GEX-01
+    (same donorID, same EXP02, same trailing -01). Without this they collide on
+    shared 10x barcodes and ad.concat(index_unique=None) yields duplicate
+    obs_names, which breaks pre_qc_assessment. The raw barcode is preserved in
+    obs['cellbarcode'].
+    """
     adata.obs['donorID'] = donorID
     adata.obs['cellbarcode'] = adata.obs_names
-    adata.obs_names = [f"{donorID}_{batch_number}_{chanel_number}_{bc}" for bc in adata.obs_names]
+    adata.obs_names = [f"{sampleID}_{bc}" for bc in adata.obs_names]
 
 def run_per_tissue(working_df, tissue, input_dir, scrinvex_dir, output_h5ad_dir, donor_colors, tissue_color):
     """Process all samples for a single tissue and concatenate h5ad files."""
@@ -112,7 +121,7 @@ def run_per_tissue(working_df, tissue, input_dir, scrinvex_dir, output_h5ad_dir,
             else:
                 print("[WARNING] No Scrinvex directory provided. Skipping exon_reads% info.")
     
-            reindex_obs_names(adata, donorID, batch_number, chanel_number)
+            reindex_obs_names(adata, donorID, batch_number, chanel_number, sampleID)
     
             adata.obs['sampleID'] = sampleID
             
