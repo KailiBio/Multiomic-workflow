@@ -102,6 +102,15 @@ This script coordinates data loading, QC, analysis and results export.
 - Both must be formatted according to the pipeline expectations (see example tables in the repo).
 - Double check for typos and formatting issues—invalid entries will cause errors (error messages may not always specify the location of the typo).
 
+**Doublet filtering (RNA QC).** The `doublet_cutoffs` column sets the per-sample doublet threshold. By default it is applied to the Scrublet **probability** (`doublet_probabilities`). To instead threshold the **absolute Scrublet score** (`doublet_score`), add a `use_double_probability_filter` column (per sample):
+
+| `use_double_probability_filter` | metric filtered | typical `doublet_cutoffs` scale |
+|---|---|---|
+| `Yes` (or column absent) | `doublet_probabilities` (GMM, 0–1) | ~0.5–1.0 |
+| `No` | `doublet_score` (raw Scrublet) | ~0.05–0.3 |
+
+This mirrors the existing ATAC QC toggle of the same name. Both metrics are computed in pre-QC, so it is only a metric switch; cells with a missing metric are kept.
+
 ### Directory Structure
 
 - Main workflow scripts and notebooks are in the root directory.
