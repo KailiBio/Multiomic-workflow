@@ -51,7 +51,18 @@ def run_harmony_batch_correction(output_h5ad_dir, workdir, tissue, runtag, key="
     print("[INFO] Running Harmony integration...")
     with warnings.catch_warnings():
         warnings.filterwarnings("ignore", category=RuntimeWarning)
-        sce.pp.harmony_integrate(adata, key=key, max_iter_harmony=30)
+        # Direct harmonypy call — sce.pp.harmony_integrate has a shape bug in the
+        # current scanpy_external; call harmonypy directly and place the corrected
+        # PCA into X_pca_harmony ourselves.
+        import harmonypy as hm
+        ho = hm.run_harmony(
+            adata.obsm['X_pca'],
+            adata.obs[[key]],
+            key,
+            max_iter_harmony=30,
+            verbose=True,
+        )
+        adata.obsm['X_pca_harmony'] = np.asarray(ho.Z_corr).T  # Z_corr is (n_pcs, n_cells) -> (n_cells, n_pcs)
 
     # Build UMAP from Harmony-corrected PCA
     adata.obsm['X_pca'] = adata.obsm['X_pca_harmony']
