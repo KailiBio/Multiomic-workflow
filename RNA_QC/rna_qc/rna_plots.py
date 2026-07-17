@@ -296,16 +296,24 @@ def plot_upset(upset_data_summary, tissue, key, ID, tissue_std, adata, savepath)
     """
     Plot an upset diagram for the given donor's data summary and save to file.
     """
-    plt.figure(figsize=(8, 4))
-    with warnings.catch_warnings():
-        warnings.filterwarnings("ignore", category=FutureWarning)
-        upsetplot.plot(upset_data_summary, show_counts=True, sort_by="cardinality")
-    plt.suptitle(f'{tissue} - {ID}\ntotal N={len(adata[adata.obs[key] == ID, :].obs_names)}', fontsize=14)
-    with warnings.catch_warnings():
-        warnings.filterwarnings("ignore", category=UserWarning)
-        plt.tight_layout()
-    plt.savefig(savepath, dpi=300, bbox_inches='tight')
-    plt.close()
+    try:
+        plt.figure(figsize=(8, 4))
+        with warnings.catch_warnings():
+            warnings.filterwarnings("ignore", category=FutureWarning)
+            upsetplot.plot(upset_data_summary, show_counts=True, sort_by="cardinality")
+        plt.suptitle(f'{tissue} - {ID}\ntotal N={len(adata[adata.obs[key] == ID, :].obs_names)}', fontsize=14)
+        with warnings.catch_warnings():
+            warnings.filterwarnings("ignore", category=UserWarning)
+            plt.tight_layout()
+        plt.savefig(savepath, dpi=300, bbox_inches='tight')
+        plt.close()
+    except (TypeError, ValueError) as e:
+        # matplotlib/upsetplot version incompatibility — skip the plot but don't fail the run
+        print(f"[WARN] Upset plot failed for {ID}: {e}; skipping")
+        try:
+            plt.close('all')
+        except Exception:
+            pass
 
 def run_umap_clustering(adata, tissue, tissue_std, figdir, plotlist):
     sc.pp.neighbors(adata)
