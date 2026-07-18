@@ -170,17 +170,30 @@ def compute_mad_thresholds(adata, QC_cutoff_df, nmads, key='sampleID', scope='pe
 def _doublet_metric_col(cutoff_row):
     """obs column to threshold for doublets, mirroring the ATAC
     `use_double_probability_filter` toggle in the QC cutoff table:
-      'Yes' (default) -> GMM `doublet_probabilities`
-      'No'            -> absolute scrublet `doublet_score`
+      'No'                         -> absolute scrublet `doublet_score`
+      'Yes' / blank / missing      -> GMM `doublet_probabilities` (default)
     Both columns are written to .obs by pre_qc_assessment, so this is a
     metric switch only — no extra computation.
+
+    The column name is matched case-insensitively and with surrounding
+    whitespace stripped, so a stray trailing space in the Excel header
+    (e.g. 'use_double_probability_filter ') does NOT silently revert to
+    probability filtering.
     """
+    val = None
     try:
-        val = cutoff_row.get('use_double_probability_filter', 'Yes')
+        items = list(cutoff_row.items())
     except AttributeError:
-        val = 'Yes'
-    use_prob = str(val).strip().lower() not in ('no', 'false', '0', 'nan', '')
-    return 'doublet_probabilities' if use_prob else 'doublet_score'
+        items = []
+    for k, v in items:
+        if str(k).strip().lower() == 'use_double_probability_filter':
+            val = v
+            break
+    s = str(val).strip().lower()
+    # Only an explicit opt-out selects the absolute score; everything else
+    # (Yes / blank / NaN / column absent) keeps the original probability filter.
+    use_score = s in ('no', 'false', '0')
+    return 'doublet_score' if use_score else 'doublet_probabilities'
 
 
 def prepare_upset_summary_allQC(sample_data, QC_cutoff_dict, global_obs, default_cutoffs):
