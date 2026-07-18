@@ -478,6 +478,10 @@ def run_per_tissue(working_df, output_h5ad_dir, workdir, QC_cutoff, tissue, my_c
         "pct_counts_ribo": adata.obs["pct_counts_ribo"],
         "doublet_probabilities": adata.obs["doublet_probabilities"]
     })
+    # doublet_score is needed when use_double_probability_filter='No' (score mode);
+    # the upset summary thresholds whichever metric the toggle selects.
+    if 'doublet_score' in adata.obs:
+        filter_df["doublet_score"] = adata.obs["doublet_score"]
     if 'pct_exon_reads' in adata.obs:
         filter_df["pct_exon_reads"] = adata.obs["pct_exon_reads"]
     if 'MALAT1_CPM' in adata.obs:
