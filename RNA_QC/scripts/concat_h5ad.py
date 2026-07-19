@@ -156,28 +156,35 @@ def main(config_path):
     df = pd.read_csv(sample_metadata, sep='\t', header=None,  index_col=False,
                      names=["rnaID", "atacID", "species", "donorID", "ageGroup", "gender", "tissue"])
 
+    failed_tissues = []
     if tissue == "---":  # Multiple tissues mode
         tissues = sorted(df["tissue"].unique())
         print(f"[INFO] Running analysis for MULTIPLE tissues: {tissues}")
 
         for idx, tissue_name in enumerate(tissues, 1):
             print(f"\n========== Processing tissue: {tissue_name} ({idx}/{len(tissues)}) ==========")
-            
+
             try:
                 tissue_col = tissue_colors.get(tissue_name, "#bdbdbd") if tissue_colors else "#bdbdbd"
                 working_df = df[df["tissue"] == tissue_name]
                 run_per_tissue(working_df, tissue_name, input_dir, scrinvex_dir, output_h5ad_dir, donor_colors, tissue_col)
             except Exception as e:
                 print(f"[ERROR] Encountered error for tissue {tissue_name}: {e}")
+                failed_tissues.append(tissue_name)
     else:
         print(f"\n========== Processing tissue: {tissue} ==========")
-    
+
         try:
             tissue_col = tissue_colors.get(tissue, "#bdbdbd") if tissue_colors else "#bdbdbd"
             working_df = df[df["tissue"] == tissue]
             run_per_tissue(working_df, tissue, input_dir, scrinvex_dir, output_h5ad_dir, donor_colors, tissue_col)
         except Exception as e:
             print(f"[ERROR] Encountered error for tissue {tissue}: {e}")
+            failed_tissues.append(tissue)
+
+    if failed_tissues:
+        print(f"[ERROR] concat_h5ad failed for {len(failed_tissues)} tissue(s): {failed_tissues}")
+        sys.exit(1)
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(

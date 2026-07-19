@@ -63,11 +63,15 @@ def assign_colors(keys, palette="tab10"):
     out = {k: hex_colors[i % len(hex_colors)] for i, k in enumerate(keys)}
     return out
     
-def assign_donor_colors(df, donor_col, key='donorID'):
+def assign_donor_colors(df, donor_col, key='donorID', fallback_palette=None):
     """
-    Returns a {donor: color} dict for only donors in df[key].unique().
-    donor_col can be a dict of {donor: color} or a list of colors (palette).
-    For donors not in donor_col, assigns extra colors from a colormap.
+    Returns a {value: color} dict for only values in df[key].unique(). Despite
+    the name, this works for any grouping key (donorID, sampleID, aliquotID, ...).
+
+    donor_col can be a dict of {value: color} (explicit assignments) or a list
+    of colors (palette assigned by index). For values not covered by donor_col,
+    colors are assigned from `fallback_palette` (cycled through by index) if
+    given, otherwise auto-generated from a tab20 colormap.
     """
     donors_in_data = list(df[key].unique())
 
@@ -80,10 +84,14 @@ def assign_donor_colors(df, donor_col, key='donorID'):
     unknown_donors = [d for d in donors_in_data if d not in color_map]
 
     if unknown_donors:
-        colormap = plt.cm.get_cmap('tab20', len(unknown_donors))
-        hex_colormap = [mcolors.rgb2hex(colormap(i)) for i in range(colormap.N)]
-        for i, donor in enumerate(unknown_donors):
-            color_map[donor] = hex_colormap[i]
+        if fallback_palette:
+            for i, donor in enumerate(unknown_donors):
+                color_map[donor] = fallback_palette[i % len(fallback_palette)]
+        else:
+            colormap = plt.cm.get_cmap('tab20', len(unknown_donors))
+            hex_colormap = [mcolors.rgb2hex(colormap(i)) for i in range(colormap.N)]
+            for i, donor in enumerate(unknown_donors):
+                color_map[donor] = hex_colormap[i]
 
     # Only keep donors present in df
     return {donor: color_map[donor] for donor in donors_in_data}
@@ -269,8 +277,6 @@ def clustering_umap(adata, tissue, tissue_std, figdir, key):
         warnings.filterwarnings("ignore", category=RuntimeWarning)
         sc.pp.pca(adata, n_comps=50, svd_solver='arpack')
         sc.pp.neighbors(adata, n_neighbors=15, use_rep='X_pca')
-        # sc.pp.neighbors(adata) # why is this called twice?
-
         sc.tl.leiden(adata, flavor="igraph")
         sc.tl.umap(adata)
     sc.pl.umap(
@@ -315,18 +321,19 @@ def plot_upset(upset_data_summary, tissue, key, ID, tissue_std, adata, savepath)
     plt.savefig(savepath, dpi=300, bbox_inches='tight')
     plt.close()
 
-def run_umap_clustering(adata, tissue, tissue_std, figdir, plotlist):
+def run_umap_clustering(adata, tissue, tissue_std, figdir):
     sc.pp.neighbors(adata)
     sc.tl.umap(adata)
     sc.tl.leiden(adata, flavor="igraph")
-    
+
     sc.pl.umap(adata, color=["leiden"], title = f'{tissue}: leiden', save=f'.filterqc.LeidenCluster.{tissue_std}.png', show=False)
 
+    umap_color = ["leiden", "sampleID"]
     sc.pl.umap(
         adata,
-        color=["leiden", "sampleID"],
+        color=umap_color,
         wspace=0.5,
-        title = [f"{tissue}: {feature}" for feature in plotlist],
+        title = [f"{tissue}: {feature}" for feature in umap_color],
         save=f'.filterqc.LeidenCluster-donorID.{tissue_std}.png',
         show=False
     )

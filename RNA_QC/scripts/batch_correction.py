@@ -38,7 +38,6 @@ def run_harmony_batch_correction(output_h5ad_dir, workdir, tissue, runtag, key="
     
     figures_dir = os.path.join(workdir, "figures")
     os.makedirs(figures_dir, exist_ok=True)
-    os.chdir(workdir)
 
     # Save before Harmony embeddings
     adata.obsm['X_umap_before_harmony'] = adata.obsm['X_umap']
@@ -121,20 +120,27 @@ def main(config_path, runtag):
         tissue_names = sorted(df['tissue'].unique())
         print(f"[INFO] Running Harmony batch correction for MULTIPLE tissues: {tissue_names}")
         
+        failed_tissues = []
         for idx, tissue_name in enumerate(tissue_names, 1):
             print(f"\n============== Processing tissue: {tissue_name} ({idx}/{len(tissue_names)}) ==============")
-            
+
             try:
                 run_harmony_batch_correction(output_h5ad_dir, workdir, tissue_name, runtag, key = "sampleID")
             except Exception as e:
                 print(f"[ERROR] Harmony batch correction failed for {tissue_name}: {e}")
+                failed_tissues.append(tissue_name)
+
+        if failed_tissues:
+            print(f"[ERROR] batch_correction failed for {len(failed_tissues)} tissue(s): {failed_tissues}")
+            sys.exit(1)
     else:
         print(f"\n============== Processing tissue: {tissue} ==============")
-        
+
         try:
             run_harmony_batch_correction(output_h5ad_dir, workdir, tissue, runtag, key = "sampleID")
         except Exception as e:
             print(f"[ERROR] Harmony batch correction failed for {tissue}: {e}")
+            sys.exit(1)
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Run Harmony batch correction for scRNA-seq h5ad.")

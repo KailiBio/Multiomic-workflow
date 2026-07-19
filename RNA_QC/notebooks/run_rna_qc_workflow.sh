@@ -12,7 +12,6 @@ set -euo pipefail
 # ===========================
 # PARAMETERS
 # ===========================
-metatable="../ATAC_QC/test_data/test_metatable.txt"
 runtag="${1:-demo_run}"
 
 config="config/rna_qc_config.yaml"

@@ -20,7 +20,7 @@ from scipy.stats import median_abs_deviation
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 from rna_qc.utils import load_config, standardize_tissue_name
-from rna_qc.rna_plots import assign_colors, assign_donor_colors, move_figures_to_newdir, plot_upset, run_umap_clustering, plot_doublet_hist
+from rna_qc.rna_plots import assign_donor_colors, move_figures_to_newdir, plot_upset, run_umap_clustering, plot_doublet_hist
 
 def _compute_mad_for_sample(sample_obs, nmads):
     """Compute MAD-based QC thresholds for a single sample's cells.
@@ -166,6 +166,26 @@ def compute_mad_thresholds(adata, QC_cutoff_df, nmads, key='sampleID', scope='pe
     return QC_cutoff
 
 
+def resolve_doublet_column(cutoff, default="Yes"):
+    """Pick which column to filter doublets on for one sample.
+
+    Reads that sample's own 'Whether_use_double_GMM_method' QC cutoff value:
+    'Yes' -> GMM-derived doublet_probabilities, 'No' -> raw doublet_score.
+    Doublet detection/GMM conversion is computed per sample, so this is
+    resolved per sample rather than once for the whole tissue.
+    Case-insensitive; missing/blank/'---' values fall back to `default`.
+    """
+    raw = str(cutoff.get('Whether_use_double_GMM_method', default)).strip()
+    value = raw.lower()
+    if value in ("", "nan", "none", "---"):
+        value = default.lower()
+    elif value not in ("yes", "no"):
+        print(f"[WARNING] Unrecognized Whether_use_double_GMM_method value '{raw}' "
+              f"(expected 'Yes' or 'No'). Defaulting to '{default}'.")
+        value = default.lower()
+    return 'doublet_probabilities' if value == 'yes' else 'doublet_score'
+
+
 def prepare_upset_summary_allQC(sample_data, QC_cutoff_dict, global_obs, default_cutoffs):
     sampleID = sample_data['sampleID'].iloc[0].strip()
 
@@ -267,7 +287,7 @@ def prepare_upset_summary_filteredQC(sample_df, QC_cutoff_dict):
     upset_data = upset_data[(upset_data.sum(axis=1) > 0)]
     return upset_data.groupby(list(condition_indices.keys())).size()
 
-def export_doublet_calls_by_sample(adata, QC_cutoff_dict, tissue, tissue_std, figdir, doublet_col='doublet_probabilities'):
+def export_doublet_calls_by_sample(adata, QC_cutoff_dict, tissue, tissue_std, figdir):
     """
     For each sampleID in adata.obs, determines doublet calls using the supplied QC_cutoff_dict,
     and saves the results as TSV files in the specified figdir.
@@ -280,6 +300,7 @@ def export_doublet_calls_by_sample(adata, QC_cutoff_dict, tissue, tissue_std, fi
 
         cutoff = QC_cutoff_dict[sampleID]
         doublet_cutoff = float(cutoff['doublet_cutoffs'])
+        doublet_col = resolve_doublet_column(cutoff)
 
         adata_sel = adata[adata.obs['sampleID'] == sampleID, :].copy()
         df_doublet = adata_sel.obs[['doublet_score', 'doublet_probabilities']].copy()
@@ -297,7 +318,7 @@ def export_doublet_calls_by_sample(adata, QC_cutoff_dict, tissue, tissue_std, fi
             metric_col=doublet_col)
 
 
-def filter_and_process_adata(adata, df, QC_cutoff_dict, tissue, tissue_std, log_file_dir, key, doublet_col='doublet_probabilities'):
+def filter_and_process_adata(adata, df, QC_cutoff_dict, tissue, tissue_std, log_file_dir, key):
 
     adata_filter = adata.copy()
     
@@ -313,6 +334,7 @@ def filter_and_process_adata(adata, df, QC_cutoff_dict, tissue, tissue_std, log_
         log_lines.append(f'total cellbarcodes in {ID}: {len(adata_process.obs_names)}\n')
 
         cutoff = QC_cutoff_dict[ID]
+        doublet_col = resolve_doublet_column(cutoff)
         n_before = len(adata_process)
 
         adata_process = adata_process[adata_process.obs['n_genes_by_counts'] > int(cutoff['Min_genes_in_cells']), :]
@@ -400,7 +422,7 @@ def compress_and_save_postqc_h5ad(adata, output_h5ad_dir, tissue_std, runtag):
     adata.write(os.path.join(output_h5ad_dir, f'{tissue_std}_GEX.filtered.{runtag}.h5ad'))
 
 def run_per_tissue(working_df, output_h5ad_dir, workdir, QC_cutoff, tissue, my_color_palette, default_cutoffs, runtag,
-                  key, use_mad=False, nmads=5.0, mad_scope='per-sample'):
+                  key, use_mad=False, nmads=5.0, mad_scope='per-sample', sample_colors=None, donor_colors=None):
     tissue_std = standardize_tissue_name(tissue)
 
     adata_path = os.path.join(output_h5ad_dir, f"{tissue_std}_GEX.withQC.h5ad")
@@ -420,27 +442,31 @@ def run_per_tissue(working_df, output_h5ad_dir, workdir, QC_cutoff, tissue, my_c
         QC_cutoff.to_csv(mad_tsv, sep='\t', index=False)
         print(f"[INFO] MAD QC cutoffs written to {mad_tsv}")
 
-    os.chdir(workdir)
+    sc.settings.figdir = figdir
 
     print(f'[INFO] all figure plots by {key}')
     if key == 'donorID':
-        all_colors = assign_donor_colors(working_df, my_color_palette, key = key)
+        all_colors = assign_donor_colors(working_df, donor_colors or {}, key=key, fallback_palette=my_color_palette)
         print(f"use colors: {all_colors}")
     elif key == 'sampleID':
-        sample_colors={}
-        #all_colors = assign_donor_colors(working_df, sample_colors, key = 'rnaID')
-        all_colors = assign_colors(sorted(set(working_df['rnaID'])), palette=my_color_palette)
+        all_colors = assign_donor_colors(working_df, sample_colors or {}, key='rnaID', fallback_palette=my_color_palette)
         print(f"use colors: {all_colors}")
     else:
         print("[WARNING] need to edit for colors")
 
     QC_cutoff_dict = QC_cutoff.set_index('rnaID').T.to_dict()
 
-    # Whether_use_double_GMM_method (from QC cutoff table): "Yes" filters on the
-    # GMM-derived doublet_probabilities, "No" filters directly on the raw doublet_score.
-    use_gmm_doublet = QC_cutoff_dict[next(iter(QC_cutoff_dict))].get('Whether_use_double_GMM_method', 'Yes') == "Yes"
-    doublet_col = 'doublet_probabilities' if use_gmm_doublet else 'doublet_score'
-    print(f"[INFO] Doublet filtering metric: {doublet_col} (Whether_use_double_GMM_method={'Yes' if use_gmm_doublet else 'No'})")
+    # Whether_use_double_GMM_method (from QC cutoff table) is resolved per sample:
+    # "Yes" filters that sample's cells on the GMM-derived doublet_probabilities,
+    # "No" filters directly on the raw doublet_score.
+    doublet_metric = pd.Series(np.nan, index=adata.obs_names)
+    for sample_id in adata.obs["sampleID"].unique():
+        if sample_id not in QC_cutoff_dict:
+            continue
+        doublet_col = resolve_doublet_column(QC_cutoff_dict[sample_id])
+        print(f"[INFO]   {sample_id}: doublet filtering metric = {doublet_col}")
+        sample_mask = adata.obs["sampleID"] == sample_id
+        doublet_metric.loc[sample_mask] = adata.obs.loc[sample_mask, doublet_col].values
 
     # For upset plot input summary
     filter_df = pd.DataFrame({
@@ -449,7 +475,7 @@ def run_per_tissue(working_df, output_h5ad_dir, workdir, QC_cutoff, tissue, my_c
         "total_counts": adata.obs["total_counts"],
         "pct_counts_mt": adata.obs["pct_counts_mt"],
         "pct_counts_ribo": adata.obs["pct_counts_ribo"],
-        "doublet_probabilities": adata.obs[doublet_col]
+        "doublet_probabilities": doublet_metric
     })
     if 'pct_exon_reads' in adata.obs:
         filter_df["pct_exon_reads"] = adata.obs["pct_exon_reads"]
@@ -457,25 +483,11 @@ def run_per_tissue(working_df, output_h5ad_dir, workdir, QC_cutoff, tissue, my_c
         filter_df["MALAT1_CPM"] = adata.obs["MALAT1_CPM"]
         filter_df["MALAT1_max_CPM"] = adata.obs["MALAT1_CPM"]
 
-    plotlist = ["leiden", "log10_total_counts", "log10_n_genes_by_counts", "pct_counts_mt", "pct_counts_ribo",
-                "pct_exon_reads", "log10_MALAT1_CPM", "doublet_score", "doublet_probabilities"]
-    if 'pct_exon_reads' not in adata.obs:
-        plotlist.remove('pct_exon_reads')
-        for d in QC_cutoff_dict.values():
-            d.pop('pct_exon_reads', None)
-
-    if 'MALAT1_CPM' not in adata.obs:
-        plotlist.remove('log10_MALAT1_CPM')
-        for d in QC_cutoff_dict.values():
-            d.pop('log10_MALAT1_CPM', None)
-
-    # Skip MALAT1 plots if all samples have both cutoffs set to '---'
+    # Skip MALAT1 plots/downstream coloring if all samples have both cutoffs set to '---'
     all_malat1_skipped = all(
         str(d.get('MALAT1_CPM_cutoffs', '---')) == '---' and str(d.get('MALAT1_CPM_max_cutoffs', '---')) == '---'
         for d in QC_cutoff_dict.values()
     )
-    if all_malat1_skipped and 'log10_MALAT1_CPM' in plotlist:
-        plotlist.remove('log10_MALAT1_CPM')
 
     # 1. Plot upset (all metrics and filtered only)
     print("[INFO] Generating upset plot...")
@@ -491,11 +503,11 @@ def run_per_tissue(working_df, output_h5ad_dir, workdir, QC_cutoff, tissue, my_c
 
     # 2. save doublet results
     print("[INFO] Export doublet information...")
-    export_doublet_calls_by_sample(adata, QC_cutoff_dict, tissue, tissue_std, figdir, doublet_col=doublet_col)
+    export_doublet_calls_by_sample(adata, QC_cutoff_dict, tissue, tissue_std, figdir)
 
     # 3. Filtering + logging
     print("[INFO] Filtering...")
-    adata_filt = filter_and_process_adata(adata, working_df, QC_cutoff_dict, tissue, tissue_std, figdir, key, doublet_col=doublet_col)
+    adata_filt = filter_and_process_adata(adata, working_df, QC_cutoff_dict, tissue, tissue_std, figdir, key)
     adata_filt.var = adata.var.copy()
     adata_filt.uns = adata.uns.copy()
     adata = adata_filt.copy()
@@ -508,7 +520,7 @@ def run_per_tissue(working_df, output_h5ad_dir, workdir, QC_cutoff, tissue, my_c
     # 5. normalization, feature selection, linear dimensional reduction
     print("[INFO] Post-filter processing...")
     downstream_process(adata, tissue_std, figdir, all_colors, include_malat1=not all_malat1_skipped)
-    run_umap_clustering(adata, tissue, tissue_std, figdir, plotlist)
+    run_umap_clustering(adata, tissue, tissue_std, figdir)
 
     # Save output h5ad
     compress_and_save_postqc_h5ad(adata, output_h5ad_dir, tissue_std, runtag)
@@ -528,6 +540,7 @@ def main(config_path, runtag, use_mad=False, nmads=5.0, mad_scope='per-sample'):
     tissue = config['params']['tissue']
 
     donor_colors = config['color'].get("donor_colors")
+    sample_colors = config['color'].get("sample_colors")
     my_color_palette = config["my_color_palette"]
 
     # Default QC cutoffs for fallback
@@ -555,26 +568,33 @@ def main(config_path, runtag, use_mad=False, nmads=5.0, mad_scope='per-sample'):
     else:
         df_cutoff_all = pd.read_csv(qc_cutoff_table, sep='\t')
 
+    failed_tissues = []
     if tissue == "---":
         tissues = sorted(df["tissue"].unique())
         print(f"[INFO] Running QC filtering for MULTIPLE tissues: {tissues}")
-        
+
         for idx, tissue_name in enumerate(tissues, 1):
             print(f"\n============== Processing tissue: {tissue_name} ({idx}/{len(tissues)}) ==============")
             try:
                 working_df = df[df["tissue"] == tissue_name]
                 QC_cutoff = df_cutoff_all[df_cutoff_all['Tissue'] == tissue_name]
-                run_per_tissue(working_df, output_h5ad_dir, workdir, QC_cutoff, tissue_name, my_color_palette, default_cutoffs, runtag, "sampleID", use_mad=use_mad, nmads=nmads, mad_scope=mad_scope)
+                run_per_tissue(working_df, output_h5ad_dir, workdir, QC_cutoff, tissue_name, my_color_palette, default_cutoffs, runtag, "sampleID", use_mad=use_mad, nmads=nmads, mad_scope=mad_scope, sample_colors=sample_colors, donor_colors=donor_colors)
             except Exception as e:
                 print(f"[ERROR] QC filtering failed for {tissue_name}: {e}")
+                failed_tissues.append(tissue_name)
     else:
         print(f"\n============== Processing tissue: {tissue} ==============")
         try:
             working_df = df[df["tissue"] == tissue]
             QC_cutoff = df_cutoff_all[df_cutoff_all['Tissue'] == tissue]
-            run_per_tissue(working_df, output_h5ad_dir, workdir, QC_cutoff, tissue, my_color_palette, default_cutoffs, runtag, "sampleID", use_mad=use_mad, nmads=nmads, mad_scope=mad_scope)
+            run_per_tissue(working_df, output_h5ad_dir, workdir, QC_cutoff, tissue, my_color_palette, default_cutoffs, runtag, "sampleID", use_mad=use_mad, nmads=nmads, mad_scope=mad_scope, sample_colors=sample_colors, donor_colors=donor_colors)
         except Exception as e:
             print(f"[ERROR] QC filtering failed for {tissue}: {e}")
+            failed_tissues.append(tissue)
+
+    if failed_tissues:
+        print(f"[ERROR] filter_qc failed for {len(failed_tissues)} tissue(s): {failed_tissues}")
+        sys.exit(1)
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Run QC filtering, normalization, feature selection for scRNA-seq h5ad.")
