@@ -216,24 +216,25 @@ def plot_qc_cumulative_distribution(adata, metrics, tissue, tissue_std, all_colo
             plt.savefig(os.path.join(figdir, f"RNA_QC_cumulative.by{key}.{tissue_std}.{metric}.png"), dpi=300, bbox_inches='tight')
             plt.close()
 
-def plot_doublet_hist(adata, tissue, tissue_std, figdir, key, probability_cutoff=None, stage=None):
+def plot_doublet_hist(adata, tissue, tissue_std, figdir, key, probability_cutoff=None, stage=None, metric_col='doublet_probabilities'):
+    metric_label = 'Doublet Probability' if metric_col == 'doublet_probabilities' else 'Doublet Score'
     for ID in adata.obs[key].unique():
         print(f"[INFO] Plotting doublet score & probability distribution for: {ID}...")
         doublet_scores = adata[adata.obs[key] == ID].obs['doublet_score']
-        doublet_probabilities = adata[adata.obs[key] == ID].obs['doublet_probabilities']
+        doublet_metric = adata[adata.obs[key] == ID].obs[metric_col]
 
-        if doublet_probabilities.isnull().all():
-            print(f"[WARNING] No doublet probabilities for {ID}")
+        if doublet_metric.isnull().all():
+            print(f"[WARNING] No {metric_col} for {ID}")
             continue
         # check whether have given doublet cutoffs. if no, use midpoint
         if probability_cutoff is None:
             print(f"[INFO] using midpoint as doublet cutoff...")
-            cutoff = np.round((doublet_probabilities.max()+doublet_probabilities.min())/2,1)
+            cutoff = np.round((doublet_metric.max()+doublet_metric.min())/2,1)
         else:
             print(f"[INFO] using given doublet cutoff...")
             cutoff = float(probability_cutoff)
         print(f"[INFO] current doublet cutoff is {cutoff}.")
-        doublet_mask = doublet_probabilities > cutoff
+        doublet_mask = doublet_metric > cutoff
 
         bins = np.histogram_bin_edges(doublet_scores, bins=50)
         hist_non_doublets, _ = np.histogram(doublet_scores[~doublet_mask], bins=bins)
@@ -246,12 +247,12 @@ def plot_doublet_hist(adata, tissue, tissue_std, figdir, key, probability_cutoff
         axes[0].set_ylabel('Frequency')
         axes[0].legend()
         axes[0].grid(False)
-        prob_bins = np.histogram_bin_edges(doublet_probabilities, bins=30)
-        prob_hist, _ = np.histogram(doublet_probabilities, bins=prob_bins)
+        prob_bins = np.histogram_bin_edges(doublet_metric, bins=30)
+        prob_hist, _ = np.histogram(doublet_metric, bins=prob_bins)
         axes[1].bar(prob_bins[:-1], prob_hist, width=np.diff(prob_bins), edgecolor='black', color='grey', alpha=0.7)
         axes[1].axvline(cutoff, color='red', linestyle='--', label='Doublet Threshold')
         axes[1].set_title(f'cutoff = {str(cutoff)}')
-        axes[1].set_xlabel('Doublet Probability')
+        axes[1].set_xlabel(metric_label)
         axes[1].set_ylabel('Frequency')
         axes[1].set_xlim(0, 1)
         axes[1].grid(False)

@@ -267,12 +267,12 @@ def prepare_upset_summary_filteredQC(sample_df, QC_cutoff_dict):
     upset_data = upset_data[(upset_data.sum(axis=1) > 0)]
     return upset_data.groupby(list(condition_indices.keys())).size()
 
-def export_doublet_calls_by_sample(adata, QC_cutoff_dict, tissue, tissue_std, figdir):
+def export_doublet_calls_by_sample(adata, QC_cutoff_dict, tissue, tissue_std, figdir, doublet_col='doublet_probabilities'):
     """
     For each sampleID in adata.obs, determines doublet calls using the supplied QC_cutoff_dict,
     and saves the results as TSV files in the specified figdir.
     """
-    
+
     for sampleID in adata.obs['sampleID'].unique():
         if sampleID not in QC_cutoff_dict:
             print(f"[ERROR] sampleID {sampleID} not found in QC_cutoff_dict.")
@@ -280,23 +280,24 @@ def export_doublet_calls_by_sample(adata, QC_cutoff_dict, tissue, tissue_std, fi
 
         cutoff = QC_cutoff_dict[sampleID]
         doublet_cutoff = float(cutoff['doublet_cutoffs'])
-        
+
         adata_sel = adata[adata.obs['sampleID'] == sampleID, :].copy()
         df_doublet = adata_sel.obs[['doublet_score', 'doublet_probabilities']].copy()
-        df_doublet['doublet_call'] = df_doublet['doublet_probabilities'].apply(
+        df_doublet['doublet_call'] = df_doublet[doublet_col].apply(
             lambda x: 'yes' if x > doublet_cutoff else 'no'
         )
-        
+
         doublet_outfile = os.path.join(figdir, f'RNA_doublet_results.{sampleID}.tsv')
         df_doublet.to_csv(doublet_outfile, sep='\t', index=True, header=True, index_label="cell_barcode")
 
         # plot the doublet distribution with filter cutoff
         plot_doublet_hist(
             adata=adata_sel, tissue=tissue, tissue_std=tissue_std,
-            figdir=figdir, key='sampleID', probability_cutoff=doublet_cutoff, stage="filterqc")
+            figdir=figdir, key='sampleID', probability_cutoff=doublet_cutoff, stage="filterqc",
+            metric_col=doublet_col)
 
 
-def filter_and_process_adata(adata, df, QC_cutoff_dict, tissue, tissue_std, log_file_dir, key):
+def filter_and_process_adata(adata, df, QC_cutoff_dict, tissue, tissue_std, log_file_dir, key, doublet_col='doublet_probabilities'):
 
     adata_filter = adata.copy()
     
@@ -342,9 +343,9 @@ def filter_and_process_adata(adata, df, QC_cutoff_dict, tissue, tissue_std, log_
                 print(f"[INFO]   after MALAT1_CPM max ({cutoff['MALAT1_CPM_max_cutoffs']}): -> {len(adata_process)} cells")
             else:
                 print(f"[WARNING] Skipping MALAT1_CPM max filter for {ID}: all values are NaN")
-        # Doublet filter: keep cells with NaN probabilities (doublet detection may have failed)
-        doublet_mask = adata_process.obs['doublet_probabilities'] < float(cutoff['doublet_cutoffs'])
-        doublet_mask = doublet_mask | adata_process.obs['doublet_probabilities'].isna()
+        # Doublet filter: keep cells with NaN values (doublet detection may have failed)
+        doublet_mask = adata_process.obs[doublet_col] < float(cutoff['doublet_cutoffs'])
+        doublet_mask = doublet_mask | adata_process.obs[doublet_col].isna()
         adata_process = adata_process[doublet_mask, :]
         print(f"[INFO]   after doublet ({cutoff['doublet_cutoffs']}): -> {len(adata_process)} cells")
         log_lines.append(f'num of cellbarcodes after QC filtering in {ID}: {len(adata_process.obs_names)}\n\n')
@@ -435,6 +436,12 @@ def run_per_tissue(working_df, output_h5ad_dir, workdir, QC_cutoff, tissue, my_c
 
     QC_cutoff_dict = QC_cutoff.set_index('rnaID').T.to_dict()
 
+    # Whether_use_double_GMM_method (from QC cutoff table): "Yes" filters on the
+    # GMM-derived doublet_probabilities, "No" filters directly on the raw doublet_score.
+    use_gmm_doublet = QC_cutoff_dict[next(iter(QC_cutoff_dict))].get('Whether_use_double_GMM_method', 'Yes') == "Yes"
+    doublet_col = 'doublet_probabilities' if use_gmm_doublet else 'doublet_score'
+    print(f"[INFO] Doublet filtering metric: {doublet_col} (Whether_use_double_GMM_method={'Yes' if use_gmm_doublet else 'No'})")
+
     # For upset plot input summary
     filter_df = pd.DataFrame({
         "sampleID": adata.obs["sampleID"],
@@ -442,7 +449,7 @@ def run_per_tissue(working_df, output_h5ad_dir, workdir, QC_cutoff, tissue, my_c
         "total_counts": adata.obs["total_counts"],
         "pct_counts_mt": adata.obs["pct_counts_mt"],
         "pct_counts_ribo": adata.obs["pct_counts_ribo"],
-        "doublet_probabilities": adata.obs["doublet_probabilities"]
+        "doublet_probabilities": adata.obs[doublet_col]
     })
     if 'pct_exon_reads' in adata.obs:
         filter_df["pct_exon_reads"] = adata.obs["pct_exon_reads"]
@@ -484,11 +491,11 @@ def run_per_tissue(working_df, output_h5ad_dir, workdir, QC_cutoff, tissue, my_c
 
     # 2. save doublet results
     print("[INFO] Export doublet information...")
-    export_doublet_calls_by_sample(adata, QC_cutoff_dict, tissue, tissue_std, figdir)
-    
+    export_doublet_calls_by_sample(adata, QC_cutoff_dict, tissue, tissue_std, figdir, doublet_col=doublet_col)
+
     # 3. Filtering + logging
     print("[INFO] Filtering...")
-    adata_filt = filter_and_process_adata(adata, working_df, QC_cutoff_dict, tissue, tissue_std, figdir, key)
+    adata_filt = filter_and_process_adata(adata, working_df, QC_cutoff_dict, tissue, tissue_std, figdir, key, doublet_col=doublet_col)
     adata_filt.var = adata.var.copy()
     adata_filt.uns = adata.uns.copy()
     adata = adata_filt.copy()
