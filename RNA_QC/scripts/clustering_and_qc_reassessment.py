@@ -19,7 +19,7 @@ import anndata as ad
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 from rna_qc.utils import load_config, standardize_tissue_name, setup_logging, require_keys
-from rna_qc.rna_plots import assign_donor_colors, move_figures_to_newdir, plot_umap_by_ID, plot_cellcount_per_cluster_barplot, plot_umap_highlight_by_qc_metrics, plot_qc_metrics_violin_by_cluster
+from rna_qc.rna_plots import assign_colors, assign_donor_colors, move_figures_to_newdir, plot_umap_by_ID, plot_cellcount_per_cluster_barplot, plot_umap_highlight_by_qc_metrics, plot_qc_metrics_violin_by_cluster
 
 def get_h5ad_path(output_h5ad_dir, tissue_std, batch_corrected, runtag):
     if batch_corrected:
@@ -82,7 +82,7 @@ def save_processed_adata(adata, output_h5ad_dir, tissue_std, runtag):
     out_h5ad = os.path.join(output_h5ad_dir,  f"{tissue_std}_GEX.filtered.processed.{runtag}.h5ad")
     adata.write(out_h5ad)
 
-def run_per_tissue(workdir, output_h5ad_dir, qc_cutoff_tissue, tissue, my_color_palette, runtag, nmads, key = "aliquotID", resolutions=[0.1,0.5,1.0], default_res=0.5, sample_colors=None, donor_colors=None):
+def run_per_tissue(workdir, output_h5ad_dir, qc_cutoff_tissue, tissue, my_color_palette, runtag, nmads, key = "aliquotID", resolutions=[0.1,0.5,1.0], default_res=0.5):
     
     tissue_std = standardize_tissue_name(tissue)
 
@@ -104,17 +104,17 @@ def run_per_tissue(workdir, output_h5ad_dir, qc_cutoff_tissue, tissue, my_color_
 
     figdir = os.path.join(workdir, 'figures')
     os.makedirs(figdir, exist_ok=True)
-    sc.settings.figdir = figdir
+    os.chdir(workdir)
 
     logging.info(f'all figure plots by {key}')
     if key == 'donorID':
-        all_colors = assign_donor_colors(adata.obs, donor_colors or {}, key=key, fallback_palette=my_color_palette)
+        all_colors = assign_colors(sorted(set(adata.obs[key])), palette=my_color_palette)
         logging.info(f"use colors: {all_colors}")
     elif key == 'sampleID':
-        all_colors = assign_donor_colors(adata.obs, sample_colors or {}, key='sampleID', fallback_palette=my_color_palette)
+        all_colors = assign_colors(sorted(set(adata.obs[key])), palette=my_color_palette)
         logging.info(f"use colors: {all_colors}")
     elif key == 'aliquotID':
-        all_colors = assign_donor_colors(adata.obs, donor_colors or {}, key='aliquotID', fallback_palette=my_color_palette)
+        all_colors = assign_donor_colors(adata.obs, my_color_palette, key = 'aliquotID')
         logging.info(f"use colors: {all_colors}")
     else:
         logging.warning("need to edit for colors")
@@ -140,8 +140,8 @@ def run_per_tissue(workdir, output_h5ad_dir, qc_cutoff_tissue, tissue, my_color_
     ((adata.obs["log10_MALAT1_CPM"] == np.inf) | (adata.obs["log10_MALAT1_CPM"] == -np.inf)).all()):
         qc_metrics.remove("log10_MALAT1_CPM")
     plot_umap_highlight_by_qc_metrics(adata, tissue, tissue_std, figdir, qc_metrics, key)
-    plot_qc_metrics_violin_by_cluster(adata, tissue, tissue_std, figdir, qc_metrics[1:], key,
-                                      nmads, add_mad_lines=False)
+    plot_qc_metrics_violin_by_cluster(adata, tissue, tissue_std, figdir, qc_metrics[1:], key, 
+                                      nmads, add_mad_lines=True)
     
     # Save outputs
     save_stats(adata, figdir, tissue_std, runtag)
@@ -165,7 +165,6 @@ def main(config_path, runtag, key, nmads=5.0):
     tissue = config['params']['tissue']
 
     donor_colors = config['color'].get("donor_colors")
-    sample_colors = config['color'].get("sample_colors")
     my_color_palette = config["my_color_palette"]
     
     # Load qc cutoff table
@@ -191,7 +190,7 @@ def main(config_path, runtag, key, nmads=5.0):
             try:
                 QC_cutoff = df_cutoff_all[df_cutoff_all['Tissue'] == tissue_name]
                 run_per_tissue(workdir, output_h5ad_dir, QC_cutoff, tissue_name, my_color_palette,
-                               runtag, nmads, key, sample_colors=sample_colors, donor_colors=donor_colors)
+                               runtag, nmads, key)
             except Exception as e:
                 logging.error(f"QC re-assessment failed for {tissue_name}: {e}")
                 failed_tissues.append(tissue_name)
@@ -205,7 +204,7 @@ def main(config_path, runtag, key, nmads=5.0):
         try:
             QC_cutoff = df_cutoff_all[df_cutoff_all['Tissue'] == tissue]
             run_per_tissue(workdir, output_h5ad_dir, QC_cutoff, tissue, my_color_palette,
-                           runtag, nmads, key, sample_colors=sample_colors, donor_colors=donor_colors)
+                           runtag, nmads, key)
         except Exception as e:
             logging.error(f"QC re-assessment failed for {tissue}: {e}")
             sys.exit(1)

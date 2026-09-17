@@ -16,7 +16,6 @@ import time
 import argparse
 import re
 import logging
-import traceback
 import pandas as pd
 import snapatac2 as snap
 
@@ -66,25 +65,9 @@ def process_fragments(row, config, barcode_dic_rna, overwrite=False):
             logging.info(f"Skipping {atacID}: output already exists.")
             return
 
-    # Load chrom sizes: use file from config if provided, otherwise fall back to hg38
-    chrom_sizes_file = config['references'].get('chrom_sizes', None)
-    if chrom_sizes_file and os.path.isfile(chrom_sizes_file):
-        logging.info(f"Loading chrom sizes from {chrom_sizes_file}")
-        chrom_sizes = {}
-        with open(chrom_sizes_file) as f:
-            for line in f:
-                parts = line.strip().split('\t')
-                if len(parts) >= 2:
-                    chrom_sizes[parts[0]] = int(parts[1])
-    else:
-        if chrom_sizes_file:
-            logging.warning(f"Configured chrom_sizes file not found: {chrom_sizes_file}")
-        logging.info("Using default hg38 chrom sizes")
-        chrom_sizes = snap.genome.hg38
-
     data = snap.pp.import_data(
         fragment_file,
-        chrom_sizes = chrom_sizes,
+        chrom_sizes = snap.genome.hg38,
         file = output_h5ad,
         min_num_fragments = min_fragments,
         sorted_by_barcode = False,
@@ -111,25 +94,12 @@ def process_fragments(row, config, barcode_dic_rna, overwrite=False):
 
     # Figure and metrics
     logging.info("Plotting fragment size...")
-    try:
-        snap.pl.frag_size_distr(
-            data, interactive=False,
-            out_file=output_fig
-        )
-    except Exception as e:
-        logging.warning(f"Fragment size plot failed (non-fatal): {e}")
-
+    snap.pl.frag_size_distr(
+        data, interactive=False,
+        out_file=output_fig
+    )
     logging.info("Calculating TSS enrichment score...")
     snap.metrics.tsse(data, gene_anno=gencode_gtf, n_jobs = n_threads)
-
-    # Verify tsse was computed
-    if 'tsse' not in data.obs:
-        data.close()
-        os.remove(output_h5ad)
-        raise RuntimeError(
-            f"snap.metrics.tsse() did not produce 'tsse' column for {atacID}. "
-            f"Available obs columns: {list(data.obs.keys())}"
-        )
 
     logging.info(f"Adding sampleID: {atacID} to anndata object")
     data.obs['sampleID'] = [str(atacID) for bc in data.obs_names]
@@ -182,12 +152,6 @@ def main(config_path, overwrite=False):
             process_fragments(row, config, barcode_dic_rna, overwrite=overwrite)
         except Exception as e:
             logging.error(f"Encountered error for {row['atacID']}: {e}")
-            traceback.print_exc()
-            # Clean up partial h5ad so downstream steps don't find incomplete files
-            partial_h5ad = os.path.join(output_h5ad_dir, f"{row['atacID']}.raw.h5ad")
-            if os.path.exists(partial_h5ad):
-                os.remove(partial_h5ad)
-                logging.info(f"Removed partial h5ad: {partial_h5ad}")
             failed_samples.append(row['atacID'])
             continue
 
