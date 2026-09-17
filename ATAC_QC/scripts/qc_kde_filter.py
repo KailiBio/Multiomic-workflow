@@ -12,6 +12,7 @@ warnings.filterwarnings("ignore", message="Transforming to str index.")
 import os
 import sys
 import argparse
+import logging
 import numpy as np
 import pandas as pd
 from matplotlib.backends.backend_pdf import PdfPages
@@ -19,13 +20,18 @@ import anndata as ad
 import snapatac2 as snap
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
-from atac_qc.utils import load_config, standardize_tissue_name
+from atac_qc.utils import load_config, standardize_tissue_name, setup_logging, require_keys
 from atac_qc.atac_plots import plot_kde_filter
 
 
 def main(config_path, runtag):
+    setup_logging()
     config = load_config(config_path)
-    
+    require_keys(config, [
+        "paths.workdir", "paths.output_h5ad_dir", "paths.sample_metadata",
+        "params.tissue", "params.suffix", "qc.atac_qc_cutoff_table", "qc.sheet_name",
+    ], context=config_path)
+
     workdir = config['paths']['workdir']
     output_h5ad_dir = config['paths']['output_h5ad_dir']
     outdir = os.path.join(workdir, f"qc_filtering.{runtag}")
@@ -57,13 +63,13 @@ def main(config_path, runtag):
         df_cutoff = df_cutoff_all[df_cutoff_all['Tissue'] == tissue]
 
     if (df_cutoff.empty):
-        print(f'ERROR: No QC cutoffs found for {tissue} in {qc_cutoff_table}')
-        exit(1)
+        logging.error(f'No QC cutoffs found for {tissue} in {qc_cutoff_table}')
+        sys.exit(1)
 
     tissues = sorted(working_df["tissue"].unique())
-    print(f"Working tissue: {', '.join(tissues)}")
+    logging.info(f"Working tissue: {', '.join(tissues)}")
     sample_list = working_df['atacID'].unique()
-    print(f"Samples: {list(sample_list)}")
+    logging.info(f"Samples: {list(sample_list)}")
 
     df_cutoff.set_index('atacID', inplace=True)
     sample_tissue_dict = dict(zip(working_df['atacID'], working_df['tissue']))
@@ -73,26 +79,26 @@ def main(config_path, runtag):
 
     with PdfPages(before_pdf) as pdf_before, PdfPages(after_pdf) as pdf_after:
         for i, fileID in enumerate(sample_list, 1):
-            print(f"\n========== Processing {fileID} ({i}/{len(sample_list)}) ==========")
+            logging.info(f"========== Processing {fileID} ({i}/{len(sample_list)}) ==========")
 
             tissue_std = standardize_tissue_name(sample_tissue_dict[fileID])
-            
+
             try:
                 h5ad_path = os.path.join(output_h5ad_dir, f'{fileID}.raw.h5ad')
                 if not os.path.exists(h5ad_path):
-                    print(f"[ERROR] No h5ad for {fileID} at {h5ad_path}.")
+                    logging.error(f"No h5ad for {fileID} at {h5ad_path}.")
                     continue
 
-                print("[INFO] Loading anndata object...")
+                logging.info("Loading anndata object...")
                 adata = ad.read_h5ad(h5ad_path)
 
                 if 'tsse' not in adata.obs.columns:
-                    print(f"[ERROR] 'tsse' column missing from {h5ad_path}. "
-                          f"This usually means load_fragments failed for this sample. "
-                          f"Re-run load_fragments with --overwrite.")
+                    logging.error(f"'tsse' column missing from {h5ad_path}. "
+                                  f"This usually means load_fragments failed for this sample. "
+                                  f"Re-run load_fragments with --overwrite.")
                     continue
 
-                print("[INFO] Calculating initial number...")
+                logging.info("Calculating initial number...")
                 initial_cell_str = f"Initial cell barcodes: {len(adata.obs_names)}"
                 x_cutoff = df_cutoff.loc[fileID, "num_fragment"]
                 y_cutoff = df_cutoff.loc[fileID, "TSS_enrichment_score"]
@@ -104,33 +110,37 @@ def main(config_path, runtag):
                 passed_cells_str = f"Cells passing QC: {len(adata_qc)}"
 
                 # Pre-filter plot
-                print("[INFO] Plotting pre-filter kde...")
+                logging.info("Plotting pre-filter kde...")
                 snap.pp.filter_cells(adata, min_tsse=3, min_counts=100, max_counts=100000,
                                      inplace=True, n_jobs=n_threads)
                 plot_kde_filter(
-                    adata, x_cutoff, y_cutoff, f'{tissue_std}\n{fileID}', 
+                    adata, x_cutoff, y_cutoff, f'{tissue_std}\n{fileID}',
                     initial_cell_str, cutoff_str, passed_cells_str, pdf_before, show_cutoff_line=True
                 )
 
                 # filter & post-filter plot
-                print("[INFO] Filter & plotting kde...")
+                logging.info("Filter & plotting kde...")
                 snap.pp.filter_cells(adata, min_tsse=y_cutoff, min_counts=x_cutoff,
                                      max_counts=100000, inplace=True, n_jobs=n_threads)
                 plot_kde_filter(
-                    adata, x_cutoff, y_cutoff, f'{tissue_std}\n{fileID}', 
+                    adata, x_cutoff, y_cutoff, f'{tissue_std}\n{fileID}',
                     initial_cell_str, cutoff_str, passed_cells_str, pdf_after, show_cutoff_line=False
                 )
 
                 out_path = os.path.join(output_h5ad_dir, f'{fileID}.filtered.{runtag}.h5ad')
                 adata.write(out_path)
-                print(f"[DONE] wrote {os.path.relpath(out_path)} with {adata.n_obs} cells\n")
-                
+                logging.info(f"wrote {os.path.relpath(out_path)} with {adata.n_obs} cells")
+
             except Exception as e:
-                print(f"[ERROR] Encountered error for {fileID}: {e}")
+                logging.error(f"Encountered error for {fileID}: {e}")
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="ATAC cell filtering and KDE plotting.")
     parser.add_argument("config", help="YAML config file")
     parser.add_argument("runtag", help="Tag for this run (e.g. round3 or v1)")
     args = parser.parse_args()
-    main(args.config, args.runtag)
+    try:
+        main(args.config, args.runtag)
+    except (FileNotFoundError, KeyError, ValueError) as e:
+        logging.error(f"{type(e).__name__}: {e}")
+        sys.exit(1)

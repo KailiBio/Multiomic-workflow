@@ -20,7 +20,7 @@ import logging
 from sklearn.mixture import BayesianGaussianMixture
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
-from rna_qc.utils import load_config, standardize_tissue_name
+from rna_qc.utils import load_config, standardize_tissue_name, setup_logging, require_keys
 from rna_qc.rna_plots import assign_donor_colors, move_figures_to_newdir, plot_qc_violin, plot_qc_jointplot, plot_qc_cumulative_distribution, plot_doublet_hist, clustering_umap
 
 
@@ -43,8 +43,8 @@ def calculate_qc_metrics(adata, species=None):
     # calculate mt, ribo, hb
     extra_mito_genes = _SPECIES_MITO_GENES.get(str(species).strip().lower(), [])
     if extra_mito_genes:
-        print(f"[INFO] Species '{species}' matched — including {len(extra_mito_genes)} extra "
-              f"non-'MT-' mitochondrial gene IDs for pct_counts_mt.")
+        logging.info(f"Species '{species}' matched — including {len(extra_mito_genes)} extra "
+                     f"non-'MT-' mitochondrial gene IDs for pct_counts_mt.")
     adata.var["mt"] = (
         adata.var_names.str.startswith("MT-") |
         adata.var_names.isin(extra_mito_genes)
@@ -103,7 +103,7 @@ def run_doublet_detection(adata, donor_col, key):
     dfs = []
     for ID in adata.obs[key].unique():
         try:
-            print(f"[INFO] Doublet detection for {ID}...")
+            logging.info(f"Doublet detection for {ID}...")
             doublet_scores_sim = adata.uns['scrublet']['batches'][ID]['doublet_scores_sim']
             doublet_scores = adata[adata.obs[key] == ID].obs['doublet_score'].to_numpy()
             
@@ -119,7 +119,7 @@ def run_doublet_detection(adata, donor_col, key):
             dfs.append(df)
             
         except Exception as e:
-            print(f"[WARNING] Could not run doublet GMM for {ID}: {e}")
+            logging.warning(f"Could not run doublet GMM for {ID}: {e}")
     
     if dfs:
         all_prob_df = pd.concat(dfs).set_index('obs_names')
@@ -133,7 +133,7 @@ def compress_and_save(adata, output_h5ad_dir, tissue_std):
         adata.X = scipy.sparse.csr_matrix(adata.X)
     if 'CPM' in adata.layers and not scipy.sparse.issparse(adata.layers['CPM']):
         adata.layers['CPM'] = scipy.sparse.csr_matrix(adata.layers['CPM'])
-    print("[INFO] Saving h5ad...")
+    logging.info("Saving h5ad...")
     adata.write(os.path.join(output_h5ad_dir, f'{tissue_std}_GEX.withQC.h5ad'))
 
 def run_per_tissue(working_df, tissue, output_h5ad_dir, outdir, my_color_palette, scrinvex_dir, nmads, key = "sampleID", qc_cutoff_df=None, mad_scope='per-sample', sample_colors=None, donor_colors=None):
@@ -141,33 +141,33 @@ def run_per_tissue(working_df, tissue, output_h5ad_dir, outdir, my_color_palette
         
     adata_path = os.path.join(output_h5ad_dir, f"{tissue_std}_GEX.raw.h5ad")
     if not os.path.exists(adata_path):
-        print(f"[ERROR] No h5ad found for tissue {tissue_std} at {adata_path}.")
+        logging.error(f"No h5ad found for tissue {tissue_std} at {adata_path}.")
         return
     
-    print(f"[INFO] Loading raw anndata obejct for tissue: {tissue_std}...")
+    logging.info(f"Loading raw anndata obejct for tissue: {tissue_std}...")
     adata = ad.read_h5ad(adata_path)
 
     figdir = os.path.join(outdir, 'figures')
     os.makedirs(figdir, exist_ok=True)
     sc.settings.figdir = figdir
 
-    print(f'[INFO] all figure plots by {key}')
+    logging.info(f'all figure plots by {key}')
     if key == 'donorID':
         all_colors = assign_donor_colors(working_df, donor_colors or {}, key=key, fallback_palette=my_color_palette)
-        print(f"use colors: {all_colors}")
+        logging.info(f"use colors: {all_colors}")
     elif key == 'sampleID':
         all_colors = assign_donor_colors(working_df, sample_colors or {}, key='rnaID', fallback_palette=my_color_palette)
-        print(f"use colors: {all_colors}")
+        logging.info(f"use colors: {all_colors}")
     else:
-        print("[WARNING] need to edit for colors")
+        logging.warning("need to edit for colors")
 
     species_values = working_df['species'].dropna().unique() if 'species' in working_df else []
     if len(species_values) == 1:
         species = species_values[0]
     else:
         if len(species_values) > 1:
-            print(f"[WARNING] Multiple species values found for tissue {tissue}: {list(species_values)}. "
-                  f"Skipping species-specific mitochondrial gene list.")
+            logging.warning(f"Multiple species values found for tissue {tissue}: {list(species_values)}. "
+                            f"Skipping species-specific mitochondrial gene list.")
         species = None
     calculate_qc_metrics(adata, species=species)
 
@@ -184,7 +184,7 @@ def run_per_tissue(working_df, tissue, output_h5ad_dir, outdir, my_color_palette
         adata.obs['log10_MALAT1_CPM'].isnull().all() or
         ((adata.obs['log10_MALAT1_CPM'] == np.inf) | (adata.obs['log10_MALAT1_CPM'] == -np.inf)).all()):
         QC_metrics.remove('log10_MALAT1_CPM')
-        print("[INFO] Skipping MALAT1 plots — gene absent from reference or all values NaN/inf.")
+        logging.info("Skipping MALAT1 plots — gene absent from reference or all values NaN/inf.")
 
     # Build cutoff bounds from Excel QC table if available, otherwise use defaults.
     # Each metric maps to {'lower': v_or_None, 'upper': v_or_None}; MAD lines are
@@ -208,7 +208,7 @@ def run_per_tissue(working_df, tissue, output_h5ad_dir, outdir, my_color_palette
             'pct_exon_reads': {'upper': _safe(row.get('Exon_ratio_cutoffs'))},
             'log10_MALAT1_CPM': {'lower': _safe(row.get('MALAT1_CPM_cutoffs'), lambda v: np.log10(max(v, 1)))},
         }
-        print(f"[INFO] Pre-QC cutoff lines from Excel: {metrics_with_cutoffs}")
+        logging.info(f"Pre-QC cutoff lines from Excel: {metrics_with_cutoffs}")
     else:
         # Fallback: default cutoffs
         if 'pct_exon_reads' in adata.obs and adata.obs['pct_exon_reads'].notna().any():
@@ -226,7 +226,7 @@ def run_per_tissue(working_df, tissue, output_h5ad_dir, outdir, my_color_palette
             'pct_exon_reads': {'upper': percent_exon_cutoff},
             'log10_MALAT1_CPM': {'lower': np.log10(10)},
         }
-        print("[INFO] Pre-QC cutoff lines using defaults (no Excel cutoffs provided)")
+        logging.info("Pre-QC cutoff lines using defaults (no Excel cutoffs provided)")
     for metric in QC_metrics:
         plot_qc_violin(adata, metric, tissue, tissue_std, all_colors, metrics_with_cutoffs, figdir, key, nmads=nmads, add_mad_lines=True, mad_scope=mad_scope)
 
@@ -264,10 +264,15 @@ def run_per_tissue(working_df, tissue, output_h5ad_dir, outdir, my_color_palette
     compress_and_save(adata, output_h5ad_dir, tissue_std)
     # Move figures to new directory
     move_figures_to_newdir(outdir, old="figures", new="pre_qc_assessment")
-    print(f"[INFO] RNA QC pre-assessment complete for {tissue}.")
+    logging.info(f"RNA QC pre-assessment complete for {tissue}.")
 
 def main(config_path, nmads=5.0, mad_scope='per-sample'):
+    setup_logging()
     config = load_config(config_path)
+    require_keys(config, [
+        "paths.workdir", "paths.output_h5ad_dir", "paths.sample_metadata",
+        "params.tissue", "color", "my_color_palette",
+    ], context=config_path)
 
     workdir = config['paths']['workdir']
     output_h5ad_dir = config['paths']['output_h5ad_dir']
@@ -288,7 +293,7 @@ def main(config_path, nmads=5.0, mad_scope='per-sample'):
     qc_config = config.get('qc', {})
     qc_cutoff_table = qc_config.get('rna_qc_cutoff_table')
     if qc_cutoff_table and os.path.exists(qc_cutoff_table):
-        print(f"[INFO] Loading QC cutoff table for pre-QC plots: {qc_cutoff_table}")
+        logging.info(f"Loading QC cutoff table for pre-QC plots: {qc_cutoff_table}")
         if qc_cutoff_table.endswith('.xlsx') or qc_cutoff_table.endswith('.xls'):
             df_cutoff_all = pd.read_excel(qc_cutoff_table,
                                           sheet_name=qc_config.get('sheet_name', 0), engine='openpyxl')
@@ -298,10 +303,10 @@ def main(config_path, nmads=5.0, mad_scope='per-sample'):
     failed_tissues = []
     if tissue == "---":
         tissues = sorted(df["tissue"].unique())
-        print(f"[INFO] Running analysis for MULTIPLE tissues: {tissues}")
+        logging.info(f"Running analysis for MULTIPLE tissues: {tissues}")
 
         for idx, tissue_name in enumerate(tissues, 1):
-            print(f"\n============== Processing tissue: {tissue_name} ({idx}/{len(tissues)}) ==============")
+            logging.info(f"============== Processing tissue: {tissue_name} ({idx}/{len(tissues)}) ==============")
 
             try:
                 working_df = df[df["tissue"] == tissue_name]
@@ -310,10 +315,10 @@ def main(config_path, nmads=5.0, mad_scope='per-sample'):
                                scrinvex_dir, nmads, key="sampleID", qc_cutoff_df=qc_cutoff, mad_scope=mad_scope,
                                sample_colors=sample_colors, donor_colors=donor_colors)
             except Exception as e:
-                print(f"[ERROR] Encountered error for tissue {tissue_name}: {e}")
+                logging.error(f"Encountered error for tissue {tissue_name}: {e}")
                 failed_tissues.append(tissue_name)
     else:
-        print(f"\n========== Processing tissue: {tissue} ==========")
+        logging.info(f"========== Processing tissue: {tissue} ==========")
 
         try:
             working_df = df[df["tissue"] == tissue]
@@ -322,11 +327,11 @@ def main(config_path, nmads=5.0, mad_scope='per-sample'):
                            scrinvex_dir, nmads, key="sampleID", qc_cutoff_df=qc_cutoff, mad_scope=mad_scope,
                            sample_colors=sample_colors, donor_colors=donor_colors)
         except Exception as e:
-            print(f"[ERROR] Encountered error for tissue {tissue}: {e}")
+            logging.error(f"Encountered error for tissue {tissue}: {e}")
             failed_tissues.append(tissue)
 
     if failed_tissues:
-        print(f"[ERROR] pre_qc_assessment failed for {len(failed_tissues)} tissue(s): {failed_tissues}")
+        logging.error(f"pre_qc_assessment failed for {len(failed_tissues)} tissue(s): {failed_tissues}")
         sys.exit(1)
 
 
@@ -339,4 +344,8 @@ if __name__ == "__main__":
                         help="Show per-sample or per-tissue MAD lines on violin plots (default: per-sample).")
 
     args = parser.parse_args()
-    main(args.config, nmads=args.nmads, mad_scope=args.mad_scope)
+    try:
+        main(args.config, nmads=args.nmads, mad_scope=args.mad_scope)
+    except (FileNotFoundError, KeyError, ValueError) as e:
+        logging.error(f"{type(e).__name__}: {e}")
+        sys.exit(1)

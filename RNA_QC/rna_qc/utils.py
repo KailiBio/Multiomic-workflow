@@ -7,7 +7,34 @@ Author: Kaili Fan
 import os
 import re
 import time
+import logging
 import yaml
+
+
+def setup_logging(log_path=None, level=logging.INFO):
+    """Configure the root logger: always logs to stderr, optionally also to a file."""
+    handlers = [logging.StreamHandler()]
+    if log_path:
+        os.makedirs(os.path.dirname(log_path) or ".", exist_ok=True)
+        handlers.append(logging.FileHandler(log_path))
+    logging.basicConfig(
+        level=level,
+        format="%(asctime)s [%(levelname)s] %(message)s",
+        datefmt="%Y-%m-%d %H:%M:%S",
+        handlers=handlers,
+        force=True,
+    )
+
+
+def require_keys(config, dotted_keys, context="config"):
+    """Raise a clear KeyError if any dotted-path key (e.g. 'paths.input_dir') is missing."""
+    for dotted_key in dotted_keys:
+        node = config
+        parts = dotted_key.split(".")
+        for i, part in enumerate(parts):
+            if not isinstance(node, dict) or part not in node:
+                raise KeyError(f"Missing required key '{'.'.join(parts[:i + 1])}' in {context}")
+            node = node[part]
 
 
 def print_elapsed_time(start_time, end_time):
