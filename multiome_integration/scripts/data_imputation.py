@@ -11,6 +11,7 @@ warnings.filterwarnings("ignore", category=DeprecationWarning)
 import os
 import sys
 import argparse
+import logging
 import numpy as np
 import pandas as pd
 import anndata as ad
@@ -24,7 +25,7 @@ import torch
 from scipy import sparse
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
-from multiome_integration.utils import load_config, standardize_tissue_name, print_elapsed_time
+from multiome_integration.utils import load_config, standardize_tissue_name, print_elapsed_time, setup_logging, require_keys
 
 def process_overlap(rna, atac):
     rna_cells = set(rna.obs_names)
@@ -32,12 +33,12 @@ def process_overlap(rna, atac):
     shared_cells = rna_cells & atac_cells
     rna_only_cells = rna_cells - atac_cells
     atac_only_cells = atac_cells - rna_cells
-    print(f"[INFO] n(RNA): {len(rna_cells)}, n(ATAC): {len(atac_cells)}, \
-n(shared): {len(shared_cells)}, n(rna_only): {len(rna_only_cells)}, n(atac_only): {len(atac_only_cells)}")
+    logging.info(f"n(RNA): {len(rna_cells)}, n(ATAC): {len(atac_cells)}, "
+                 f"n(shared): {len(shared_cells)}, n(rna_only): {len(rna_only_cells)}, n(atac_only): {len(atac_only_cells)}")
     return rna_cells, atac_cells, shared_cells, rna_only_cells, atac_only_cells
 
 def extract_atac_object(anndata_org, celllist):
-    print(f"[INFO] Extracting ATAC for {len(celllist)} cells")
+    logging.info(f"Extracting ATAC for {len(celllist)} cells")
     anndata_extract = anndata_org[list(celllist), :].copy()
     obs_col = list(anndata_extract.obs.columns)
     if 'celltype_glue' in obs_col:
@@ -47,7 +48,7 @@ def extract_atac_object(anndata_org, celllist):
     return anndata_extract
 
 def extract_rna_object(anndata_org, celllist, celltype_obs):
-    print(f"[INFO] Extracting RNA for {len(celllist)} cells (with {celltype_obs})")
+    logging.info(f"Extracting RNA for {len(celllist)} cells (with {celltype_obs})")
     anndata_extract = anndata_org[list(celllist), :].copy()
     anndata_extract.obs['celltype_glue'] = anndata_extract.obs[celltype_obs]
     obs_col = list(anndata_extract.obs.columns)
@@ -65,7 +66,7 @@ def extract_rna_object(anndata_org, celllist, celltype_obs):
     return anndata_extract
 
 def generate_multivi_input(rna, atac, shared_cells, rna_only_cells, atac_only_cells, celltype_obs, output_h5ad_dir, tissue_std):
-    print("[INFO] Assembling MultiVI input AnnData ...")
+    logging.info("Assembling MultiVI input AnnData ...")
     atac_shared = extract_atac_object(atac, shared_cells)
     rna_shared = extract_rna_object(rna, shared_cells, celltype_obs)
     data_shared = ad.concat([rna_shared, atac_shared], axis=1, join='inner')
@@ -82,26 +83,26 @@ def generate_multivi_input(rna, atac, shared_cells, rna_only_cells, atac_only_ce
     adata_mvi = adata_mvi[:, adata_mvi.var["modality"].argsort()].copy()
     if not sparse.issparse(adata_mvi.X):
         adata_mvi.X = sparse.csr_matrix(adata_mvi.X)
-        print("[INFO] Converted adata_mvi.X to sparse CSR matrix.")
-    print(f"[INFO] MultiVI input shape: {adata_mvi.shape}")
+        logging.info("Converted adata_mvi.X to sparse CSR matrix.")
+    logging.info(f"MultiVI input shape: {adata_mvi.shape}")
     adata_mvi.write(os.path.join(output_h5ad_dir,f'MultiVI_input.{tissue_std}.h5ad'))
     return adata_mvi
 
 def train_multivi(adata_mvi, tissue_std):
-    print("[INFO] Setting up MULTIVI anndata ...")
-    print("  tissue:", tissue_std)
-    print("  shape before copy:", adata_mvi.shape, "| is_view:", adata_mvi.is_view)
+    logging.info("Setting up MULTIVI anndata ...")
+    logging.info(f"tissue: {tissue_std}")
+    logging.info(f"shape before copy: {adata_mvi.shape} | is_view: {adata_mvi.is_view}")
 
     if adata_mvi.is_view:
         adata_mvi = adata_mvi.copy()
-        print("  made a copy; is_view now:", adata_mvi.is_view)
+        logging.info(f"made a copy; is_view now: {adata_mvi.is_view}")
 
-    print("n_genes:", (adata_mvi.var["modality"] == "Gene expression").sum())
-    print("n_regions:", (adata_mvi.var["modality"] == "Peaks").sum())
+    logging.info(f"n_genes: {(adata_mvi.var['modality'] == 'Gene expression').sum()}")
+    logging.info(f"n_regions: {(adata_mvi.var['modality'] == 'Peaks').sum()}")
 
-    print("cell with both modality:", (adata_mvi.obs["modality"] == "paired").sum())
-    print("cell with RNA-only:", (adata_mvi.obs["modality"] == "expression").sum())
-    print("cell with ATAC-only:", (adata_mvi.obs["modality"] == "accessibility").sum())
+    logging.info(f"cell with both modality: {(adata_mvi.obs['modality'] == 'paired').sum()}")
+    logging.info(f"cell with RNA-only: {(adata_mvi.obs['modality'] == 'expression').sum()}")
+    logging.info(f"cell with ATAC-only: {(adata_mvi.obs['modality'] == 'accessibility').sum()}")
 
     scvi.model.MULTIVI.setup_anndata(adata_mvi, batch_key="modality")
     model = scvi.model.MULTIVI(
@@ -110,20 +111,20 @@ def train_multivi(adata_mvi, tissue_std):
         n_regions=(adata_mvi.var["modality"] == "Peaks").sum(),
     )
     
-    print("[INFO] Training MULTIVI model ...")
+    logging.info("Training MULTIVI model ...")
     start_time = time.time()
     scvi.settings.seed = 0
     model.train()
     end_time = time.time()
-    print("[INFO] MULTIVI model training complete.")
+    logging.info("MULTIVI model training complete.")
     print_elapsed_time(start_time, end_time)
 
-    print("[INFO] Saving MULTIVI model ...")
+    logging.info("Saving MULTIVI model ...")
     model.save(f"MultiVI.{tissue_std}.model", overwrite=True)
     return model
 
 def get_imputation_values(model, adata_mvi, output_h5ad_dir, tissue_std):
-    print("[INFO] Extracting latent space and embedding")
+    logging.info("Extracting latent space and embedding")
     adata_mvi.obsm['X_multivi'] = model.get_latent_representation()
     sc.pp.neighbors(adata_mvi, use_rep='X_multivi')
     sc.tl.leiden(adata_mvi, random_state=0)
@@ -132,7 +133,7 @@ def get_imputation_values(model, adata_mvi, output_h5ad_dir, tissue_std):
                save=f'_multiVI.{tissue_std}.png')
     adata_mvi.write(os.path.join(output_h5ad_dir, f'MultiVI_merged.{tissue_std}.h5ad'))
 
-    print("[INFO] Imputing expression matrix ...")
+    logging.info("Imputing expression matrix ...")
     imputed_expression = model.get_normalized_expression(adata_mvi)
     imputed_expression.index = imputed_expression.index.str.rsplit('_', n=1).str[0]
     imputed_rna_adata = ad.AnnData(
@@ -141,9 +142,9 @@ def get_imputation_values(model, adata_mvi, output_h5ad_dir, tissue_std):
         var=pd.DataFrame(index=imputed_expression.columns)
     )
     imputed_rna_adata.write(os.path.join(output_h5ad_dir,f'MultiVI_impute_RNA.{tissue_std}.h5ad'))
-    print(f"[INFO] Wrote imputed RNA: MultiVI_impute_RNA.{tissue_std}.h5ad")
+    logging.info(f"Wrote imputed RNA: MultiVI_impute_RNA.{tissue_std}.h5ad")
 
-    print("[INFO] Imputing accessibility matrix ...")
+    logging.info("Imputing accessibility matrix ...")
     imputed_accessibility = model.get_accessibility_estimates(adata_mvi)
     imputed_accessibility.index = imputed_accessibility.index.str.rsplit('_', n=1).str[0]
     imputed_atac_adata = ad.AnnData(
@@ -152,34 +153,38 @@ def get_imputation_values(model, adata_mvi, output_h5ad_dir, tissue_std):
         var=pd.DataFrame(index=imputed_accessibility.columns)
     )
     imputed_atac_adata.write(os.path.join(output_h5ad_dir,f'MultiVI_impute_ATAC.{tissue_std}.h5ad'))
-    print(f"[INFO] Wrote imputed ATAC: MultiVI_impute_ATAC.{tissue_std}.h5ad")
+    logging.info(f"Wrote imputed ATAC: MultiVI_impute_ATAC.{tissue_std}.h5ad")
 
 def run_per_tissue(tissue, output_h5ad_dir, celltype_obs):
     tissue_std = standardize_tissue_name(tissue)
     
-    print(f"[INFO] Loading RNA and ATAC AnnData for tissue: {tissue}")
+    logging.info(f"Loading RNA and ATAC AnnData for tissue: {tissue}")
     rna_path = os.path.join(output_h5ad_dir, f'RNA_removeDoublet.{tissue_std}.h5ad')
     atac_path = os.path.join(output_h5ad_dir, f'ATAC_cellByPeak.{tissue_std}.h5ad')
     rna = ad.read_h5ad(rna_path)
     atac = ad.read_h5ad(atac_path)
 
-    print("[INFO] Integrating all data...")
+    logging.info("Integrating all data...")
     rna_cells, atac_cells, shared_cells, rna_only_cells, atac_only_cells = process_overlap(rna, atac)
     adata_mvi = generate_multivi_input(rna, atac, shared_cells, rna_only_cells, atac_only_cells, 
                                        celltype_obs, output_h5ad_dir, tissue_std)
 
-    print("Tissue:", tissue_std)
-    print("adata_mvi shape:", adata_mvi.shape)
-    print("obs columns:", adata_mvi.obs.columns.tolist())
-    print("var columns:", adata_mvi.var.columns.tolist())
-    print("unique adata_mvi.var['modality']:", adata_mvi.var["modality"].unique())
+    logging.info(f"Tissue: {tissue_std}")
+    logging.info(f"adata_mvi shape: {adata_mvi.shape}")
+    logging.info(f"obs columns: {adata_mvi.obs.columns.tolist()}")
+    logging.info(f"var columns: {adata_mvi.var.columns.tolist()}")
+    logging.info(f"unique adata_mvi.var['modality']: {adata_mvi.var['modality'].unique()}")
 
     model = train_multivi(adata_mvi, tissue_std)
     get_imputation_values(model, adata_mvi, output_h5ad_dir, tissue_std)
-    print(f"[INFO] Done integration with {tissue}\n")
+    logging.info(f"Done integration with {tissue}\n")
 
 def main(config_path):
+    setup_logging()
     config = load_config(config_path)
+    require_keys(config, [
+        "paths.workdir", "paths.output_h5ad_dir", "params.tissue", "params.celltype_obs",
+    ], context=config_path)
 
     workdir = config['paths']['workdir']
     output_h5ad_dir = config['paths']['output_h5ad_dir']
@@ -187,7 +192,7 @@ def main(config_path):
     os.makedirs(multivi_output_dir, exist_ok=True)
     os.makedirs(os.path.join(multivi_output_dir, 'figures'), exist_ok=True)
     os.chdir(multivi_output_dir)
-    print(f"[INFO] Output path set to: {multivi_output_dir}")
+    logging.info(f"Output path set to: {multivi_output_dir}")
 
     tissue = config['params']['tissue']
     
@@ -199,32 +204,45 @@ def main(config_path):
                      names=["rnaID", "atacID", "species", "donorID", "ageGroup", "gender", "tissue"])
         
         tissues = sorted(df["tissue"].unique())
-        print(f"[INFO] Data imputation for MULTIPLE tissues: {tissues}")
+        logging.info(f"Data imputation for MULTIPLE tissues: {tissues}")
         
+        failed_tissues = []
         for idx, tissue_name in enumerate(tissues, 1):
-            print(f"\n========== Processing tissue: {tissue_name} ({idx}/{len(tissues)}) ==========")
-            
+            logging.info(f"========== Processing tissue: {tissue_name} ({idx}/{len(tissues)}) ==========")
+
             try:
                 run_per_tissue(tissue_name, output_h5ad_dir, celltype_obs)
             except Exception as e:
-                print(f"[ERROR] Encountered error for tissue {tissue_name}: {str(e)}")
+                logging.error(f"Encountered error for tissue {tissue_name}: {str(e)}")
+                failed_tissues.append(tissue_name)
     else:
-        print(f"\n========== Processing tissue: {tissue} ==========")
-        
+        logging.info(f"========== Processing tissue: {tissue} ==========")
+
+        failed_tissues = []
         try:
             run_per_tissue(tissue, output_h5ad_dir, celltype_obs)
         except Exception as e:
-            print(f"[ERROR] Encountered error for tissue {tissue}: {str(e)}")
+            logging.error(f"Encountered error for tissue {tissue}: {str(e)}")
+            failed_tissues.append(tissue)
+
+    if failed_tissues:
+        logging.error(f"data_imputation failed for {len(failed_tissues)} tissue(s): {failed_tissues}")
+        sys.exit(1)
 
 if __name__ == "__main__":
-    print(f"[INFO] torch.cuda.is_available(): {torch.cuda.is_available()}")
-    print(f"[INFO] torch.cuda.device_count(): {torch.cuda.device_count()}")
+    setup_logging()
+    logging.info(f"torch.cuda.is_available(): {torch.cuda.is_available()}")
+    logging.info(f"torch.cuda.device_count(): {torch.cuda.device_count()}")
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-    print(f"[INFO] Using device: {device}\n")
-    
+    logging.info(f"Using device: {device}")
+
     parser = argparse.ArgumentParser(
         description="Joint imputation using MultiVI"
     )
     parser.add_argument("config", help="YAML config file")
     args = parser.parse_args()
-    main(args.config)
+    try:
+        main(args.config)
+    except (FileNotFoundError, KeyError, ValueError) as e:
+        logging.error(f"{type(e).__name__}: {e}")
+        sys.exit(1)
