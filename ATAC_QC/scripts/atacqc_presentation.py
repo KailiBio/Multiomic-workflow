@@ -12,10 +12,12 @@ Supports two input modes:
 """
 
 import argparse
+import logging
 import os
 import re
 import shutil
 import subprocess
+import sys
 import tempfile
 import glob as globmod
 
@@ -43,7 +45,7 @@ except ImportError:
 
 # Import pipeline utilities when available (for local mode)
 try:
-    from atac_qc.utils import load_config, standardize_tissue_name
+    from atac_qc.utils import load_config, standardize_tissue_name, setup_logging, require_keys
 except ImportError:
     try:
         import yaml
@@ -65,6 +67,30 @@ except ImportError:
         tissue = re.sub(r'\s+', '_', tissue)
         tissue = re.sub(r'_+', '_', tissue)
         return tissue.strip('_')
+
+    def setup_logging(log_path=None, level=logging.INFO):
+        """Configure the root logger: always logs to stderr, optionally also to a file."""
+        handlers = [logging.StreamHandler()]
+        if log_path:
+            os.makedirs(os.path.dirname(log_path) or ".", exist_ok=True)
+            handlers.append(logging.FileHandler(log_path))
+        logging.basicConfig(
+            level=level,
+            format="%(asctime)s [%(levelname)s] %(message)s",
+            datefmt="%Y-%m-%d %H:%M:%S",
+            handlers=handlers,
+            force=True,
+        )
+
+    def require_keys(config, dotted_keys, context="config"):
+        """Raise a clear KeyError if any dotted-path key (e.g. 'paths.input_dir') is missing."""
+        for dotted_key in dotted_keys:
+            node = config
+            parts = dotted_key.split(".")
+            for i, part in enumerate(parts):
+                if not isinstance(node, dict) or part not in node:
+                    raise KeyError(f"Missing required key '{'.'.join(parts[:i + 1])}' in {context}")
+                node = node[part]
 
 
 # ---------------------------------------------------------------------------
@@ -162,7 +188,7 @@ def download_figures_and_stats(gcs_base, tmpdir):
                 capture_output=True, text=True
             )
             if result.returncode != 0:
-                print(f"[WARNING] gsutil cp failed for {gcs_base}{step}/{ext} (may not exist yet)")
+                logging.warning(f"gsutil cp failed for {gcs_base}{step}/{ext} (may not exist yet)")
     return tmpdir
 
 
@@ -183,7 +209,7 @@ def collect_local_figures(workdir, runtag, tmpdir):
     if os.path.isdir(fragment_src):
         dst = os.path.join(tmpdir, "2_load_fragments_figures")
         shutil.copytree(fragment_src, dst, dirs_exist_ok=True)
-        print(f"[INFO]   fragment/ -> 2_load_fragments_figures/")
+        logging.info(f"fragment/ -> 2_load_fragments_figures/")
 
     found_any = False
     for local_name, tmp_name in dir_mapping.items():
@@ -192,9 +218,9 @@ def collect_local_figures(workdir, runtag, tmpdir):
             dst = os.path.join(tmpdir, tmp_name)
             shutil.copytree(src, dst, dirs_exist_ok=True)
             found_any = True
-            print(f"[INFO]   {local_name}/ -> {tmp_name}/")
+            logging.info(f"{local_name}/ -> {tmp_name}/")
     if not found_any:
-        print(f"[WARN] No pipeline output directories found in {workdir}")
+        logging.warning(f"No pipeline output directories found in {workdir}")
     return tmpdir
 
 
@@ -208,8 +234,8 @@ def pdf_to_images(pdf_path, output_dir=None):
     Uses pdf2image if available, otherwise returns empty list with a warning.
     """
     if not HAS_PDF2IMAGE:
-        print(f"[WARNING] pdf2image not installed — skipping PDF: {os.path.basename(pdf_path)}")
-        print("          Install with: pip install pdf2image (requires poppler)")
+        logging.warning(f"pdf2image not installed — skipping PDF: {os.path.basename(pdf_path)}")
+        logging.warning("Install with: pip install pdf2image (requires poppler)")
         return []
 
     if output_dir is None:
@@ -219,7 +245,7 @@ def pdf_to_images(pdf_path, output_dir=None):
     try:
         images = convert_from_path(pdf_path, dpi=200)
     except Exception as e:
-        print(f"[WARNING] Failed to convert PDF {os.path.basename(pdf_path)}: {e}")
+        logging.warning(f"Failed to convert PDF {os.path.basename(pdf_path)}: {e}")
         return []
 
     paths = []
@@ -420,11 +446,11 @@ def add_tsv_slide(prs, title, tsv_path):
 
 def build_presentation(tmpdir, tissue_name, tissue_std, sample_ids, source_label=""):
     """Build the PowerPoint presentation from figures in tmpdir."""
-    print(f"[INFO] Building presentation for {tissue_name}...")
+    logging.info(f"Building presentation for {tissue_name}...")
     if sample_ids:
-        print(f"[INFO]   {len(sample_ids)} sample IDs for per-sample detection")
+        logging.info(f"{len(sample_ids)} sample IDs for per-sample detection")
     else:
-        print("[WARN]   No sample IDs found — all plots will be treated as overview")
+        logging.warning("No sample IDs found — all plots will be treated as overview")
 
     prs = Presentation()
     prs.slide_width = SLIDE_WIDTH
@@ -558,7 +584,7 @@ def build_presentation(tmpdir, tissue_name, tissue_std, sample_ids, source_label
     # Save
     out_pptx = os.path.join(tmpdir, f"{tissue_name}_ATAC_QC_Report.pptx")
     prs.save(out_pptx)
-    print(f"[INFO] Saved presentation: {out_pptx}")
+    logging.info(f"Saved presentation: {out_pptx}")
     return out_pptx
 
 
@@ -576,12 +602,12 @@ def process_gcs(gcs_path, tissue=None):
         tissue_std = tissue_name.rsplit("_v", 1)[0]
 
     with tempfile.TemporaryDirectory() as tmpdir:
-        print(f"[INFO] Downloading figures from {gcs_base}...")
+        logging.info(f"Downloading figures from {gcs_base}...")
         download_figures_and_stats(gcs_base, tmpdir)
 
         # Infer sample IDs from downloaded filenames
         sample_ids = extract_sample_ids_from_files(tmpdir, tissue_std)
-        print(f"[INFO] Inferred {len(sample_ids)} sample IDs from filenames")
+        logging.info(f"Inferred {len(sample_ids)} sample IDs from filenames")
 
         pptx_path = build_presentation(
             tmpdir, tissue_name, tissue_std, sample_ids,
@@ -590,9 +616,9 @@ def process_gcs(gcs_path, tissue=None):
 
         # Upload back to GCS
         gcs_dest = gcs_base + f"{tissue_name}_ATAC_QC_Report.pptx"
-        print(f"[INFO] Uploading to {gcs_dest}...")
+        logging.info(f"Uploading to {gcs_dest}...")
         subprocess.run(["gsutil", "-q", "cp", pptx_path, gcs_dest], check=True)
-        print(f"[DONE] {gcs_dest}")
+        logging.info(f"Wrote presentation: {gcs_dest}")
 
 
 def process_gcs_parent(gcs_path):
@@ -601,17 +627,24 @@ def process_gcs_parent(gcs_path):
     contents = gsutil_ls(gcs_path)
     subdirs = [c for c in contents if c.endswith("/")]
 
+    failed_dirs = []
     for tissue_dir in sorted(subdirs):
         try:
             process_gcs(tissue_dir)
         except Exception as e:
-            print(f"[ERROR] Failed for {tissue_dir}: {e}")
-            continue
+            logging.error(f"Failed for {tissue_dir}: {e}")
+            failed_dirs.append(tissue_dir)
+
+    if failed_dirs:
+        logging.error(f"atacqc_presentation failed for {len(failed_dirs)} dir(s): {failed_dirs}")
+        sys.exit(1)
 
 
 def process_local(config_path, runtag, output_path=None):
     """Local mode: collect from workdir -> build -> save locally."""
+    setup_logging()
     config = load_config(config_path)
+    require_keys(config, ["params.tissue", "paths.workdir"], context=config_path)
     tissue = config['params']['tissue']
     suffix = config['params'].get('suffix') or standardize_tissue_name(tissue)
     workdir = config['paths']['workdir'].rstrip("/")
@@ -622,20 +655,20 @@ def process_local(config_path, runtag, output_path=None):
     # Extract sample IDs from metadata
     try:
         sample_ids = extract_sample_ids_from_config(config, tissue_std)
-        print(f"[INFO] Found {len(sample_ids)} sample IDs from metadata")
+        logging.info(f"Found {len(sample_ids)} sample IDs from metadata")
     except Exception as e:
-        print(f"[WARN] Could not read sample metadata: {e}")
+        logging.warning(f"Could not read sample metadata: {e}")
         sample_ids = set()
 
     with tempfile.TemporaryDirectory() as tmpdir:
-        print(f"[INFO] Collecting figures from {workdir}...")
+        logging.info(f"Collecting figures from {workdir}...")
         collect_local_figures(workdir, runtag, tmpdir)
 
         # If we didn't get sample IDs from config, try inferring from filenames
         if not sample_ids:
             sample_ids = extract_sample_ids_from_files(tmpdir, tissue_std)
             if sample_ids:
-                print(f"[INFO] Inferred {len(sample_ids)} sample IDs from filenames")
+                logging.info(f"Inferred {len(sample_ids)} sample IDs from filenames")
 
         pptx_path = build_presentation(
             tmpdir, tissue_name, tissue_std, sample_ids,
@@ -646,7 +679,7 @@ def process_local(config_path, runtag, output_path=None):
         if output_path is None:
             output_path = os.path.join(workdir, f"{tissue_name}_ATAC_QC_Report.pptx")
         shutil.copy2(pptx_path, output_path)
-        print(f"[DONE] {output_path}")
+        logging.info(f"Wrote presentation: {output_path}")
 
 
 def main():
@@ -670,6 +703,7 @@ def main():
     parser.add_argument("--output",
                         help="Output PPTX path (default: auto)")
     args = parser.parse_args()
+    setup_logging()
 
     if args.gcs:
         gcs_path = args.gcs.rstrip("/") + "/"
@@ -688,4 +722,8 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    try:
+        main()
+    except (FileNotFoundError, KeyError, ValueError) as e:
+        logging.error(f"{type(e).__name__}: {e}")
+        sys.exit(1)

@@ -8,6 +8,7 @@ Description: Update and clean h5ad, generate final h5ad and summary plots/statis
 import os
 import sys
 import argparse
+import logging
 import numpy as np
 import pandas as pd
 import scanpy as sc
@@ -17,7 +18,7 @@ import matplotlib.pyplot as plt
 import seaborn as sns
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
-from cell_annotation.utils import load_config, standardize_tissue_name, move_figures_to_newdir
+from cell_annotation.utils import load_config, standardize_tissue_name, move_figures_to_newdir, setup_logging, require_keys
 
 def update_annotations(adata, cell_lineage, celltype_broad, celltype_fine, celltype_refine=None):
     if 'leiden_new' in adata.obs_names:
@@ -31,7 +32,7 @@ def update_annotations(adata, cell_lineage, celltype_broad, celltype_fine, cellt
         if celltype_refine in adata.obs.columns:
             adata.obs['celltype_refine'] = adata.obs[celltype_refine]
         else:
-            print(f"[WARN] celltype_refine column '{celltype_refine}' not found in adata.obs; skipping.")
+            logging.warning(f"celltype_refine column '{celltype_refine}' not found in adata.obs; skipping.")
 
     return adata
 
@@ -98,7 +99,7 @@ def save_final_h5ad(adata, workdir, tissue_std):
     # save the final .h5ad
     final_h5ad_path = os.path.join(workdir, f"{tissue_std}.GEX.final.h5ad")
     adata_final.write(final_h5ad_path)
-    print(f"[INFO] Final h5ad saved to: {final_h5ad_path}")
+    logging.info(f"Final h5ad saved to: {final_h5ad_path}")
 
 def run_per_tissue(workdir, tissue, cell_lineage, celltype_broad, celltype_fine, 
                    donor_color_palette, out_h5ad_dir, celltype_refine=None):
@@ -106,17 +107,17 @@ def run_per_tissue(workdir, tissue, cell_lineage, celltype_broad, celltype_fine,
     tissue_std = standardize_tissue_name(tissue)
 
     # load h5ad
-    print("[INFO] Loading anndata object...")
+    logging.info("Loading anndata object...")
     adata_path1 = os.path.join(out_h5ad_dir, f"{tissue_std}_GEX.filtered.processes.cellAnnotated.h5ad")
     adata_path2 = os.path.join(out_h5ad_dir, f"{tissue_std}_GEX.filtered.processes.autoAnnotated.h5ad")
     if os.path.exists(adata_path1):
-        print(f"[INFO] loading adata from {adata_path1}")
+        logging.info(f"loading adata from {adata_path1}")
         adata = sc.read_h5ad(adata_path1)
     elif os.path.exists(adata_path2):
-        print(f"[INFO] loading adata from {adata_path2}")
+        logging.info(f"loading adata from {adata_path2}")
         adata = sc.read_h5ad(adata_path2)
     else:
-        print(f"[ERROR] AnnData file not found for {tissue_std}.")
+        logging.error(f"AnnData file not found for {tissue_std}.")
         return
 
     figdir = os.path.join(workdir, 'figures')
@@ -133,44 +134,55 @@ def run_per_tissue(workdir, tissue, cell_lineage, celltype_broad, celltype_fine,
 
     plot_cell_counts(adata, tissue_std, figdir, donor_color_palette)
 
-    print("[INFO] Save files and figures...")
+    logging.info("Save files and figures...")
     # Save
     save_final_h5ad(adata, out_h5ad_dir, tissue_std)
     # Organize figures
     move_figures_to_newdir(workdir, old="figures", new="cell_annotation_final")
 
-    print(f"[INFO] Completed generating final RNA h5ad for {tissue}.")
+    logging.info(f"Completed generating final RNA h5ad for {tissue}.")
 
 def main(config_path, cell_lineage, celltype_broad, celltype_fine, celltype_refine=None):
+    setup_logging()
     config = load_config(config_path)
-    
+    require_keys(config, [
+        "paths.workdir", "paths.output_h5ad_dir", "params.tissue", "color.donor_colors",
+    ], context=config_path)
+
     workdir = config['paths']['workdir']
     out_h5ad_dir = config['paths']['output_h5ad_dir']
     tissue = config['params']['tissue']
     donor_color_palette = config["color"]['donor_colors']
 
+    failed_tissues = []
     if tissue == "---":
         sample_metadata = config['paths']['sample_metadata']
         df = pd.read_csv(sample_metadata, sep='\t', header=None,
             names=["rnaID", "atacID", "species", "donorID", "ageGroup", "gender", "tissue"])
-        
+
         tissues = sorted(df["tissue"].unique())
-        print(f"[INFO] Processing MULTIPLE tissues: {tissues}")
-        
+        logging.info(f"Processing MULTIPLE tissues: {tissues}")
+
         for idx, tissue_name in enumerate(tissues, 1):
-            print(f"\n========== Final annotation for tissue: {tissue_name} ({idx}/{len(tissues)}) ==========")
+            logging.info(f"========== Final annotation for tissue: {tissue_name} ({idx}/{len(tissues)}) ==========")
             try:
                 run_per_tissue(workdir, tissue_name, cell_lineage, celltype_broad, celltype_fine,
                                donor_color_palette, out_h5ad_dir, celltype_refine=celltype_refine)
             except Exception as e:
-                print(f"[ERROR] Final h5ad generation failed for {tissue_name}: {e}")
+                logging.error(f"Final h5ad generation failed for {tissue_name}: {e}")
+                failed_tissues.append(tissue_name)
     else:
-        print(f"\n========== Final annotation for tissue: {tissue} ==========")
+        logging.info(f"========== Final annotation for tissue: {tissue} ==========")
         try:
-            run_per_tissue(workdir, tissue, cell_lineage, celltype_broad, celltype_fine, 
+            run_per_tissue(workdir, tissue, cell_lineage, celltype_broad, celltype_fine,
                            donor_color_palette, out_h5ad_dir, celltype_refine=celltype_refine)
         except Exception as e:
-            print(f"[ERROR] Final h5ad generation failed for {tissue}: {e}")
+            logging.error(f"Final h5ad generation failed for {tissue}: {e}")
+            failed_tissues.append(tissue)
+
+    if failed_tissues:
+        logging.error(f"generate_final_h5ad failed for {len(failed_tissues)} tissue(s): {failed_tissues}")
+        sys.exit(1)
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Generate final cell-annotated h5ad (manual correction) and statistics.")
@@ -178,8 +190,12 @@ if __name__ == "__main__":
     parser.add_argument("cell_lineage", help="obs name for final cell lineage")
     parser.add_argument("celltype_broad", help="obs name for final broad annotation")
     parser.add_argument("celltype_fine", help="obs name for final fine annotation")
-    parser.add_argument("--celltype_refine", 
+    parser.add_argument("--celltype_refine",
                         help="obs name for refined cell type annotation (optional)",
                         default=None)
     args = parser.parse_args()
-    main(args.config, args.cell_lineage, args.celltype_broad, args.celltype_fine, args.celltype_refine)
+    try:
+        main(args.config, args.cell_lineage, args.celltype_broad, args.celltype_fine, args.celltype_refine)
+    except (FileNotFoundError, KeyError, ValueError) as e:
+        logging.error(f"{type(e).__name__}: {e}")
+        sys.exit(1)
