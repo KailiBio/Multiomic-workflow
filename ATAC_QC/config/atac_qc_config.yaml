@@ -1,12 +1,19 @@
+# All paths below are relative to the ATAC_QC/ directory (this module's repo root).
+# Both notebooks/ATAC_QC_demo.ipynb and notebooks/run_atac_qc_workflow.sh cd into
+# ATAC_QC/ before invoking any script, so relative paths resolve the same way for
+# everyone. When adapting this config for your own data, replace these with your
+# own paths (relative to ATAC_QC/, or absolute).
 paths:
-  workdir: /data/fankaili/scripts/multi-Omic_workflow/ATAC_QC/test_output/
-  fragment_dir: /data/fankaili/scripts/multi-Omic_workflow/ATAC_QC/test_data/fragmemt_files/
-  output_h5ad_dir: /data/fankaili/scripts/multi-Omic_workflow/ATAC_QC/test_output/atac_h5ad/
-  sample_metadata: /data/fankaili/scripts/multi-Omic_workflow/ATAC_QC/test_data/test_metatable.txt
+  workdir: test_output/
+  fragment_dir: test_data/fragmemt_files/
+  output_h5ad_dir: test_output/atac_h5ad/
+  sample_metadata: test_data/test_metatable.txt
 
 references:
-  barcode_whitelist: /data/fankaili/scripts/multi-Omic_workflow/ATAC_QC/ref/10XMultiOmic_737K_arc-v1.txt
-  gencode_gtf: /data/fankaili/scripts/multi-Omic_workflow/ATAC_QC/ref/gencode.v47.primary_assembly.annotation.gtf
+  barcode_whitelist: ref/10XMultiOmic_737K_arc-v1.txt
+  # Reference GTF, too large to ship in this repo (see .gitignore) — download
+  # the matching GENCODE annotation yourself and place it at this path.
+  gencode_gtf: ref/gencode.v47.primary_assembly.annotation.gtf
 
 params:
   tissue: Muscle - Quadriceps
@@ -16,7 +23,7 @@ params:
   genomic_bin_size: 500
 
 qc:
-    atac_qc_cutoff_table: /data/fankaili/scripts/multi-Omic_workflow/ATAC_QC/test_data/test_QC_cutoffs.xlsx
+    atac_qc_cutoff_table: test_data/test_QC_cutoffs.xlsx
     sheet_name: test
 
 process:

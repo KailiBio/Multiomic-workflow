@@ -1,15 +1,28 @@
+# All paths below are relative to the multiome_integration/ directory (this
+# module's repo root); notebooks/multiome_integration_demo.ipynb and
+# notebooks/run_multiome_integration_workflow.sh cd into multiome_integration/
+# before invoking any script, so relative paths resolve the same way for
+# everyone. Paths starting with ../ reach into a sibling module's directory
+# (this module consumes RNA_QC, ATAC_QC, and cell_annotation output). When
+# adapting this config for your own data, replace these with your own paths
+# (relative to multiome_integration/, or absolute).
 paths:
-  workdir: /data/fankaili/scripts/multi-Omic_workflow/multiome_integration/test_output/
-  rna_post_qc_h5ad: /data/fankaili/scripts/multi-Omic_workflow/cell_annotation/test_output/final/Muscle_Quadriceps.GEX.final.h5ad
-  atac_post_qc_h5ad: /data/fankaili/scripts/multi-Omic_workflow/ATAC_QC/test_output/atac_h5ad/Muscle_Quadriceps.ATAC.demo_run.h5ad
-  rna_doublet_dir: /data/fankaili/scripts/multi-Omic_workflow/RNA_QC/test_output/filter_qc.demo_run/
-  atac_doublet_dir: /data/fankaili/scripts/multi-Omic_workflow/ATAC_QC/test_output/doublet_filter_processing.demo_run/
-  output_h5ad_dir: /data/fankaili/scripts/multi-Omic_workflow/multiome_integration/test_output/h5ad/
-  sample_metadata: /data/fankaili/scripts/multi-Omic_workflow/ATAC_QC/test_data/test_metatable.txt
+  workdir: test_output/
+  rna_post_qc_h5ad: ../cell_annotation/test_output/final/Muscle_Quadriceps.GEX.final.h5ad
+  atac_post_qc_h5ad: ../ATAC_QC/test_output/atac_h5ad/Muscle_Quadriceps.ATAC.demo_run.h5ad
+  rna_doublet_dir: ../RNA_QC/test_output/filter_qc.demo_run/
+  atac_doublet_dir: ../ATAC_QC/test_output/doublet_filter_processing.demo_run/
+  output_h5ad_dir: test_output/h5ad/
+  sample_metadata: ../ATAC_QC/test_data/test_metatable.txt
 
 references:
-  gencode_gtf: /data/fankaili/scripts/multi-Omic_workflow/ATAC_QC/ref/gencode.v47.primary_assembly.annotation.gtf
-  chrom_size: /data/fankaili/ref/chromsize/hg38.chrom.sizes
+  # Reference GTF, too large to ship in this repo (see .gitignore) — same
+  # GENCODE annotation used by ATAC_QC (see ATAC_QC/ref/).
+  gencode_gtf: ../ATAC_QC/ref/gencode.v47.primary_assembly.annotation.gtf
+  # Not provided in this repo: a <chrom><TAB><length> file for your reference
+  # genome (e.g. download hg38.chrom.sizes from the UCSC goldenPath). Replace
+  # with the path to your own copy.
+  chrom_size: /path/to/your/hg38.chrom.sizes
 
 params:
   tissue: Muscle - Quadriceps
