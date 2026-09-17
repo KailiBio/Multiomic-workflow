@@ -12,6 +12,7 @@ warnings.filterwarnings("ignore", category=DeprecationWarning)
 import os
 import sys
 import argparse
+import logging
 import numpy as np
 import pandas as pd
 import anndata as ad
@@ -19,11 +20,11 @@ import scanpy as sc
 from scipy import sparse
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
-from multiome_integration.utils import load_config, standardize_tissue_name
+from multiome_integration.utils import load_config, standardize_tissue_name, setup_logging, require_keys
 
 def propagate_obs(adata, refdata, features, new_prefix):
     for feature in features:
-        print(f"[INFO] Propagating {feature}")
+        logging.info(f"Propagating {feature}")
         if new_prefix != "":
             adata.obs[new_prefix+"."+feature] = refdata.obs[feature].reindex(adata.obs_names).values
         else:
@@ -31,7 +32,7 @@ def propagate_obs(adata, refdata, features, new_prefix):
 
 def propagate_obs_with_fallback(adata, ref1, ref2, features, new_prefix=''):
     for feature in features:
-        print(f"[INFO] Propagating {feature}")
+        logging.info(f"Propagating {feature}")
         # 1. Map from first reference (ref1)
         tmp = ref1.obs[feature].reindex(adata.obs_names)
         # 2. For missing, fallback to second reference (ref2)
@@ -52,7 +53,7 @@ def propagate_ann_structures(adata, rna, atac, celllineage_obs, celltype_obs):
         'means', 'dispersions', 'dispersions_norm'
     ]
     for col in rna_var_cols:
-        print(f"[INFO] Adding var column (rna): {col}")
+        logging.info(f"Adding var column (rna): {col}")
         values = pd.Series(index=adata.var_names, dtype=rna.var[col].dtype)
         values.loc[rna.var_names] = rna.var[col].values
         adata.var[col] = values.values
@@ -65,14 +66,14 @@ def propagate_ann_structures(adata, rna, atac, celllineage_obs, celltype_obs):
     ]
     for key in uns_copy_keys:
         if key in rna.uns and key not in adata.uns:
-            print(f"[INFO] Adding uns key (rna): {key}")
+            logging.info(f"Adding uns key (rna): {key}")
             adata.uns[key] = rna.uns[key]
 
     # --- OBSM keys ---
     obsm_copy_keys = ['X_pca','X_pca_before_harmony','X_pca_harmony']
     for key in obsm_copy_keys:
         if key in rna.obsm:
-            print(f"[INFO] Adding obsm key (rna): {key}")
+            logging.info(f"Adding obsm key (rna): {key}")
             arr = rna.obsm[key]             # (n_rna, d)
             n_dim = arr.shape[1]
             arr_c = np.full((adata.n_obs, n_dim), np.nan, dtype=arr.dtype)
@@ -84,7 +85,7 @@ def propagate_ann_structures(adata, rna, atac, celllineage_obs, celltype_obs):
 
     for key in ['X_lsi']:
         if key in atac.obsm:
-            print(f"[INFO] Adding obsm key (atac): {key}")
+            logging.info(f"Adding obsm key (atac): {key}")
             arr = atac.obsm[key]             # (n_rna, d)
             n_dim = arr.shape[1]
             arr_c = np.full((adata.n_obs, n_dim), np.nan, dtype=arr.dtype)
@@ -98,17 +99,17 @@ def propagate_ann_structures(adata, rna, atac, celllineage_obs, celltype_obs):
     # --- OBSP keys ---
     for key in ['connectivities','distances']:
         if key in rna.obsp and key not in adata.obsp:
-            print(f"[INFO] Adding obsp key: {key}")
+            logging.info(f"Adding obsp key: {key}")
             idx = adata.obs_names.intersection(rna.obs_names)
             array = rna.obsp[key]
             arr_c = np.full((adata.n_obs, adata.n_obs), np.nan)
             adata_idx = adata.obs_names.get_indexer(idx)
             arr_c[np.ix_(adata_idx, adata_idx)] = array[np.ix_(rna.obs_names.get_indexer(idx), rna.obs_names.get_indexer(idx))]
             adata.obsp[key] = sparse.csr_matrix(arr_c)
-    print("[INFO] Finished copying all relevant AnnData structures to adata.")
+    logging.info("Finished copying all relevant AnnData structures to adata.")
 
 def propagate_layers_from_rna(adata, rna, rna_layer_names):
-    print("[INFO] Propagating RNA layers for gene expression features...")
+    logging.info("Propagating RNA layers for gene expression features...")
 
     # genes that are RNA features in adata and present in rna
     mask_genes = (adata.var["is_rna_feature"] == 1) & adata.var_names.isin(rna.var_names)
@@ -126,9 +127,9 @@ def propagate_layers_from_rna(adata, rna, rna_layer_names):
     rna_col = rna.var_names.get_indexer(genes_common)
 
     for layer_name in rna_layer_names:
-        print(f"[INFO] Propagating layer: {layer_name}")
+        logging.info(f"Propagating layer: {layer_name}")
         if layer_name not in rna.layers:
-            print(f"  [WARN] Layer '{layer_name}' not found in RNA; skipping.")
+            logging.warning(f"  Layer '{layer_name}' not found in RNA; skipping.")
             continue
 
         block = rna.layers[layer_name][np.ix_(rna_row, rna_col)]
@@ -140,7 +141,7 @@ def propagate_layers_from_rna(adata, rna, rna_layer_names):
         adata.layers[layer_name] = sparse.csr_matrix(adata_layer)
 
 def add_imputed_signal(adata, rna_impute, atac_impute):
-    print("[INFO] Integrating imputed expression and accessibility signal into combined AnnData ...")
+    logging.info("Integrating imputed expression and accessibility signal into combined AnnData ...")
     genes = adata.var_names[adata.var['modality'] == "Gene Expression"]
     peaks = adata.var_names[adata.var['modality'] == "Peaks"]
 
@@ -161,12 +162,12 @@ def add_imputed_signal(adata, rna_impute, atac_impute):
     )
 
     adata.layers['imputation_signal'] = sparse.csr_matrix(imp)
-    print("[INFO] Added layer: imputation_signal.")
+    logging.info("Added layer: imputation_signal.")
 
     
 def split_and_save_multiome(adata, output_h5ad_dir, tissue_std, celllineage_obs, celltype_obs):
     # RNA-only
-    print("[INFO] Extracting and writing RNA AnnData ...")
+    logging.info("Extracting and writing RNA AnnData ...")
     rna_final = adata[adata.obs['modality']!='accessibility-only', adata.var['is_rna_feature']==1].copy()
     rna_keep = [
         'rna.sampleID', 'rna.leiden', 'donorID', 'cellbarcode', 'total_counts', 'n_genes_by_counts', 
@@ -176,12 +177,12 @@ def split_and_save_multiome(adata, output_h5ad_dir, tissue_std, celllineage_obs,
     rna_final.obs.drop(columns=drop_cols, inplace=True)
     rna_file = os.path.join(output_h5ad_dir, f'multiome_final.RNA.{tissue_std}.h5ad')
     rna_final.write(rna_file, compression="gzip")
-    print(f"[INFO] Wrote RNA AnnData: {rna_file}")
+    logging.info(f"Wrote RNA AnnData: {rna_file}")
     sc.pl.umap(rna_final, color=[celllineage_obs], save=f"_multiome_final.RNA.{celllineage_obs}.{tissue_std}.png")
     sc.pl.umap(rna_final, color=[celltype_obs], save=f"_multiome_final.RNA.{celltype_obs}.{tissue_std}.png")
     
     # ATAC-only
-    print("[INFO] Extracting and writing ATAC AnnData ...")
+    logging.info("Extracting and writing ATAC AnnData ...")
     atac_final = adata[adata.obs['modality']!='expression-only', adata.var['is_atac_feature']==1].copy()
     atac_keep = [
         'atac.sampleID', 'atac.leiden', 'modality', 'celltype_glue', 'n_fragment', 'frac_dup', 
@@ -196,7 +197,7 @@ def split_and_save_multiome(adata, output_h5ad_dir, tissue_std, celllineage_obs,
     if 'rawcounts' in atac_final.layers: del atac_final.layers['rawcounts']
     atac_file = os.path.join(output_h5ad_dir, f'multiome_final.ATAC.{tissue_std}.h5ad')
     atac_final.write(atac_file, compression="gzip")
-    print(f"[INFO] Wrote ATAC AnnData: {atac_file}")
+    logging.info(f"Wrote ATAC AnnData: {atac_file}")
     sc.pl.umap(atac_final, color=[celllineage_obs], save=f"_multiome_final.ATAC.{celllineage_obs}.{tissue_std}.png")
     sc.pl.umap(atac_final, color=[celltype_obs], save=f"_multiome_final.ATAC.{celltype_obs}.{tissue_std}.png")
     
@@ -204,14 +205,14 @@ def run_per_tissue(tissue, output_h5ad_dir, celllineage_obs, celltype_obs, imput
     
     tissue_std = standardize_tissue_name(tissue)
     
-    print(f"[INFO] Loading AnnData for tissue: {tissue}")
+    logging.info(f"Loading AnnData for tissue: {tissue}")
     adata = ad.read_h5ad(os.path.join(output_h5ad_dir, f'Multiome_merged.GLUE.{tissue_std}.h5ad'))
     adata.obs['tissue'] = tissue
     rna = ad.read_h5ad(os.path.join(output_h5ad_dir, f'RNA.GLUE.{tissue_std}.h5ad'))
     atac = ad.read_h5ad(os.path.join(output_h5ad_dir, f'ATAC.GLUE.{tissue_std}.h5ad'))
 
     # propagate obs/metadata
-    print("[INFO] Propagating RNA/ATAC obs fields ...")
+    logging.info("Propagating RNA/ATAC obs fields ...")
     propagate_obs(adata, rna, ['sampleID','leiden'], 'rna')
     propagate_obs(adata, rna, ['cellbarcode', 'total_counts', 'n_genes_by_counts', 'n_genes',
                                'pct_counts_mt', 'pct_counts_ribo', 'pct_counts_hb', 'pct_exon_reads',
@@ -238,55 +239,67 @@ def run_per_tissue(tissue, output_h5ad_dir, celllineage_obs, celltype_obs, imput
     # Save main complete file
     final_file = os.path.join(output_h5ad_dir, f'multiome_final.{tissue_std}.h5ad')
     adata.write(final_file)
-    print(f"[INFO] Wrote: {final_file}")
+    logging.info(f"Wrote: {final_file}")
 
     # plot UMAP
-    print(f"[INFO] plotting UMAPs")
+    logging.info(f"plotting UMAPs")
     sc.pl.umap(adata, color=[celllineage_obs], save=f"_multiome_final.cell_lineage.{tissue_std}.png")
     sc.pl.umap(adata, color=[celltype_obs], save=f"_multiome_final.celltype_broad.{tissue_std}.png")
     sc.pl.umap(adata, color=["modality"], save=f"_multiome_final.modality.{tissue_std}.png")
 
     split_and_save_multiome(adata, output_h5ad_dir, tissue_std, celllineage_obs, celltype_obs)
 
-    print(f"[DONE] Finish the whole workflow! Hooray!!!")
+    logging.info(f"Finish the whole workflow! Hooray!!!")
 
 def main(config_path):
+    setup_logging()
     config = load_config(config_path)
+    require_keys(config, [
+        "paths.workdir", "paths.output_h5ad_dir", "params.tissue",
+        "params.celltype_obs", "params.celllineage_obs", "params.imputation",
+    ], context=config_path)
 
     workdir = config['paths']['workdir']
     output_h5ad_dir = config['paths']['output_h5ad_dir']
     final_output_dir = os.path.join(workdir, 'final')
     os.makedirs(final_output_dir, exist_ok=True)
     os.chdir(final_output_dir)
-    
+
     tissue = config['params']['tissue']
-    
+
     celltype_obs = config['params']['celltype_obs']
     celllineage_obs = config['params']['celllineage_obs']
     imputation = config['params']['imputation']
-    
+
+    failed_tissues = []
     if tissue == "---":
         sample_metadata = config['paths']['sample_metadata']
         df = pd.read_csv(sample_metadata, sep='\t', header=None,
                      names=["rnaID", "atacID", "species", "donorID", "ageGroup", "gender", "tissue"])
-        
+
         tissues = sorted(df["tissue"].unique())
-        print(f"[INFO] Data integration for MULTIPLE tissues: {tissues}")
-        
+        logging.info(f"Data integration for MULTIPLE tissues: {tissues}")
+
         for idx, tissue_name in enumerate(tissues, 1):
-            print(f"\n========== Processing tissue: {tissue_name} ({idx}/{len(tissues)}) ==========")
-            
+            logging.info(f"========== Processing tissue: {tissue_name} ({idx}/{len(tissues)}) ==========")
+
             try:
-                run_per_tissue(working_tissue, output_h5ad_dir, celllineage_obs, celltype_obs, imputation)
+                run_per_tissue(tissue_name, output_h5ad_dir, celllineage_obs, celltype_obs, imputation)
             except Exception as e:
-                print(f"[ERROR] Encountered error for tissue {working_tissue}: {str(e)}")
+                logging.error(f"Encountered error for tissue {tissue_name}: {str(e)}")
+                failed_tissues.append(tissue_name)
     else:
-        print(f"\n========== Processing tissue: {tissue} ==========")
-        
+        logging.info(f"========== Processing tissue: {tissue} ==========")
+
         try:
             run_per_tissue(tissue, output_h5ad_dir, celllineage_obs, celltype_obs, imputation)
         except Exception as e:
-            print(f"[ERROR] Encountered error for tissue {tissue}: {str(e)}")
+            logging.error(f"Encountered error for tissue {tissue}: {str(e)}")
+            failed_tissues.append(tissue)
+
+    if failed_tissues:
+        logging.error(f"data_integration failed for {len(failed_tissues)} tissue(s): {failed_tissues}")
+        sys.exit(1)
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(
@@ -294,4 +307,8 @@ if __name__ == "__main__":
     )
     parser.add_argument("config", help="YAML config file")
     args = parser.parse_args()
-    main(args.config)
+    try:
+        main(args.config)
+    except (FileNotFoundError, KeyError, ValueError) as e:
+        logging.error(f"{type(e).__name__}: {e}")
+        sys.exit(1)

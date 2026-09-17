@@ -18,7 +18,7 @@ runtag="${1:-demo_run}"
 nthread="${2:-4}"
 
 config="config/atac_qc_config.yaml"
-fragdir="test_data/fragment_files"
+fragdir="test_data/fragmemt_files"
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$repo_root"
 

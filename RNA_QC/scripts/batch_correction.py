@@ -11,6 +11,7 @@ warnings.filterwarnings("ignore", category=FutureWarning)
 import os
 import sys
 import argparse
+import logging
 import numpy as np
 import pandas as pd
 import scanpy as sc
@@ -21,20 +22,20 @@ mpl.rcParams['pdf.fonttype'] = 42
 import matplotlib.pyplot as plt
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
-from rna_qc.utils import load_config, standardize_tissue_name
+from rna_qc.utils import load_config, standardize_tissue_name, setup_logging, require_keys
 from rna_qc.rna_plots import move_figures_to_newdir
 
 def run_harmony_batch_correction(output_h5ad_dir, workdir, tissue, runtag, key="sampleID"):
-    
+
     tissue_std = standardize_tissue_name(tissue)
 
     adata_path = os.path.join(output_h5ad_dir, f"{tissue_std}_GEX.filtered.{runtag}.h5ad")
     if not os.path.exists(adata_path):
-        print(f"[ERROR] No h5ad for tissue {tissue} at {adata_path}.")
+        logging.error(f"No h5ad for tissue {tissue} at {adata_path}.")
         return
-    
+
     adata = sc.read_h5ad(adata_path)
-    print(f"[INFO] Loaded AnnData for tissue {tissue} ({adata.shape[0]} cells, {adata.shape[1]} genes)")
+    logging.info(f"Loaded AnnData for tissue {tissue} ({adata.shape[0]} cells, {adata.shape[1]} genes)")
     
     figures_dir = os.path.join(workdir, "figures")
     os.makedirs(figures_dir, exist_ok=True)
@@ -48,7 +49,7 @@ def run_harmony_batch_correction(output_h5ad_dir, workdir, tissue, runtag, key="
     adata_before = adata.copy()
 
     # Run Harmony batch correction
-    print("[INFO] Running Harmony integration...")
+    logging.info("Running Harmony integration...")
     with warnings.catch_warnings():
         warnings.filterwarnings("ignore", category=RuntimeWarning)
         sce.pp.harmony_integrate(adata, key=key, max_iter_harmony=30)
@@ -90,56 +91,60 @@ def run_harmony_batch_correction(output_h5ad_dir, workdir, tissue, runtag, key="
     plot_path = os.path.join(figures_dir, f"Harmony_batchCorrection_umap.{tissue_std}.png")
     plt.savefig(plot_path, dpi=300, bbox_inches='tight')
     plt.close(fig)
-    print(f"[INFO] Saved batch correction UMAP to {plot_path}")
+    logging.info(f"Saved batch correction UMAP to {plot_path}")
 
     # Save Harmony-corrected AnnData
     out_adata_path = os.path.join(output_h5ad_dir, f"{tissue_std}_GEX.filtered.RMbatch.{runtag}.h5ad")
     adata.write(out_adata_path)
-    print(f"[INFO] Saved Harmony-corrected AnnData: {out_adata_path}")
+    logging.info(f"Saved Harmony-corrected AnnData: {out_adata_path}")
 
     # Move figures to new directory
     move_figures_to_newdir(workdir, old="figures", new=f"batch_correction.{runtag}")
 
-    print(f"[INFO] Harmony batch correction done for tissue: {tissue}")
+    logging.info(f"Harmony batch correction done for tissue: {tissue}")
 
 def main(config_path, runtag):
+    setup_logging()
     config = load_config(config_path)
+    require_keys(config, [
+        "paths.workdir", "paths.output_h5ad_dir", "params.tissue",
+    ], context=config_path)
 
     workdir = config['paths']['workdir']
     output_h5ad_dir = config['paths']['output_h5ad_dir']
 
     tissue = config['params']['tissue']
-    
+
     if tissue == "---":
 
         # Load master sample metadata across tissues/donors
         sample_metadata = config['paths']['sample_metadata']
         df = pd.read_csv(sample_metadata, sep='\t', header=None, index_col=False,
                          names=["rnaID", "atacID", "species", "donorID", "ageGroup", "gender", "tissue"])
-    
+
         tissue_names = sorted(df['tissue'].unique())
-        print(f"[INFO] Running Harmony batch correction for MULTIPLE tissues: {tissue_names}")
-        
+        logging.info(f"Running Harmony batch correction for MULTIPLE tissues: {tissue_names}")
+
         failed_tissues = []
         for idx, tissue_name in enumerate(tissue_names, 1):
-            print(f"\n============== Processing tissue: {tissue_name} ({idx}/{len(tissue_names)}) ==============")
+            logging.info(f"============== Processing tissue: {tissue_name} ({idx}/{len(tissue_names)}) ==============")
 
             try:
                 run_harmony_batch_correction(output_h5ad_dir, workdir, tissue_name, runtag, key = "sampleID")
             except Exception as e:
-                print(f"[ERROR] Harmony batch correction failed for {tissue_name}: {e}")
+                logging.error(f"Harmony batch correction failed for {tissue_name}: {e}")
                 failed_tissues.append(tissue_name)
 
         if failed_tissues:
-            print(f"[ERROR] batch_correction failed for {len(failed_tissues)} tissue(s): {failed_tissues}")
+            logging.error(f"batch_correction failed for {len(failed_tissues)} tissue(s): {failed_tissues}")
             sys.exit(1)
     else:
-        print(f"\n============== Processing tissue: {tissue} ==============")
+        logging.info(f"============== Processing tissue: {tissue} ==============")
 
         try:
             run_harmony_batch_correction(output_h5ad_dir, workdir, tissue, runtag, key = "sampleID")
         except Exception as e:
-            print(f"[ERROR] Harmony batch correction failed for {tissue}: {e}")
+            logging.error(f"Harmony batch correction failed for {tissue}: {e}")
             sys.exit(1)
 
 if __name__ == "__main__":
@@ -147,4 +152,8 @@ if __name__ == "__main__":
     parser.add_argument("config", help="YAML config file describing tissue, paths, etc.")
     parser.add_argument("runtag", help="Tag for this run (e.g. round3 or v1)")
     args = parser.parse_args()
-    main(args.config, args.runtag)
+    try:
+        main(args.config, args.runtag)
+    except (FileNotFoundError, KeyError, ValueError) as e:
+        logging.error(f"{type(e).__name__}: {e}")
+        sys.exit(1)

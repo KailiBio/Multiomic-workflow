@@ -8,6 +8,7 @@ Description: Identify DEG and generates dot plots, run automatic annotation with
 import os
 import sys
 import argparse
+import logging
 import numpy as np
 import pandas as pd
 import scanpy as sc
@@ -17,7 +18,7 @@ import matplotlib.pyplot as plt
 import urllib.request
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
-from cell_annotation.utils import load_config, standardize_tissue_name, move_figures_to_newdir
+from cell_annotation.utils import load_config, standardize_tissue_name, move_figures_to_newdir, setup_logging, require_keys
 
 def load_marker_genes(config):
     marker_gene_table = config['annotation']['marker_gene_file']
@@ -56,7 +57,7 @@ def Process_DEG(adata, tissue, tissue_std, valid_marker_genes, outdir):
             f.write(f"Top DEGs for cluster {group}:\n")
             genes = result['names'][group][:20]
             f.write(", ".join(genes) + "\n\n")
-    print(f"[Info] Saved top DEGs to {output_txt}")
+    logging.info(f"Saved top DEGs to {output_txt}")
 
     # UMAPs for top14 DEGs of each cluster
     clusters = adata.obs['leiden'].unique()
@@ -127,49 +128,55 @@ def run_per_tissue(workdir, input_h5ad_file, tissue, marker_gene_list, out_h5ad_
     # Load data
     adata_path = os.path.join(input_h5ad_file)
     if not os.path.exists(adata_path):
-        print(f"[ERROR] No h5ad for tissue {tissue} at {adata_path}.")
+        logging.error(f"No h5ad for tissue {tissue} at {adata_path}.")
         return
 
-    print("[INFO] Loading anndata object...")
+    logging.info("Loading anndata object...")
     adata = sc.read_h5ad(adata_path)
-    
+
     figdir = os.path.join(workdir, 'figures')
     os.makedirs(figdir, exist_ok=True)
     os.chdir(workdir)
 
     # check marker genes
     valid_marker_genes = filter_marker_genes(marker_gene_list, adata.var_names)
-    print(f"[INFO] Annotating {tissue}: {adata.shape[0]} cells, {adata.shape[1]} genes\nwith {len(valid_marker_genes)} valid marker sets")
+    logging.info(f"Annotating {tissue}: {adata.shape[0]} cells, {adata.shape[1]} genes "
+                 f"with {len(valid_marker_genes)} valid marker sets")
 
     # 1. DEG and marker plots
-    print("[INFO] Calling DEGs...")
+    logging.info("Calling DEGs...")
     Process_DEG(adata, tissue, tissue_std, valid_marker_genes, figdir)
 
     # 2. Dotplot with input markers
-    print("[INFO] Generate dotplot with marker genes...")
+    logging.info("Generate dotplot with marker genes...")
     sc.pl.dotplot(adata, valid_marker_genes, groupby="leiden", standard_scale="var",
                   show=False, save=f'markerGenes.{tissue_std}.png')
 
     # 3. ScType annotation
-    print("[INFO] Running scType for automatic cell annotation...")
+    logging.info("Running scType for automatic cell annotation...")
     load_sctype()
     run_sctype_annotation(adata, marker_gene_list)
-    
+
     sc.pl.umap(adata, color='sctype_annotation', frameon=False, show=False, save=f'.ScType_Annotation.{tissue_std}.png')
     plot_final_marker_dotplots(adata, tissue_std, valid_marker_genes)
 
-    print("[INFO] Save files and figures...")
+    logging.info("Save files and figures...")
     # 4. Save h5ad and annotation table
     save_results(adata, out_h5ad_dir, tissue_std)
 
     # 5. Move figures
     move_figures_to_newdir(workdir, old="figures", new="cell_annotation_auto")
 
-    print(f"[INFO] Completed annotation step for {tissue}.")
+    logging.info(f"Completed annotation step for {tissue}.")
 
 def main(config_path):
+    setup_logging()
     config = load_config(config_path)
-    
+    require_keys(config, [
+        "paths.workdir", "paths.input_h5ad_dir", "paths.output_h5ad_dir",
+        "params.tissue", "annotation.marker_gene_file",
+    ], context=config_path)
+
     workdir = config['paths']['workdir']
     input_h5ad_file = config['paths']['input_h5ad_dir']
     out_h5ad_dir = config['paths']['output_h5ad_dir']
@@ -179,30 +186,41 @@ def main(config_path):
     marker_gene_list = load_marker_genes(config)
         
     tissue = config['params']['tissue']
-    
+
+    failed_tissues = []
     if tissue == "---":
         sample_metadata = config['paths']['sample_metadata']
         df = pd.read_csv(sample_metadata, sep='\t', header=None,
             names=["rnaID", "atacID", "species", "donorID", "ageGroup", "gender", "tissue"])
-        
+
         tissues = sorted(df['tissue'].unique())
-        print(f"[INFO] Annotating MULTIPLE tissues: {tissues}")
-        
+        logging.info(f"Annotating MULTIPLE tissues: {tissues}")
+
         for idx, tissue_name in enumerate(tissues, 1):
-            print(f"\n========== Annotating tissue: {tissue_name} ({idx}/{len(tissues)}) ==========")
+            logging.info(f"========== Annotating tissue: {tissue_name} ({idx}/{len(tissues)}) ==========")
             try:
                 run_per_tissue(workdir, input_h5ad_file, tissue_name, marker_gene_list, out_h5ad_dir)
             except Exception as e:
-                print(f"[ERROR] Cell annotation failed for {tissue_name}: {e}")
+                logging.error(f"Cell annotation failed for {tissue_name}: {e}")
+                failed_tissues.append(tissue_name)
     else:
-        print(f"\n========== Annotating tissue: {tissue} ==========")
+        logging.info(f"========== Annotating tissue: {tissue} ==========")
         try:
             run_per_tissue(workdir, input_h5ad_file, tissue, marker_gene_list, out_h5ad_dir)
         except Exception as e:
-            print(f"[ERROR] Cell annotation failed for {tissue}: {e}")
+            logging.error(f"Cell annotation failed for {tissue}: {e}")
+            failed_tissues.append(tissue)
+
+    if failed_tissues:
+        logging.error(f"annotate_cells failed for {len(failed_tissues)} tissue(s): {failed_tissues}")
+        sys.exit(1)
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Cell annotation workflow for scRNA-seq h5ad.")
     parser.add_argument("config", help="YAML config with tissue/path/marker genes spec.")
     args = parser.parse_args()
-    main(args.config)
+    try:
+        main(args.config)
+    except (FileNotFoundError, KeyError, ValueError) as e:
+        logging.error(f"{type(e).__name__}: {e}")
+        sys.exit(1)

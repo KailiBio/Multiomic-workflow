@@ -1,15 +1,22 @@
+# All paths below are relative to the cell_annotation/ directory (this module's
+# repo root); notebooks/cell_annotation_demo.ipynb cds into cell_annotation/
+# before invoking any script, so relative paths resolve the same way for
+# everyone. Paths starting with ../ reach into a sibling module's directory
+# (this module consumes RNA_QC output). When adapting this config for your own
+# data, replace these with your own paths (relative to cell_annotation/, or
+# absolute).
 paths:
-  workdir: /data/fankaili/scripts/multi-Omic_workflow/cell_annotation/test_output/
-  input_h5ad_dir: /data/fankaili/scripts/multi-Omic_workflow/RNA_QC/test_output/rna_h5ad/Muscle_Quadriceps_GEX.filtered.processed.demo_run.h5ad
-  output_h5ad_dir: /data/fankaili/scripts/multi-Omic_workflow/RNA_QC/test_output/rna_h5ad/
-  sample_metadata: /data/fankaili/scripts/multi-Omic_workflow/ATAC_QC/test_data/test_metatable.txt
-  
+  workdir: test_output/
+  input_h5ad_dir: ../RNA_QC/test_output/rna_h5ad/Muscle_Quadriceps_GEX.filtered.processed.demo_run.h5ad
+  output_h5ad_dir: ../RNA_QC/test_output/rna_h5ad/
+  sample_metadata: ../ATAC_QC/test_data/test_metatable.txt
+
 params:
   tissue: Muscle - Quadriceps
   suffix: Muscle_Quadriceps
 
 annotation:
-    marker_gene_file: /data/fankaili/scripts/multi-Omic_workflow/cell_annotation/test_data/test_marker_gene.xlsx
+    marker_gene_file: test_data/test_marker_gene.xlsx
     sheet_name: test
 
 color:

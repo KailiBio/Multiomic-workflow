@@ -11,12 +11,13 @@ warnings.filterwarnings("ignore", category=FutureWarning)
 import os
 import sys
 import argparse
+import logging
 import pandas as pd
 import anndata as ad
 import csv
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
-from multiome_integration.utils import load_config, standardize_tissue_name
+from multiome_integration.utils import load_config, standardize_tissue_name, setup_logging, require_keys
 from multiome_integration.integration_plots import plot_venn_and_save, plot_overlap_bar
 
 def remove_remaining_doublet(adata, doublet_dir, id_convert_dic, assay):
@@ -29,12 +30,12 @@ def remove_remaining_doublet(adata, doublet_dir, id_convert_dic, assay):
             
             sample_edit = id_convert_dic[sample]
             tissue = adata[adata.obs['sampleID']==sample, :].obs['tissue'].unique()[0]
-            print(f"[INFO] checking sample {sample}: {tissue}")
-            
+            logging.info(f"checking sample {sample}: {tissue}")
+
             filename = f"{assay}_doublet_results.{sample_edit}.tsv"
             doublet_file_path = os.path.join(doublet_dir, filename)
             if not os.path.exists(doublet_file_path):
-                print(f"[WARNING] Doublet file not found for sample {sample}: {filename}")
+                logging.warning(f"Doublet file not found for sample {sample}: {filename}")
                 continue
             doublet_file = pd.read_csv(doublet_file_path, sep='\t', header=0)
             
@@ -46,12 +47,12 @@ def remove_remaining_doublet(adata, doublet_dir, id_convert_dic, assay):
             doublet_barcodes_to_remove.update(barcodes)
 
         else:
-            print(f"[Warning] sample {sample} not on metatable")
+            logging.warning(f"sample {sample} not on metatable")
 
-    print(f"Removing {len(doublet_barcodes_to_remove)} remaining doublet cells for {assay}.")
+    logging.info(f"Removing {len(doublet_barcodes_to_remove)} remaining doublet cells for {assay}.")
     mask = ~adata.obs_names.isin(doublet_barcodes_to_remove)
     adata_filtered = adata[mask].copy()
-    print(f"adata reduced from {adata.shape[0]} to {adata_filtered.shape[0]} cells.")
+    logging.info(f"adata reduced from {adata.shape[0]} to {adata_filtered.shape[0]} cells.")
     return adata_filtered
 
 def process_overlap(rna_sample, atac_sample, rna_df, atac_df, tissue_std, outdir):
@@ -65,7 +66,13 @@ def process_overlap(rna_sample, atac_sample, rna_df, atac_df, tissue_std, outdir
     return [rna_only, overlap, atac_only]
 
 def main(config_path):
+    setup_logging()
     config = load_config(config_path)
+    require_keys(config, [
+        "paths.workdir", "paths.output_h5ad_dir", "paths.sample_metadata",
+        "params.tissue", "params.suffix", "paths.rna_doublet_dir", "paths.atac_doublet_dir",
+        "paths.rna_post_qc_h5ad", "paths.atac_post_qc_h5ad",
+    ], context=config_path)
 
     workdir = config['paths']['workdir']
     output_h5ad_dir = config['paths']['output_h5ad_dir']
@@ -89,11 +96,11 @@ def main(config_path):
         working_df = df[df["tissue"] == tissue]
 
     tissues = sorted(working_df["tissue"].unique())
-    print(f"Working tissue: {', '.join(tissues)}")
+    logging.info(f"Working tissue: {', '.join(tissues)}")
     rna_sample_list = working_df["rnaID"].unique().tolist()
-    print(f"RNA Samples: {list(rna_sample_list)}")
+    logging.info(f"RNA Samples: {list(rna_sample_list)}")
     atac_sample_list = working_df["atacID"].unique().tolist()
-    print(f"ATAC Samples: {list(atac_sample_list)}")
+    logging.info(f"ATAC Samples: {list(atac_sample_list)}")
 
     sample_tissue_dict = dict(zip(working_df['atacID'], working_df['tissue']))
     
@@ -106,25 +113,25 @@ def main(config_path):
 
     # Remove potential doublets in RNA (based on ATAC doublet directory)
     if os.path.exists(atac_doublet_dir):
-        print(f"[INFO] ATAC doublet directory found: {atac_doublet_dir}")
+        logging.info(f"ATAC doublet directory found: {atac_doublet_dir}")
         rna = remove_remaining_doublet(rna_all, atac_doublet_dir, rna_to_atac, assay="ATAC")
         rna.write(os.path.join(output_h5ad_dir, f'RNA_removeDoublet.{suffix}.h5ad'))
     else:
-        print(f"[WARNING] ATAC doublet directory not found: {atac_doublet_dir}. Skipping RNA doublet removal.")
+        logging.warning(f"ATAC doublet directory not found: {atac_doublet_dir}. Skipping RNA doublet removal.")
         rna = rna_all
         rna.write(os.path.join(output_h5ad_dir, f'RNA_removeDoublet.{suffix}.h5ad'))
 
     # Remove potential doublets in ATAC (based on RNA doublet directory)
     if os.path.exists(rna_doublet_dir):
-        print(f"[INFO] RNA doublet directory found: {rna_doublet_dir}")
+        logging.info(f"RNA doublet directory found: {rna_doublet_dir}")
         atac = remove_remaining_doublet(atac_all, rna_doublet_dir, atac_to_rna, assay="RNA")
         atac.write(os.path.join(output_h5ad_dir, f'ATAC_removeDoublet.{suffix}.h5ad'))
     else:
-        print(f"[WARNING] RNA doublet directory not found: {rna_doublet_dir}. Skipping ATAC doublet removal.")
+        logging.warning(f"RNA doublet directory not found: {rna_doublet_dir}. Skipping ATAC doublet removal.")
         atac = atac_all
         atac.write(os.path.join(output_h5ad_dir, f'ATAC_removeDoublet.{suffix}.h5ad'))
 
-    print("[INFO] Calculating overlapping cells and generating Venn plots...")
+    logging.info("Calculating overlapping cells and generating Venn plots...")
     # For RNA
     rna_df = rna.obs[['sampleID']].copy()
     rna_df['cellbarcode'] = rna.obs_names.values
@@ -137,7 +144,7 @@ def main(config_path):
         rna_sample = row.rnaID
         atac_sample = row.atacID
 
-        print(f"\n========== Processing sample: {rna_sample} / {atac_sample} ({idx}/{working_df.shape[0]}) ==========")
+        logging.info(f"========== Processing sample: {rna_sample} / {atac_sample} ({idx}/{working_df.shape[0]}) ==========")
         
         tissue_std = standardize_tissue_name(sample_tissue_dict[atac_sample])
         
@@ -155,9 +162,9 @@ def main(config_path):
         df_cell_counts = pd.DataFrame(cell_counts)
         df_cell_counts.to_csv(os.path.join(outdir, f'multiome_cell_counts.{suffix}.tsv'), sep='\t', index=False)
         plot_overlap_bar(cell_counts, outdir, suffix)
-        print(f"Overlap statistics complete. Figures saved in {outdir}")
+        logging.info(f"Overlap statistics complete. Figures saved in {outdir}")
     else:
-        print("No overlaps found or no valid samples to plot.")
+        logging.warning("No overlaps found or no valid samples to plot.")
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(
@@ -165,4 +172,8 @@ if __name__ == "__main__":
     )
     parser.add_argument("config", help="YAML config file")
     args = parser.parse_args()
-    main(args.config)
+    try:
+        main(args.config)
+    except (FileNotFoundError, KeyError, ValueError) as e:
+        logging.error(f"{type(e).__name__}: {e}")
+        sys.exit(1)

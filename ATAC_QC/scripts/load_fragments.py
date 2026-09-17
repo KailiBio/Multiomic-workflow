@@ -15,17 +15,17 @@ import sys
 import time
 import argparse
 import re
-import traceback
+import logging
 import pandas as pd
 import snapatac2 as snap
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
-from atac_qc.utils import load_config, standardize_tissue_name
+from atac_qc.utils import load_config, standardize_tissue_name, setup_logging, require_keys
 from atac_qc.atac_plots import assign_donor_colors
 
 def load_barcode_dicts(barcode_whitelist):
     """Load RNA/ATAC barcode mapping from file."""
-    print("[INFO] Loading paired barcodes...")
+    logging.info("Loading paired barcodes...")
     barcode_dic_rna = {}
     barcode_dic_atac = {}
     with open(barcode_whitelist) as f:
@@ -60,30 +60,14 @@ def process_fragments(row, config, barcode_dic_rna, overwrite=False):
     if os.path.exists(output_h5ad):
         if overwrite:
             os.remove(output_h5ad)
-            print(f"Overwriting: removed existing {output_h5ad}")
+            logging.info(f"Overwriting: removed existing {output_h5ad}")
         else:
-            print(f"Skipping {atacID}: output already exists.")
+            logging.info(f"Skipping {atacID}: output already exists.")
             return
-
-    # Load chrom sizes: use file from config if provided, otherwise fall back to hg38
-    chrom_sizes_file = config['references'].get('chrom_sizes', None)
-    if chrom_sizes_file and os.path.isfile(chrom_sizes_file):
-        print(f"[INFO] Loading chrom sizes from {chrom_sizes_file}")
-        chrom_sizes = {}
-        with open(chrom_sizes_file) as f:
-            for line in f:
-                parts = line.strip().split('\t')
-                if len(parts) >= 2:
-                    chrom_sizes[parts[0]] = int(parts[1])
-    else:
-        if chrom_sizes_file:
-            print(f"[WARNING] Configured chrom_sizes file not found: {chrom_sizes_file}")
-        print("[INFO] Using default hg38 chrom sizes")
-        chrom_sizes = snap.genome.hg38
 
     data = snap.pp.import_data(
         fragment_file,
-        chrom_sizes = chrom_sizes,
+        chrom_sizes = snap.genome.hg38,
         file = output_h5ad,
         min_num_fragments = min_fragments,
         sorted_by_barcode = False,
@@ -92,13 +76,13 @@ def process_fragments(row, config, barcode_dic_rna, overwrite=False):
 
     # Barcode conversion
     data.obs['ATAC_cellbarcode'] = data.obs_names
-    print("\n[INFO] Converting barcodes...")
+    logging.info("Converting barcodes...")
     
     new_bc = []
     for barcode in data.obs_names:
         base = barcode.split('-')[0]
         if base not in barcode_dic_rna:
-            print(f"[ERROR] No matching RNA barcode for ATAC barcode {base}")
+            logging.error(f"No matching RNA barcode for ATAC barcode {base}")
         new_bc.append(barcode_dic_rna.get(base, base)+'-1')
     data.obs['cellbarcode'] = new_bc
 
@@ -109,39 +93,32 @@ def process_fragments(row, config, barcode_dic_rna, overwrite=False):
     data.obs_names = [f"{donorID}_{batch_number}_{channel_number}_{bc}" for bc in new_bc ]
 
     # Figure and metrics
-    print("[INFO] Plotting fragment size...")
-    try:
-        snap.pl.frag_size_distr(
-            data, interactive=False,
-            out_file=output_fig
-        )
-    except Exception as e:
-        print(f"[WARNING] Fragment size plot failed (non-fatal): {e}")
-
-    print("[INFO] Calculating TSS enrichment score...")
+    logging.info("Plotting fragment size...")
+    snap.pl.frag_size_distr(
+        data, interactive=False,
+        out_file=output_fig
+    )
+    logging.info("Calculating TSS enrichment score...")
     snap.metrics.tsse(data, gene_anno=gencode_gtf, n_jobs = n_threads)
 
-    # Verify tsse was computed
-    if 'tsse' not in data.obs:
-        data.close()
-        os.remove(output_h5ad)
-        raise RuntimeError(
-            f"snap.metrics.tsse() did not produce 'tsse' column for {atacID}. "
-            f"Available obs columns: {list(data.obs.keys())}"
-        )
-
-    print(f"[INFO] Adding sampleID: {atacID} to anndata object")
+    logging.info(f"Adding sampleID: {atacID} to anndata object")
     data.obs['sampleID'] = [str(atacID) for bc in data.obs_names]
 
-    print(f"[INFO] Adding tissue: {tissue_std} to anndata object")
+    logging.info(f"Adding tissue: {tissue_std} to anndata object")
     data.obs['tissue'] = [tissue_std for bc in data.obs_names]
 
     data.close()
-    print(f"Saved raw .h5ad to {output_h5ad}")
+    logging.info(f"Saved raw .h5ad to {output_h5ad}")
 
 def main(config_path, overwrite=False):
+    setup_logging()
     config = load_config(config_path)
-    
+    require_keys(config, [
+        "paths.workdir", "paths.output_h5ad_dir", "paths.fragment_dir", "paths.sample_metadata",
+        "references.gencode_gtf", "references.barcode_whitelist",
+        "params.tissue", "params.suffix", "params.min_fragments",
+    ], context=config_path)
+
     workdir = config['paths']['workdir']
     output_h5ad_dir = config['paths']['output_h5ad_dir']
     os.makedirs(output_h5ad_dir, exist_ok=True)
@@ -163,24 +140,24 @@ def main(config_path, overwrite=False):
         working_df = df[df["tissue"] == tissue]
 
     tissues = sorted(working_df["tissue"].unique())
-    print(f"Working tissue: {', '.join(tissues)}")
+    logging.info(f"Working tissue: {', '.join(tissues)}")
     sample_list = working_df['atacID'].unique()
-    print(f"Samples: {list(sample_list)}")
+    logging.info(f"Samples: {list(sample_list)}")
 
+    failed_samples = []
     for i, (_, row) in enumerate(working_df.iterrows(), 1):
-        print(f"\n========== Processing {row['atacID']} ({i}/{len(working_df)}) ==========")
+        logging.info(f"========== Processing {row['atacID']} ({i}/{len(working_df)}) ==========")
 
         try:
             process_fragments(row, config, barcode_dic_rna, overwrite=overwrite)
         except Exception as e:
-            print(f"[ERROR] Encountered error for {row['atacID']}: {e}")
-            traceback.print_exc()
-            # Clean up partial h5ad so downstream steps don't find incomplete files
-            partial_h5ad = os.path.join(output_h5ad_dir, f"{row['atacID']}.raw.h5ad")
-            if os.path.exists(partial_h5ad):
-                os.remove(partial_h5ad)
-                print(f"[INFO] Removed partial h5ad: {partial_h5ad}")
+            logging.error(f"Encountered error for {row['atacID']}: {e}")
+            failed_samples.append(row['atacID'])
             continue
+
+    if failed_samples:
+        logging.error(f"load_fragments failed for {len(failed_samples)} sample(s): {failed_samples}")
+        sys.exit(1)
 
 if __name__ == "__main__":
 
@@ -188,4 +165,8 @@ if __name__ == "__main__":
     parser.add_argument("config", help="YAML config file")
     parser.add_argument("--overwrite", action="store_true", help="Overwrite existing h5ad outputs")
     args = parser.parse_args()
-    main(args.config, overwrite=args.overwrite)
+    try:
+        main(args.config, overwrite=args.overwrite)
+    except (FileNotFoundError, KeyError, ValueError) as e:
+        logging.error(f"{type(e).__name__}: {e}")
+        sys.exit(1)
