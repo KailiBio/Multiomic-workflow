@@ -4,7 +4,6 @@ numpy<2.0.0
 anndata==0.10.9
 snapatac2==2.8.0
 scanpy
-anndata==0.10.9
 matplotlib
 seaborn
 harmonypy==0.0.10
@@ -17,4 +16,5 @@ scipy
 tqdm
 openpyxl
 kaleido==0.2.1
+pyyaml
 ipython
