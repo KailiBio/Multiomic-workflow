@@ -11,12 +11,13 @@ warnings.filterwarnings("ignore", category=FutureWarning)
 import os
 import sys
 import argparse
+import logging
 import pandas as pd
 import matplotlib.pyplot as plt
 import matplotlib.colors as mcolors
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
-from rna_qc.utils import load_config
+from rna_qc.utils import load_config, setup_logging, require_keys
 from rna_qc.rna_plots import assign_colors
 
 def load_cellranger_summary(sample_dict, datadir):
@@ -27,7 +28,7 @@ def load_cellranger_summary(sample_dict, datadir):
     for sampleID, donorID in sample_dict.items():
         summary_file = os.path.join(datadir, sampleID, 'metrics_summary.csv')
         if not os.path.exists(summary_file):
-            print(f"[WARNING] {summary_file} not found, skipping.")
+            logging.warning(f"{summary_file} not found, skipping.")
             continue
             
         sample_summary = pd.read_csv(summary_file, thousands=',')
@@ -112,7 +113,12 @@ def plot_read_mappability(summary_df, all_colors, tissue, outdir, suffix):
 
 
 def main(config_path):
+    setup_logging()
     config = load_config(config_path)
+    require_keys(config, [
+        "paths.workdir", "paths.input_dir", "paths.sample_metadata",
+        "params.tissue", "params.suffix", "my_color_palette",
+    ], context=config_path)
 
     workdir = config['paths']['workdir']
     input_dir = config['paths']['input_dir']
@@ -131,16 +137,16 @@ def main(config_path):
         working_df = df[df["tissue"] == tissue]
 
     tissues = sorted(working_df["tissue"].unique())
-    print(f"Working tissue: {', '.join(tissues)}")
+    logging.info(f"Working tissue: {', '.join(tissues)}")
     sample_list = working_df['rnaID'].unique()
-    print(f"Samples: {list(sample_list)}")
+    logging.info(f"Samples: {list(sample_list)}")
 
-    print(f"\n[INFO] Loading CellRanger summaries for {len(sample_list)} samples...")
+    logging.info(f"Loading CellRanger summaries for {len(sample_list)} samples...")
     sample_dict = dict(zip(working_df['rnaID'], working_df['donorID']))
     summary_df = load_cellranger_summary(sample_dict, input_dir)
     if summary_df.empty:
-        print("[WARNING] No CellRanger summary data could be loaded.")
-        print("Check config file to be sure tissue names are matching. Exiting.")
+        logging.warning("No CellRanger summary data could be loaded.")
+        logging.warning("Check config file to be sure tissue names are matching. Exiting.")
         sys.exit(1)
 
     # Get donor color map
@@ -151,16 +157,20 @@ def main(config_path):
     all_colors = assign_colors(sorted(set(summary_df['sampleID'])), palette=config["my_color_palette"])
     
 
-    print("[INFO] Plotting general QC metrics...")
+    logging.info("Plotting general QC metrics...")
     plot_qc_metrics(summary_df, all_colors, tissue, outdir, suffix)
 
-    print("[INFO] Plotting read mappability metrics...")
+    logging.info("Plotting read mappability metrics...")
     plot_read_mappability(summary_df, all_colors, tissue, outdir, suffix)
 
-    print(f"\n[INFO] QC summary plots saved in {outdir}")
+    logging.info(f"QC summary plots saved in {outdir}")
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Summarizes and plots CellRanger QC results.")
     parser.add_argument("config", help="YAML config file")
     args = parser.parse_args()
-    main(args.config)
+    try:
+        main(args.config)
+    except (FileNotFoundError, KeyError, ValueError) as e:
+        logging.error(f"{type(e).__name__}: {e}")
+        sys.exit(1)

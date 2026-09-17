@@ -16,7 +16,9 @@ import os
 import re
 import shutil
 import subprocess
+import sys
 import tempfile
+import logging
 import glob as globmod
 
 import pandas as pd
@@ -36,7 +38,7 @@ except ImportError as e:
 
 # Import pipeline utilities when available (for local mode)
 try:
-    from rna_qc.utils import load_config, standardize_tissue_name
+    from rna_qc.utils import load_config, standardize_tissue_name, setup_logging, require_keys
 except ImportError:
     # Fallback implementations for standalone use / GCS-only mode
     try:
@@ -59,6 +61,28 @@ except ImportError:
         tissue = re.sub(r'\s+', '_', tissue)
         tissue = re.sub(r'_+', '_', tissue)
         return tissue.strip('_')
+
+    def setup_logging(log_path=None, level=logging.INFO):
+        handlers = [logging.StreamHandler()]
+        if log_path:
+            os.makedirs(os.path.dirname(log_path) or ".", exist_ok=True)
+            handlers.append(logging.FileHandler(log_path))
+        logging.basicConfig(
+            level=level,
+            format="%(asctime)s [%(levelname)s] %(message)s",
+            datefmt="%Y-%m-%d %H:%M:%S",
+            handlers=handlers,
+            force=True,
+        )
+
+    def require_keys(config, dotted_keys, context="config"):
+        for dotted_key in dotted_keys:
+            node = config
+            parts = dotted_key.split(".")
+            for i, part in enumerate(parts):
+                if not isinstance(node, dict) or part not in node:
+                    raise KeyError(f"Missing required key '{'.'.join(parts[:i + 1])}' in {context}")
+                node = node[part]
 
 # ---------------------------------------------------------------------------
 # Slide dimensions (widescreen 16:9)
@@ -165,7 +189,7 @@ def download_figures_and_stats(gcs_base, tmpdir):
                 capture_output=True, text=True
             )
             if result.returncode != 0:
-                print(f"[WARNING] gsutil cp failed for {gcs_base}{step}/{ext} (may not exist yet)")
+                logging.warning(f"gsutil cp failed for {gcs_base}{step}/{ext} (may not exist yet)")
     return tmpdir
 
 
@@ -194,9 +218,9 @@ def collect_local_figures(workdir, runtag, tmpdir):
             dst = os.path.join(tmpdir, tmp_name)
             shutil.copytree(src, dst, dirs_exist_ok=True)
             found_any = True
-            print(f"[INFO]   {local_name}/ -> {tmp_name}/")
+            logging.info(f"{local_name}/ -> {tmp_name}/")
     if not found_any:
-        print(f"[WARN] No pipeline output directories found in {workdir}")
+        logging.warning(f"No pipeline output directories found in {workdir}")
     return tmpdir
 
 
@@ -442,11 +466,11 @@ def build_presentation(tmpdir, tissue_name, tissue_std, sample_ids, source_label
     source_label : str
         Shown on title slide (GCS path or local workdir path).
     """
-    print(f"[INFO] Building presentation for {tissue_name}...")
+    logging.info(f"Building presentation for {tissue_name}...")
     if sample_ids:
-        print(f"[INFO]   {len(sample_ids)} sample IDs for per-sample detection")
+        logging.info(f"{len(sample_ids)} sample IDs for per-sample detection")
     else:
-        print("[WARN]   No sample IDs found — all plots will be treated as overview")
+        logging.warning("No sample IDs found — all plots will be treated as overview")
 
     prs = Presentation()
     prs.slide_width = SLIDE_WIDTH
@@ -668,7 +692,7 @@ def build_presentation(tmpdir, tissue_name, tissue_std, sample_ids, source_label
     # Save
     out_pptx = os.path.join(tmpdir, f"{tissue_name}_RNA_QC_Report.pptx")
     prs.save(out_pptx)
-    print(f"[INFO] Saved presentation: {out_pptx}")
+    logging.info(f"Saved presentation: {out_pptx}")
     return out_pptx
 
 
@@ -686,7 +710,7 @@ def process_gcs(gcs_path, tissue=None):
         tissue_std = tissue_name.rsplit("_v", 1)[0]
 
     with tempfile.TemporaryDirectory() as tmpdir:
-        print(f"[INFO] Downloading figures from {gcs_base}...")
+        logging.info(f"Downloading figures from {gcs_base}...")
         download_figures_and_stats(gcs_base, tmpdir)
 
         # Infer sample IDs from downloaded filenames
@@ -701,14 +725,14 @@ def process_gcs(gcs_path, tissue=None):
                 candidate = candidate.rsplit('_', 1)[0]
                 sample_ids = extract_sample_ids_from_files(tmpdir, candidate)
                 if sample_ids:
-                    print(f"[INFO] Matched tissue prefix '{candidate}' "
-                          f"(folder: {tissue_name})")
+                    logging.info(f"Matched tissue prefix '{candidate}' "
+                                 f"(folder: {tissue_name})")
                     tissue_std = candidate
                     break
 
-        print(f"[INFO] Inferred {len(sample_ids)} sample IDs from filenames")
+        logging.info(f"Inferred {len(sample_ids)} sample IDs from filenames")
         for sid in sorted(sample_ids):
-            print(f"[INFO]   - {sid}")
+            logging.info(f"- {sid}")
 
         pptx_path = build_presentation(
             tmpdir, tissue_name, tissue_std, sample_ids,
@@ -717,9 +741,9 @@ def process_gcs(gcs_path, tissue=None):
 
         # Upload back to GCS
         gcs_dest = gcs_base + f"{tissue_name}_RNA_QC_Report.pptx"
-        print(f"[INFO] Uploading to {gcs_dest}...")
+        logging.info(f"Uploading to {gcs_dest}...")
         subprocess.run(["gsutil", "-q", "cp", pptx_path, gcs_dest], check=True)
-        print(f"[DONE] {gcs_dest}")
+        logging.info(f"Uploaded presentation to {gcs_dest}")
 
 
 def process_gcs_parent(gcs_path):
@@ -732,13 +756,14 @@ def process_gcs_parent(gcs_path):
         try:
             process_gcs(tissue_dir)
         except Exception as e:
-            print(f"[ERROR] Failed for {tissue_dir}: {e}")
+            logging.error(f"Failed for {tissue_dir}: {e}")
             continue
 
 
 def process_local(config_path, runtag, output_path=None):
     """Local mode: collect from workdir -> build -> save locally."""
     config = load_config(config_path)
+    require_keys(config, ["paths.workdir", "params.tissue"], context=config_path)
     tissue = config['params']['tissue']
     suffix = config['params'].get('suffix') or standardize_tissue_name(tissue)
     workdir = config['paths']['workdir'].rstrip("/")
@@ -749,20 +774,20 @@ def process_local(config_path, runtag, output_path=None):
     # Extract sample IDs from metadata
     try:
         sample_ids = extract_sample_ids_from_config(config, tissue_std)
-        print(f"[INFO] Found {len(sample_ids)} sample IDs from metadata")
+        logging.info(f"Found {len(sample_ids)} sample IDs from metadata")
     except Exception as e:
-        print(f"[WARN] Could not read sample metadata: {e}")
+        logging.warning(f"Could not read sample metadata: {e}")
         sample_ids = set()
 
     with tempfile.TemporaryDirectory() as tmpdir:
-        print(f"[INFO] Collecting figures from {workdir}...")
+        logging.info(f"Collecting figures from {workdir}...")
         collect_local_figures(workdir, runtag, tmpdir)
 
         # If we didn't get sample IDs from config, try inferring from filenames
         if not sample_ids:
             sample_ids = extract_sample_ids_from_files(tmpdir, tissue_std)
             if sample_ids:
-                print(f"[INFO] Inferred {len(sample_ids)} sample IDs from filenames")
+                logging.info(f"Inferred {len(sample_ids)} sample IDs from filenames")
 
         pptx_path = build_presentation(
             tmpdir, tissue_name, tissue_std, sample_ids,
@@ -773,7 +798,7 @@ def process_local(config_path, runtag, output_path=None):
         if output_path is None:
             output_path = os.path.join(workdir, f"{tissue_name}_RNA_QC_Report.pptx")
         shutil.copy2(pptx_path, output_path)
-        print(f"[DONE] {output_path}")
+        logging.info(f"Report saved to {output_path}")
 
 
 def main():
@@ -798,6 +823,8 @@ def main():
                         help="Output PPTX path (default: auto)")
     args = parser.parse_args()
 
+    setup_logging()
+
     if args.gcs:
         # GCS mode
         gcs_path = args.gcs.rstrip("/") + "/"
@@ -817,4 +844,8 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    try:
+        main()
+    except (FileNotFoundError, KeyError, ValueError) as e:
+        logging.error(f"{type(e).__name__}: {e}")
+        sys.exit(1)

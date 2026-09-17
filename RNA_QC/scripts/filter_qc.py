@@ -11,6 +11,7 @@ warnings.filterwarnings("ignore", category=FutureWarning)
 import os
 import sys
 import argparse
+import logging
 import numpy as np
 import pandas as pd
 import scanpy as sc
@@ -19,7 +20,7 @@ import scipy.sparse
 from scipy.stats import median_abs_deviation
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
-from rna_qc.utils import load_config, standardize_tissue_name
+from rna_qc.utils import load_config, standardize_tissue_name, setup_logging, require_keys
 from rna_qc.rna_plots import assign_donor_colors, move_figures_to_newdir, plot_upset, run_umap_clustering, plot_doublet_hist
 
 def _compute_mad_for_sample(sample_obs, nmads):
@@ -128,20 +129,20 @@ def compute_mad_thresholds(adata, QC_cutoff_df, nmads, key='sampleID', scope='pe
         # Compute thresholds once from all cells in the tissue
         thresholds = _compute_mad_for_sample(adata.obs, nmads)
 
-        print(f"[INFO] Computing tissue-wide MAD thresholds (nmads={nmads}, {adata.n_obs} cells):")
-        print(f"  genes=[{thresholds['Min_genes_in_cells']}, {thresholds['Max_genes_in_cells']}],"
-              f" counts<{thresholds['Max_counts_in_cells']},"
-              f" mt<{thresholds['Max_percent_mt_in_cells']},"
-              f" ribo<{thresholds['Max_percent_ribo_in_cells']}]")
+        logging.info(f"Computing tissue-wide MAD thresholds (nmads={nmads}, {adata.n_obs} cells):")
+        logging.info(f"  genes=[{thresholds['Min_genes_in_cells']}, {thresholds['Max_genes_in_cells']}],"
+                     f" counts<{thresholds['Max_counts_in_cells']},"
+                     f" mt<{thresholds['Max_percent_mt_in_cells']},"
+                     f" ribo<{thresholds['Max_percent_ribo_in_cells']}]")
 
         # Apply same thresholds to every sample row
         for idx, row in QC_cutoff.iterrows():
             for col, val in thresholds.items():
                 QC_cutoff.at[idx, col] = val
-            print(f"  {row['rnaID']}: doublet={row['doublet_cutoffs']}")
+            logging.info(f"  {row['rnaID']}: doublet={row['doublet_cutoffs']}")
     else:
         # Compute thresholds per sample
-        print(f"[INFO] Computing per-sample MAD thresholds (nmads={nmads}):")
+        logging.info(f"Computing per-sample MAD thresholds (nmads={nmads}):")
 
         for idx, row in QC_cutoff.iterrows():
             sample_id = row['rnaID']
@@ -149,19 +150,19 @@ def compute_mad_thresholds(adata, QC_cutoff_df, nmads, key='sampleID', scope='pe
             sample_obs = adata.obs[sample_mask]
 
             if len(sample_obs) == 0:
-                print(f"  [WARNING] No cells found for {sample_id} — skipping MAD")
+                logging.warning(f"  No cells found for {sample_id} — skipping MAD")
                 continue
 
             thresholds = _compute_mad_for_sample(sample_obs, nmads)
             for col, val in thresholds.items():
                 QC_cutoff.at[idx, col] = val
 
-            print(f"  {sample_id} ({len(sample_obs)} cells):"
-                  f" genes=[{thresholds['Min_genes_in_cells']}, {thresholds['Max_genes_in_cells']}],"
-                  f" counts<{thresholds['Max_counts_in_cells']},"
-                  f" mt<{thresholds['Max_percent_mt_in_cells']},"
-                  f" ribo<{thresholds['Max_percent_ribo_in_cells']},"
-                  f" doublet={row['doublet_cutoffs']}")
+            logging.info(f"  {sample_id} ({len(sample_obs)} cells):"
+                         f" genes=[{thresholds['Min_genes_in_cells']}, {thresholds['Max_genes_in_cells']}],"
+                         f" counts<{thresholds['Max_counts_in_cells']},"
+                         f" mt<{thresholds['Max_percent_mt_in_cells']},"
+                         f" ribo<{thresholds['Max_percent_ribo_in_cells']},"
+                         f" doublet={row['doublet_cutoffs']}")
 
     return QC_cutoff
 
@@ -180,8 +181,8 @@ def resolve_doublet_column(cutoff, default="Yes"):
     if value in ("", "nan", "none", "---"):
         value = default.lower()
     elif value not in ("yes", "no"):
-        print(f"[WARNING] Unrecognized Whether_use_double_GMM_method value '{raw}' "
-              f"(expected 'Yes' or 'No'). Defaulting to '{default}'.")
+        logging.warning(f"Unrecognized Whether_use_double_GMM_method value '{raw}' "
+                        f"(expected 'Yes' or 'No'). Defaulting to '{default}'.")
         value = default.lower()
     return 'doublet_probabilities' if value == 'yes' else 'doublet_score'
 
@@ -295,7 +296,7 @@ def export_doublet_calls_by_sample(adata, QC_cutoff_dict, tissue, tissue_std, fi
 
     for sampleID in adata.obs['sampleID'].unique():
         if sampleID not in QC_cutoff_dict:
-            print(f"[ERROR] sampleID {sampleID} not found in QC_cutoff_dict.")
+            logging.error(f"sampleID {sampleID} not found in QC_cutoff_dict.")
             continue
 
         cutoff = QC_cutoff_dict[sampleID]
@@ -327,7 +328,7 @@ def filter_and_process_adata(adata, df, QC_cutoff_dict, tissue, tissue_std, log_
     
     for ID in adata.obs[key].unique():
 
-        print(f"[INFO] Filtering {ID}...")
+        logging.info(f"Filtering {ID}...")
         sample_obs = adata_filter.obs[key]
         adata_process = adata_filter[sample_obs == ID,:].copy()
         adata_remain  = adata_filter[sample_obs != ID,:].copy()
@@ -338,38 +339,38 @@ def filter_and_process_adata(adata, df, QC_cutoff_dict, tissue, tissue_std, log_
         n_before = len(adata_process)
 
         adata_process = adata_process[adata_process.obs['n_genes_by_counts'] > int(cutoff['Min_genes_in_cells']), :]
-        print(f"[INFO]   after Min_genes ({cutoff['Min_genes_in_cells']}): {n_before} -> {len(adata_process)} cells")
+        logging.info(f"  after Min_genes ({cutoff['Min_genes_in_cells']}): {n_before} -> {len(adata_process)} cells")
         adata_process = adata_process[adata_process.obs['n_genes_by_counts'] < int(cutoff['Max_genes_in_cells']), :]
-        print(f"[INFO]   after Max_genes ({cutoff['Max_genes_in_cells']}): -> {len(adata_process)} cells")
+        logging.info(f"  after Max_genes ({cutoff['Max_genes_in_cells']}): -> {len(adata_process)} cells")
         adata_process = adata_process[adata_process.obs['total_counts'] < int(cutoff['Max_counts_in_cells']), :]
-        print(f"[INFO]   after Max_counts ({cutoff['Max_counts_in_cells']}): -> {len(adata_process)} cells")
+        logging.info(f"  after Max_counts ({cutoff['Max_counts_in_cells']}): -> {len(adata_process)} cells")
         if cutoff['Max_percent_mt_in_cells'] != '---':
             adata_process = adata_process[adata_process.obs['pct_counts_mt'] < float(cutoff['Max_percent_mt_in_cells']), :]
-            print(f"[INFO]   after pct_mt ({cutoff['Max_percent_mt_in_cells']}): -> {len(adata_process)} cells")
+            logging.info(f"  after pct_mt ({cutoff['Max_percent_mt_in_cells']}): -> {len(adata_process)} cells")
         if cutoff['Max_percent_ribo_in_cells'] != '---':
             adata_process = adata_process[adata_process.obs['pct_counts_ribo'] < float(cutoff['Max_percent_ribo_in_cells']), :]
-            print(f"[INFO]   after pct_ribo ({cutoff['Max_percent_ribo_in_cells']}): -> {len(adata_process)} cells")
+            logging.info(f"  after pct_ribo ({cutoff['Max_percent_ribo_in_cells']}): -> {len(adata_process)} cells")
         if 'pct_exon_reads' in adata_process.obs:
             if cutoff['Exon_ratio_cutoffs'] != '---':
                 adata_process = adata_process[adata_process.obs['pct_exon_reads'] < float(cutoff['Exon_ratio_cutoffs']), :]
-                print(f"[INFO]   after Exon_ratio ({cutoff['Exon_ratio_cutoffs']}): -> {len(adata_process)} cells")
+                logging.info(f"  after Exon_ratio ({cutoff['Exon_ratio_cutoffs']}): -> {len(adata_process)} cells")
         if cutoff['MALAT1_CPM_cutoffs'] != '---':
             if adata_process.obs['MALAT1_CPM'].notna().any():
                 adata_process = adata_process[adata_process.obs['MALAT1_CPM'] > int(cutoff['MALAT1_CPM_cutoffs']), :]
-                print(f"[INFO]   after MALAT1_CPM min ({cutoff['MALAT1_CPM_cutoffs']}): -> {len(adata_process)} cells")
+                logging.info(f"  after MALAT1_CPM min ({cutoff['MALAT1_CPM_cutoffs']}): -> {len(adata_process)} cells")
             else:
-                print(f"[WARNING] Skipping MALAT1_CPM min filter for {ID}: all values are NaN (gene may not exist in reference)")
+                logging.warning(f"Skipping MALAT1_CPM min filter for {ID}: all values are NaN (gene may not exist in reference)")
         if cutoff['MALAT1_CPM_max_cutoffs'] != '---':
             if adata_process.obs['MALAT1_CPM'].notna().any():
                 adata_process = adata_process[adata_process.obs['MALAT1_CPM'] < int(cutoff['MALAT1_CPM_max_cutoffs']), :]
-                print(f"[INFO]   after MALAT1_CPM max ({cutoff['MALAT1_CPM_max_cutoffs']}): -> {len(adata_process)} cells")
+                logging.info(f"  after MALAT1_CPM max ({cutoff['MALAT1_CPM_max_cutoffs']}): -> {len(adata_process)} cells")
             else:
-                print(f"[WARNING] Skipping MALAT1_CPM max filter for {ID}: all values are NaN")
+                logging.warning(f"Skipping MALAT1_CPM max filter for {ID}: all values are NaN")
         # Doublet filter: keep cells with NaN values (doublet detection may have failed)
         doublet_mask = adata_process.obs[doublet_col] < float(cutoff['doublet_cutoffs'])
         doublet_mask = doublet_mask | adata_process.obs[doublet_col].isna()
         adata_process = adata_process[doublet_mask, :]
-        print(f"[INFO]   after doublet ({cutoff['doublet_cutoffs']}): -> {len(adata_process)} cells")
+        logging.info(f"  after doublet ({cutoff['doublet_cutoffs']}): -> {len(adata_process)} cells")
         log_lines.append(f'num of cellbarcodes after QC filtering in {ID}: {len(adata_process.obs_names)}\n\n')
         adata_filter = ad.concat([adata_process, adata_remain])
     log_lines.append(f'\nnum of cellbarcodes after QC filtering: {len(adata_filter.obs_names)}')
@@ -418,7 +419,7 @@ def compress_and_save_postqc_h5ad(adata, output_h5ad_dir, tissue_std, runtag):
     if 'rawcounts' in adata.layers and not scipy.sparse.issparse(adata.layers['rawcounts']):
         adata.layers['rawcounts'] = scipy.sparse.csr_matrix(adata.layers['rawcounts'])
 
-    print("[INFO] Saving h5ad...")
+    logging.info("Saving h5ad...")
     adata.write(os.path.join(output_h5ad_dir, f'{tissue_std}_GEX.filtered.{runtag}.h5ad'))
 
 def run_per_tissue(working_df, output_h5ad_dir, workdir, QC_cutoff, tissue, my_color_palette, default_cutoffs, runtag,
@@ -427,10 +428,10 @@ def run_per_tissue(working_df, output_h5ad_dir, workdir, QC_cutoff, tissue, my_c
 
     adata_path = os.path.join(output_h5ad_dir, f"{tissue_std}_GEX.withQC.h5ad")
     if not os.path.exists(adata_path):
-        print(f"[ERROR] No h5ad for tissue {tissue} at {adata_path}.")
+        logging.error(f"No h5ad for tissue {tissue} at {adata_path}.")
         return
 
-    print("[INFO] Loading anndata object...")
+    logging.info("Loading anndata object...")
     adata = sc.read_h5ad(adata_path)
 
     figdir = os.path.join(workdir, 'figures')
@@ -440,19 +441,19 @@ def run_per_tissue(working_df, output_h5ad_dir, workdir, QC_cutoff, tissue, my_c
         QC_cutoff = compute_mad_thresholds(adata, QC_cutoff, nmads, key=key, scope=mad_scope)
         mad_tsv = os.path.join(figdir, f"{tissue_std}_MAD_QC_cutoffs.nmads{nmads}.tsv")
         QC_cutoff.to_csv(mad_tsv, sep='\t', index=False)
-        print(f"[INFO] MAD QC cutoffs written to {mad_tsv}")
+        logging.info(f"MAD QC cutoffs written to {mad_tsv}")
 
     sc.settings.figdir = figdir
 
-    print(f'[INFO] all figure plots by {key}')
+    logging.info(f'all figure plots by {key}')
     if key == 'donorID':
         all_colors = assign_donor_colors(working_df, donor_colors or {}, key=key, fallback_palette=my_color_palette)
-        print(f"use colors: {all_colors}")
+        logging.info(f"use colors: {all_colors}")
     elif key == 'sampleID':
         all_colors = assign_donor_colors(working_df, sample_colors or {}, key='rnaID', fallback_palette=my_color_palette)
-        print(f"use colors: {all_colors}")
+        logging.info(f"use colors: {all_colors}")
     else:
-        print("[WARNING] need to edit for colors")
+        logging.warning("need to edit for colors")
 
     QC_cutoff_dict = QC_cutoff.set_index('rnaID').T.to_dict()
 
@@ -464,7 +465,7 @@ def run_per_tissue(working_df, output_h5ad_dir, workdir, QC_cutoff, tissue, my_c
         if sample_id not in QC_cutoff_dict:
             continue
         doublet_col = resolve_doublet_column(QC_cutoff_dict[sample_id])
-        print(f"[INFO]   {sample_id}: doublet filtering metric = {doublet_col}")
+        logging.info(f"  {sample_id}: doublet filtering metric = {doublet_col}")
         sample_mask = adata.obs["sampleID"] == sample_id
         doublet_metric.loc[sample_mask] = adata.obs.loc[sample_mask, doublet_col].values
 
@@ -490,23 +491,23 @@ def run_per_tissue(working_df, output_h5ad_dir, workdir, QC_cutoff, tissue, my_c
     )
 
     # 1. Plot upset (all metrics and filtered only)
-    print("[INFO] Generating upset plot...")
+    logging.info("Generating upset plot...")
     for ID in filter_df[key].unique():
         sample_df = filter_df[filter_df[key]==ID]
-        print(f"{ID}")
+        logging.info(f"{ID}")
         up1 = prepare_upset_summary_allQC(sample_df, QC_cutoff_dict, adata.obs, default_cutoffs)
-        plot_upset(up1, tissue, key, ID, tissue_std, adata, 
+        plot_upset(up1, tissue, key, ID, tissue_std, adata,
                    os.path.join(figdir,f"QC_filtering_upset.all.filterqc.{tissue_std}.{ID}.png"))
         up2 = prepare_upset_summary_filteredQC(sample_df, QC_cutoff_dict)
-        plot_upset(up2, tissue, key, ID, tissue_std, adata, 
+        plot_upset(up2, tissue, key, ID, tissue_std, adata,
                    os.path.join(figdir, f"QC_filtering_upset.filteringOnly.filterqc.{tissue_std}.{ID}.png"))
 
     # 2. save doublet results
-    print("[INFO] Export doublet information...")
+    logging.info("Export doublet information...")
     export_doublet_calls_by_sample(adata, QC_cutoff_dict, tissue, tissue_std, figdir)
 
     # 3. Filtering + logging
-    print("[INFO] Filtering...")
+    logging.info("Filtering...")
     adata_filt = filter_and_process_adata(adata, working_df, QC_cutoff_dict, tissue, tissue_std, figdir, key)
     adata_filt.var = adata.var.copy()
     adata_filt.uns = adata.uns.copy()
@@ -518,7 +519,7 @@ def run_per_tissue(working_df, output_h5ad_dir, workdir, QC_cutoff, tissue, my_c
     sc.pp.filter_genes(adata, min_cells=int(QC_cutoff_dict[adata_filt.obs[key].unique()[0]]['Min_cells_for_genes']))
 
     # 5. normalization, feature selection, linear dimensional reduction
-    print("[INFO] Post-filter processing...")
+    logging.info("Post-filter processing...")
     downstream_process(adata, tissue_std, figdir, all_colors, include_malat1=not all_malat1_skipped)
     run_umap_clustering(adata, tissue, tissue_std, figdir)
 
@@ -528,11 +529,16 @@ def run_per_tissue(working_df, output_h5ad_dir, workdir, QC_cutoff, tissue, my_c
     # Move figures to new directory
     move_figures_to_newdir(workdir, old="figures", new=f"filter_qc.{runtag}")
 
-    print(f"[INFO] Finished QC filtering and post-processing for {tissue}.")
+    logging.info(f"Finished QC filtering and post-processing for {tissue}.")
 
 
 def main(config_path, runtag, use_mad=False, nmads=5.0, mad_scope='per-sample'):
+    setup_logging()
     config = load_config(config_path)
+    require_keys(config, [
+        "paths.workdir", "paths.output_h5ad_dir", "paths.sample_metadata",
+        "params.tissue", "color", "my_color_palette", "qc.rna_qc_cutoff_table",
+    ], context=config_path)
 
     workdir = config['paths']['workdir']
     output_h5ad_dir = config['paths']['output_h5ad_dir']
@@ -555,13 +561,13 @@ def main(config_path, runtag, use_mad=False, nmads=5.0, mad_scope='per-sample'):
 
     # Load master sample metadata across tissues/donors
     sample_metadata = config['paths']['sample_metadata']
-    print(f"[INFO] Loading sample metadata {sample_metadata}")
+    logging.info(f"Loading sample metadata {sample_metadata}")
     df = pd.read_csv(sample_metadata, sep='\t', header=None, index_col=False,
                      names=["rnaID", "atacID", "species", "donorID", "ageGroup", "gender", "tissue"])
-   
+
     # Load qc cutoff table
     qc_cutoff_table = config['qc']['rna_qc_cutoff_table']
-    print(f"[INFO] Loading QC cutoff table {qc_cutoff_table}")
+    logging.info(f"Loading QC cutoff table {qc_cutoff_table}")
     if qc_cutoff_table.endswith('.xlsx') or qc_cutoff_table.endswith('.xls'):
         df_cutoff_all = pd.read_excel(qc_cutoff_table,
                                       sheet_name=config['qc']['sheet_name'], engine='openpyxl')
@@ -571,29 +577,29 @@ def main(config_path, runtag, use_mad=False, nmads=5.0, mad_scope='per-sample'):
     failed_tissues = []
     if tissue == "---":
         tissues = sorted(df["tissue"].unique())
-        print(f"[INFO] Running QC filtering for MULTIPLE tissues: {tissues}")
+        logging.info(f"Running QC filtering for MULTIPLE tissues: {tissues}")
 
         for idx, tissue_name in enumerate(tissues, 1):
-            print(f"\n============== Processing tissue: {tissue_name} ({idx}/{len(tissues)}) ==============")
+            logging.info(f"============== Processing tissue: {tissue_name} ({idx}/{len(tissues)}) ==============")
             try:
                 working_df = df[df["tissue"] == tissue_name]
                 QC_cutoff = df_cutoff_all[df_cutoff_all['Tissue'] == tissue_name]
                 run_per_tissue(working_df, output_h5ad_dir, workdir, QC_cutoff, tissue_name, my_color_palette, default_cutoffs, runtag, "sampleID", use_mad=use_mad, nmads=nmads, mad_scope=mad_scope, sample_colors=sample_colors, donor_colors=donor_colors)
             except Exception as e:
-                print(f"[ERROR] QC filtering failed for {tissue_name}: {e}")
+                logging.error(f"QC filtering failed for {tissue_name}: {e}")
                 failed_tissues.append(tissue_name)
     else:
-        print(f"\n============== Processing tissue: {tissue} ==============")
+        logging.info(f"============== Processing tissue: {tissue} ==============")
         try:
             working_df = df[df["tissue"] == tissue]
             QC_cutoff = df_cutoff_all[df_cutoff_all['Tissue'] == tissue]
             run_per_tissue(working_df, output_h5ad_dir, workdir, QC_cutoff, tissue, my_color_palette, default_cutoffs, runtag, "sampleID", use_mad=use_mad, nmads=nmads, mad_scope=mad_scope, sample_colors=sample_colors, donor_colors=donor_colors)
         except Exception as e:
-            print(f"[ERROR] QC filtering failed for {tissue}: {e}")
+            logging.error(f"QC filtering failed for {tissue}: {e}")
             failed_tissues.append(tissue)
 
     if failed_tissues:
-        print(f"[ERROR] filter_qc failed for {len(failed_tissues)} tissue(s): {failed_tissues}")
+        logging.error(f"filter_qc failed for {len(failed_tissues)} tissue(s): {failed_tissues}")
         sys.exit(1)
 
 if __name__ == "__main__":
@@ -607,4 +613,8 @@ if __name__ == "__main__":
     parser.add_argument("--mad-scope", choices=["per-sample", "per-tissue"], default="per-sample",
                         help="Compute MAD per sample or across all cells in the tissue (default: per-sample)")
     args = parser.parse_args()
-    main(args.config, args.runtag, use_mad=args.use_mad, nmads=args.nmads, mad_scope=args.mad_scope)
+    try:
+        main(args.config, args.runtag, use_mad=args.use_mad, nmads=args.nmads, mad_scope=args.mad_scope)
+    except (FileNotFoundError, KeyError, ValueError) as e:
+        logging.error(f"{type(e).__name__}: {e}")
+        sys.exit(1)

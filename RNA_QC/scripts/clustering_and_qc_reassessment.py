@@ -11,13 +11,14 @@ warnings.filterwarnings("ignore", category=FutureWarning)
 import os
 import sys
 import argparse
+import logging
 import numpy as np
 import pandas as pd
 import scanpy as sc
 import anndata as ad
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
-from rna_qc.utils import load_config, standardize_tissue_name
+from rna_qc.utils import load_config, standardize_tissue_name, setup_logging, require_keys
 from rna_qc.rna_plots import assign_donor_colors, move_figures_to_newdir, plot_umap_by_ID, plot_cellcount_per_cluster_barplot, plot_umap_highlight_by_qc_metrics, plot_qc_metrics_violin_by_cluster
 
 def get_h5ad_path(output_h5ad_dir, tissue_std, batch_corrected, runtag):
@@ -74,10 +75,10 @@ def save_stats(adata, out_dir, tissue_std, runtag):
         f.write("Median of total_counts per donorID:\n")
         f.write(median_total_counts.to_string())
         f.write("\n")
-    print(f"[INFO] Summary stats saved to {stat_fp}")
+    logging.info(f"Summary stats saved to {stat_fp}")
 
 def save_processed_adata(adata, output_h5ad_dir, tissue_std, runtag):
-    print("[INFO] Saving h5ad...")
+    logging.info("Saving h5ad...")
     out_h5ad = os.path.join(output_h5ad_dir,  f"{tissue_std}_GEX.filtered.processed.{runtag}.h5ad")
     adata.write(out_h5ad)
 
@@ -90,33 +91,33 @@ def run_per_tissue(workdir, output_h5ad_dir, qc_cutoff_tissue, tissue, my_color_
     batch_corrected = qc_cutoff_dict[next(iter(qc_cutoff_dict))]['Whether_batch_correction'] == "Yes"
     adata_path = get_h5ad_path(output_h5ad_dir, tissue_std, batch_corrected, runtag)
     if not os.path.exists(adata_path):
-        print(f"[ERROR] No h5ad for tissue {tissue} at {adata_path}.")
+        logging.error(f"No h5ad for tissue {tissue} at {adata_path}.")
         return
 
-    print("[INFO] Loading anndata object...")
+    logging.info("Loading anndata object...")
     adata = sc.read_h5ad(adata_path)
 
-    print("[INFO] adding aliquot ID...")
-    aliquotID = [f"{parts[0]}_{parts[3]}-{parts[4]}" 
+    logging.info("adding aliquot ID...")
+    aliquotID = [f"{parts[0]}_{parts[3]}-{parts[4]}"
                  for parts in (id.split('-') for id in adata.obs['sampleID'])]
     adata.obs['aliquotID'] = aliquotID
-    
+
     figdir = os.path.join(workdir, 'figures')
     os.makedirs(figdir, exist_ok=True)
     sc.settings.figdir = figdir
 
-    print(f'[INFO] all figure plots by {key}')
+    logging.info(f'all figure plots by {key}')
     if key == 'donorID':
         all_colors = assign_donor_colors(adata.obs, donor_colors or {}, key=key, fallback_palette=my_color_palette)
-        print(f"use colors: {all_colors}")
+        logging.info(f"use colors: {all_colors}")
     elif key == 'sampleID':
         all_colors = assign_donor_colors(adata.obs, sample_colors or {}, key='sampleID', fallback_palette=my_color_palette)
-        print(f"use colors: {all_colors}")
+        logging.info(f"use colors: {all_colors}")
     elif key == 'aliquotID':
         all_colors = assign_donor_colors(adata.obs, donor_colors or {}, key='aliquotID', fallback_palette=my_color_palette)
-        print(f"use colors: {all_colors}")
+        logging.info(f"use colors: {all_colors}")
     else:
-        print("[WARNING] need to edit for colors")
+        logging.warning("need to edit for colors")
     
     # check and decide Leiden resolution
     run_leiden_multi_res(adata, tissue_std, resolutions)
@@ -147,11 +148,16 @@ def run_per_tissue(workdir, output_h5ad_dir, qc_cutoff_tissue, tissue, my_color_
     save_processed_adata(adata, output_h5ad_dir, tissue_std, runtag)
     
     move_figures_to_newdir(workdir, old="figures", new=f"clustering_and_qc_reassessment.{runtag}")
-    
-    print(f"[INFO] Finished clustering and QC re-assessment for {tissue}.")
+
+    logging.info(f"Finished clustering and QC re-assessment for {tissue}.")
 
 def main(config_path, runtag, key, nmads=5.0):
+    setup_logging()
     config = load_config(config_path)
+    require_keys(config, [
+        "paths.workdir", "paths.output_h5ad_dir", "params.tissue",
+        "color", "my_color_palette", "qc.rna_qc_cutoff_table",
+    ], context=config_path)
 
     workdir = config['paths']['workdir']
     output_h5ad_dir = config['paths']['output_h5ad_dir']
@@ -176,32 +182,32 @@ def main(config_path, runtag, key, nmads=5.0):
                          names=["rnaID", "atacID", "species", "donorID", "ageGroup", "gender", "tissue"])
         
         tissues = sorted(df["tissue"].unique())
-        print(f"[INFO] QC reassessment for MULTIPLE tissues: {tissues}")
+        logging.info(f"QC reassessment for MULTIPLE tissues: {tissues}")
 
         failed_tissues = []
         for idx, tissue_name in enumerate(tissues, 1):
-            print(f"\n========== Processing tissue: {tissue_name} ({idx}/{len(tissues)}) ==========")
+            logging.info(f"========== Processing tissue: {tissue_name} ({idx}/{len(tissues)}) ==========")
 
             try:
                 QC_cutoff = df_cutoff_all[df_cutoff_all['Tissue'] == tissue_name]
                 run_per_tissue(workdir, output_h5ad_dir, QC_cutoff, tissue_name, my_color_palette,
                                runtag, nmads, key, sample_colors=sample_colors, donor_colors=donor_colors)
             except Exception as e:
-                print(f"[ERROR] QC re-assessment failed for {tissue_name}: {e}")
+                logging.error(f"QC re-assessment failed for {tissue_name}: {e}")
                 failed_tissues.append(tissue_name)
 
         if failed_tissues:
-            print(f"[ERROR] clustering_and_qc_reassessment failed for {len(failed_tissues)} tissue(s): {failed_tissues}")
+            logging.error(f"clustering_and_qc_reassessment failed for {len(failed_tissues)} tissue(s): {failed_tissues}")
             sys.exit(1)
     else:
-        print(f"\n========== Processing tissue: {tissue} ==========")
+        logging.info(f"========== Processing tissue: {tissue} ==========")
 
         try:
             QC_cutoff = df_cutoff_all[df_cutoff_all['Tissue'] == tissue]
             run_per_tissue(workdir, output_h5ad_dir, QC_cutoff, tissue, my_color_palette,
                            runtag, nmads, key, sample_colors=sample_colors, donor_colors=donor_colors)
         except Exception as e:
-            print(f"[ERROR] QC re-assessment failed for {tissue}: {e}")
+            logging.error(f"QC re-assessment failed for {tissue}: {e}")
             sys.exit(1)
 
 if __name__ == "__main__":
@@ -213,4 +219,8 @@ if __name__ == "__main__":
                         help="number of MADs from the median used to define cutoffs (default: 5).")
 
     args = parser.parse_args()
-    main(args.config, args.runtag, args.key, args.nmads)
+    try:
+        main(args.config, args.runtag, args.key, args.nmads)
+    except (FileNotFoundError, KeyError, ValueError) as e:
+        logging.error(f"{type(e).__name__}: {e}")
+        sys.exit(1)
