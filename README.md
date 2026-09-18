@@ -1,4 +1,4 @@
-# Pan-tissue scMultiome pipelien
+# Pan-tissue scMultiome pipeline
 
 A pipeline for processing single-cell multiome data (paired snRNA-seq +
 snATAC-seq, e.g. 10x Multiome) from CellRanger/fragment-file output through
