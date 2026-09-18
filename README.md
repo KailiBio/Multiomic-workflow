@@ -7,6 +7,11 @@ per-modality QC, cell annotation, and joint RNA+ATAC integration.
 Developed alongside the manuscript: *[citation placeholder — add title,
 authors, and DOI/journal link once available]*.
 
+This repo covers data preprocessing only. Downstream analysis for the
+manuscript (cCRE calling, chromatin domain mapping, cancer remodelling,
+variant-effect models) lives in the companion repo:
+[human-adult-cross-tissue-scmultiome-analysis](https://github.com/KailiBio/human-adult-cross-tissue-scmultiome-analysis).
+
 ## Table of Contents
 - [Overview](#overview)
 - [Installation](#installation)
