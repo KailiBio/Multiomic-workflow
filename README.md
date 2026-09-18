@@ -1,11 +1,10 @@
-# Multiomic Workflow
+# Pan-tissue scMultiome pipeline
 
 A pipeline for processing single-cell multiome data (paired snRNA-seq +
 snATAC-seq, e.g. 10x Multiome) from CellRanger/fragment-file output through
 per-modality QC, cell annotation, and joint RNA+ATAC integration.
 
-Developed alongside the manuscript: *[citation placeholder — add title,
-authors, and DOI/journal link once available]*.
+Developed alongside the manuscript: *[Fan et al., An atlas-scale mapping of gene regulatory activity across 21 human tissues.]*.
 
 This repo covers data preprocessing only. Downstream analysis for the
 manuscript (cCRE calling, chromatin domain mapping, cancer remodelling,
@@ -165,8 +164,7 @@ Each module follows the same layout:
 
 ## Citation
 
-If you use this pipeline, please cite: *[citation placeholder — update once
-the manuscript is published]*.
+If you use this pipeline, please cite: *[Fan et al., An atlas-scale mapping of gene regulatory activity across 21 human tissues.]*.
 
 ## Contact
 
