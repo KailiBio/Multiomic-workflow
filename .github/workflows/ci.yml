@@ -1,0 +1,38 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  lint-and-syntax:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Byte-compile all Python scripts
+        run: python -m py_compile $(find . -name "*.py" -not -path "./.git/*")
+
+      - name: Validate module config YAML files
+        run: |
+          python -c "
+          import glob, sys, yaml
+          files = glob.glob('*/config/*.yaml')
+          assert files, 'no config yaml files found'
+          for f in files:
+              with open(f) as fh:
+                  yaml.safe_load(fh)
+              print(f'OK: {f}')
+          "

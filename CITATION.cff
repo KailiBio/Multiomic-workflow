@@ -1,0 +1,18 @@
+cff-version: 1.2.0
+message: "If you use this software, please cite it as below."
+title: "Multiomic-workflow: Pan-tissue scMultiome pipeline"
+type: software
+version: 1.0.0
+date-released: 2026-10-02
+license: MIT
+repository-code: "https://github.com/KailiBio/Multiomic-workflow"
+authors:
+  - family-names: Fan
+    given-names: Kaili
+preferred-citation:
+  type: article
+  title: "Single-Nucleus Multi-Omic Atlas Maps Regulatory Architecture and Non-Coding Variant Effects across Adult Human Tissues"
+  authors:
+    - family-names: Fan
+      given-names: Kaili
+  doi: "10.64898/2026.09.25.754561"
