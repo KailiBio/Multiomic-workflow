@@ -22,6 +22,8 @@ variant-effect models) lives in the companion repo:
 
 ---
 
+![Multi-omic workflow overview](multi-omic%20workflow.png)
+
 ## Overview
 
 The workflow is organized into four self-contained modules, meant to be run
