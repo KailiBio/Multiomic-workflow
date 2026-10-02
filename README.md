@@ -1,5 +1,7 @@
 # Pan-tissue scMultiome pipeline
 
+## What This Repository Does
+
 A pipeline for processing single-cell multiome data (paired snRNA-seq +
 snATAC-seq, e.g. 10x Multiome) from CellRanger/fragment-file output through
 per-modality QC, cell annotation, and joint RNA+ATAC integration.
@@ -10,6 +12,7 @@ variant-effect models) lives in the companion repo:
 [human-adult-cross-tissue-scmultiome-analysis](https://github.com/KailiBio/human-adult-cross-tissue-scmultiome-analysis).
 
 ## Table of Contents
+- [What This Repository Does](#what-this-repository-does)
 - [Overview](#overview)
 - [Installation](#installation)
 - [The Four Modules](#the-four-modules)
