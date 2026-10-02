@@ -6,6 +6,7 @@ ATAC_QC plotting functions.
 """
 
 import os
+import logging
 import numpy as np
 import pandas as pd
 import matplotlib as mpl
@@ -71,7 +72,7 @@ def move_figures_to_newdir(output_figures_dir, old, new):
 
 def plot_qc_violin(adata, metric, tissue, tissue_std, all_colors, metrics_with_cutoffs, figdir, key, nmads, add_mad_lines=True):
     if metric in adata.obs:
-        print(f"[INFO] Plotting violin for: {metric}...")
+        logging.info(f"Plotting violin for: {metric}...")
         all_data = pd.to_numeric(adata.obs[metric], errors='coerce').copy()
         df = adata.obs[[metric, key]].copy()
         df[metric] = pd.to_numeric(df[metric], errors='coerce')
@@ -143,7 +144,7 @@ def plot_qc_violin(adata, metric, tissue, tissue_std, all_colors, metrics_with_c
 
 def plot_qc_jointplot(adata, x_metric, y_metric, title, save_path):
     if (x_metric in adata.obs) and (y_metric in adata.obs):
-        print(f"[INFO] Plotting jointplot for: {x_metric} - {y_metric}...")
+        logging.info(f"Plotting jointplot for: {x_metric} - {y_metric}...")
         g = sns.jointplot(x=adata.obs[x_metric], y=adata.obs[y_metric], kind="hex", data=adata.obs)
         g.fig.set_size_inches(6, 5)
         g.ax_joint.set_title(title)
@@ -157,7 +158,7 @@ def plot_qc_jointplot(adata, x_metric, y_metric, title, save_path):
 def plot_qc_cumulative_distribution(adata, metrics, tissue, tissue_std, all_colors, figdir, key):
     for metric in metrics:
         if metric in adata.obs:
-            print(f"[INFO] Plotting cumulative distribution for: {metric}...")
+            logging.info(f"Plotting cumulative distribution for: {metric}...")
             plt.figure(figsize=(5, 4))
             sns.ecdfplot(data=adata.obs, x=metric, hue=key, palette=all_colors)
             ax = plt.gca()
@@ -169,25 +170,26 @@ def plot_qc_cumulative_distribution(adata, metrics, tissue, tissue_std, all_colo
             plt.savefig(os.path.join(figdir, f"RNA_QC_cumulative.by{key}.{tissue_std}.{metric}.png"), dpi=300, bbox_inches='tight')
             plt.close()
 
-def plot_doublet_hist(adata, donor_col, tissue, tissue_std, figdir, key, probability_cutoff=None):
+def plot_doublet_hist(adata, donor_col, tissue, tissue_std, figdir, key, probability_cutoff=None, metric_col='doublet_probabilities'):
+    metric_label = 'Doublet Probability' if metric_col == 'doublet_probabilities' else 'Doublet Score'
     for ID in adata.obs[key].unique():
-        print(f"[INFO] Plotting doublet score & probability distribution for: {ID}...")
+        logging.info(f"Plotting doublet score & probability distribution for: {ID}...")
         doublet_scores = adata[adata.obs[key] == ID].obs['doublet_score']
-        doublet_probabilities = adata[adata.obs[key] == ID].obs['doublet_probabilities']
-        
-        if doublet_probabilities.isnull().all():
-            print(f"[WARNING] No doublet probabilities for {ID}")
+        doublet_metric = adata[adata.obs[key] == ID].obs[metric_col]
+
+        if doublet_metric.isnull().all():
+            logging.warning(f"No {metric_col} for {ID}")
             continue
         # check whether have given doublet cutoffs. if no, use midpoint
         if probability_cutoff is None:
-            print(f"[INFO] using midpoint as doublet cutoff...")
-            cutoff = np.round((doublet_probabilities.max()+doublet_probabilities.min())/2,1)
+            logging.info("using midpoint as doublet cutoff...")
+            cutoff = np.round((doublet_metric.max()+doublet_metric.min())/2,1)
         else:
-            print(f"[INFO] using given doublet cutoff...")
+            logging.info("using given doublet cutoff...")
             cutoff = float(probability_cutoff)
-        print(f"[INFO] current doublet cutoff is {cutoff}.")
-        doublet_mask = doublet_probabilities > cutoff
-        
+        logging.info(f"current doublet cutoff is {cutoff}.")
+        doublet_mask = doublet_metric > cutoff
+
         bins = np.histogram_bin_edges(doublet_scores, bins=50)
         hist_non_doublets, _ = np.histogram(doublet_scores[~doublet_mask], bins=bins)
         hist_doublets, _ = np.histogram(doublet_scores[doublet_mask], bins=bins)
@@ -199,12 +201,12 @@ def plot_doublet_hist(adata, donor_col, tissue, tissue_std, figdir, key, probabi
         axes[0].set_ylabel('Frequency')
         axes[0].legend()
         axes[0].grid(False)
-        prob_bins = np.histogram_bin_edges(doublet_probabilities, bins=30)
-        prob_hist, _ = np.histogram(doublet_probabilities, bins=prob_bins)
+        prob_bins = np.histogram_bin_edges(doublet_metric, bins=30)
+        prob_hist, _ = np.histogram(doublet_metric, bins=prob_bins)
         axes[1].bar(prob_bins[:-1], prob_hist, width=np.diff(prob_bins), edgecolor='black', color='grey', alpha=0.7)
         axes[1].axvline(cutoff, color='red', linestyle='--', label='Doublet Threshold')
         axes[1].set_title(f'cutoff = {str(cutoff)}')
-        axes[1].set_xlabel('Doublet Probability')
+        axes[1].set_xlabel(metric_label)
         axes[1].set_ylabel('Frequency')
         axes[1].set_xlim(0, 1)
         axes[1].grid(False)
@@ -214,7 +216,7 @@ def plot_doublet_hist(adata, donor_col, tissue, tissue_std, figdir, key, probabi
         plt.close(fig)
 
 def clustering_umap(adata, tissue, tissue_std, figdir, key):
-    print("[INFO] Clustering and UMAP...")
+    logging.info("Clustering and UMAP...")
 
     with warnings.catch_warnings():
         warnings.filterwarnings("ignore", category=RuntimeWarning)

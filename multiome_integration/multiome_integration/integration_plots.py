@@ -6,6 +6,7 @@ Multiome integration plotting functions.
 """
 
 import os
+import logging
 import numpy as np
 import matplotlib as mpl
 mpl.rcParams['pdf.fonttype'] = 42
@@ -30,7 +31,7 @@ def plot_venn_and_save(rna_cells, atac_cells, rna_sample, atac_sample, outdir, t
     outfile = os.path.join(outdir, f"shared_cells_venn.{sample_new}.png")
     plt.savefig(outfile, dpi=800, bbox_inches='tight')
     plt.close()
-    print(f"[plotting] Venn diagram saved: {outfile}")
+    logging.info(f"Venn diagram saved: {outfile}")
 
 
 def plot_overlap_bar(cell_counts, outdir, suffix):
@@ -76,7 +77,7 @@ def plot_overlap_bar(cell_counts, outdir, suffix):
     # Only use the actual number of successfully processed bars!
     N = len(labels)
     if N == 0:
-        print("[plotting] No samples to plot after filtering.")
+        logging.warning("No samples to plot after filtering.")
         return
 
     fig_height = max(0.5 * N, 3)
@@ -106,7 +107,7 @@ def plot_overlap_bar(cell_counts, outdir, suffix):
     outpath = os.path.join(outdir, f"multiome_overlapPercent_vennBar.{suffix}.png")
     plt.savefig(outpath, dpi=800, bbox_inches='tight')
     plt.close()
-    print(f"[plotting] Overlap bar plot saved: {outpath}")
+    logging.info(f"Overlap bar plot saved: {outpath}")
 
 def plot_multiome_celltype_count_bar(
     rna,

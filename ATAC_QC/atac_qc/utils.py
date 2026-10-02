@@ -41,7 +41,7 @@ def print_elapsed_time(start_time, end_time):
     elapsed_time = end_time - start_time
     hours, rem = divmod(int(elapsed_time), 3600)
     minutes, seconds = divmod(rem, 60)
-    print(f"Elapsed time: {hours}h {minutes}m {seconds}s")
+    logging.info(f"Elapsed time: {hours}h {minutes}m {seconds}s")
 
 def load_config(config_path):
     """Load YAML config file to Python dict."""

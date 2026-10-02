@@ -22,6 +22,25 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')
 from rna_qc.utils import load_config, standardize_tissue_name, setup_logging, require_keys
 from rna_qc.rna_plots import assign_colors, assign_donor_colors, move_figures_to_newdir, plot_upset, run_umap_clustering, plot_doublet_hist
 
+def resolve_doublet_column(cutoff, default="Yes"):
+    """Pick which column to filter doublets on for one sample.
+
+    Reads that sample's own 'Whether_use_double_GMM_method' QC cutoff value:
+    'Yes' -> GMM-derived doublet_probabilities, 'No' -> raw doublet_score.
+    Doublet detection/GMM conversion is computed per sample, so this is
+    resolved per sample rather than once for the whole tissue.
+    Case-insensitive; missing/blank/'---' values fall back to `default`.
+    """
+    raw = str(cutoff.get('Whether_use_double_GMM_method', default)).strip()
+    value = raw.lower()
+    if value in ("", "nan", "none", "---"):
+        value = default.lower()
+    elif value not in ("yes", "no"):
+        logging.warning(f"Unrecognized Whether_use_double_GMM_method value '{raw}' "
+                         f"(expected 'Yes' or 'No'). Defaulting to '{default}'.")
+        value = default.lower()
+    return 'doublet_probabilities' if value == 'yes' else 'doublet_score'
+
 def prepare_upset_summary_allQC(sample_data, QC_cutoff_dict, global_obs, default_cutoffs):
     sampleID = sample_data['sampleID'].iloc[0].strip()
 
@@ -136,10 +155,11 @@ def export_doublet_calls_by_sample(adata, QC_cutoff_dict, tissue, tissue_std, fi
 
         cutoff = QC_cutoff_dict[sampleID]
         doublet_cutoff = float(cutoff['doublet_cutoffs'])
+        doublet_col = resolve_doublet_column(cutoff)
 
         adata_sel = adata[adata.obs['sampleID'] == sampleID, :].copy()
         df_doublet = adata_sel.obs[['doublet_score', 'doublet_probabilities']].copy()
-        df_doublet['doublet_call'] = df_doublet['doublet_probabilities'].apply(
+        df_doublet['doublet_call'] = df_doublet[doublet_col].apply(
             lambda x: 'yes' if x > doublet_cutoff else 'no'
         )
 
@@ -149,7 +169,7 @@ def export_doublet_calls_by_sample(adata, QC_cutoff_dict, tissue, tissue_std, fi
         # plot the doublet distribution with filter cutoff
         plot_doublet_hist(
             adata=adata_sel, donor_col='sampleID', tissue=tissue, tissue_std=tissue_std,
-            figdir=figdir, key='sampleID', probability_cutoff=doublet_cutoff)
+            figdir=figdir, key='sampleID', probability_cutoff=doublet_cutoff, metric_col=doublet_col)
 
 
 def filter_and_process_adata(adata, df, QC_cutoff_dict, tissue, tissue_std, log_file_dir, key):
@@ -168,6 +188,7 @@ def filter_and_process_adata(adata, df, QC_cutoff_dict, tissue, tissue_std, log_
         log_lines.append(f'total cellbarcodes in {ID}: {len(adata_process.obs_names)}\n')
 
         cutoff = QC_cutoff_dict[ID]
+        doublet_col = resolve_doublet_column(cutoff)
 
         adata_process = adata_process[adata_process.obs['n_genes_by_counts'] > int(cutoff['Min_genes_in_cells']), :]
         adata_process = adata_process[adata_process.obs['n_genes_by_counts'] < int(cutoff['Max_genes_in_cells']), :]
@@ -190,8 +211,8 @@ def filter_and_process_adata(adata, df, QC_cutoff_dict, tissue, tissue_std, log_
             else:
                 logging.warning(f"Skipping MALAT1_CPM max filter for {ID}: all values are NaN")
         # Doublet filter: keep cells with NaN values (doublet detection may have failed)
-        doublet_mask = adata_process.obs['doublet_probabilities'] < float(cutoff['doublet_cutoffs'])
-        doublet_mask = doublet_mask | adata_process.obs['doublet_probabilities'].isna()
+        doublet_mask = adata_process.obs[doublet_col] < float(cutoff['doublet_cutoffs'])
+        doublet_mask = doublet_mask | adata_process.obs[doublet_col].isna()
         adata_process = adata_process[doublet_mask, :]
         log_lines.append(f'num of cellbarcodes after QC filtering in {ID}: {len(adata_process.obs_names)}\n\n')
         adata_filter = ad.concat([adata_process, adata_remain])
@@ -270,6 +291,18 @@ def run_per_tissue(working_df, output_h5ad_dir, workdir, QC_cutoff, tissue, my_c
 
     QC_cutoff_dict = QC_cutoff.set_index('rnaID').T.to_dict()
 
+    # Whether_use_double_GMM_method (from QC cutoff table) is resolved per sample:
+    # "Yes" filters that sample's cells on the GMM-derived doublet_probabilities,
+    # "No" filters directly on the raw doublet_score.
+    doublet_metric = pd.Series(np.nan, index=adata.obs_names)
+    for sample_id in adata.obs["sampleID"].unique():
+        if sample_id not in QC_cutoff_dict:
+            continue
+        doublet_col = resolve_doublet_column(QC_cutoff_dict[sample_id])
+        logging.info(f"  {sample_id}: doublet filtering metric = {doublet_col}")
+        sample_mask = adata.obs["sampleID"] == sample_id
+        doublet_metric.loc[sample_mask] = adata.obs.loc[sample_mask, doublet_col].values
+
     # For upset plot input summary
     filter_df = pd.DataFrame({
         "sampleID": adata.obs["sampleID"],
@@ -277,7 +310,7 @@ def run_per_tissue(working_df, output_h5ad_dir, workdir, QC_cutoff, tissue, my_c
         "total_counts": adata.obs["total_counts"],
         "pct_counts_mt": adata.obs["pct_counts_mt"],
         "pct_counts_ribo": adata.obs["pct_counts_ribo"],
-        "doublet_probabilities": adata.obs["doublet_probabilities"]
+        "doublet_probabilities": doublet_metric
     })
     if 'pct_exon_reads' in adata.obs:
         filter_df["pct_exon_reads"] = adata.obs["pct_exon_reads"]

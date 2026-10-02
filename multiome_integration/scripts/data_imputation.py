@@ -18,7 +18,6 @@ import anndata as ad
 import scanpy as sc
 import snapatac2 as snap
 import scvi
-print("scvi-tools version:", scvi.__version__)
 import time
 scvi.settings.seed = 0
 import torch
@@ -231,6 +230,7 @@ def main(config_path):
 
 if __name__ == "__main__":
     setup_logging()
+    logging.info(f"scvi-tools version: {scvi.__version__}")
     logging.info(f"torch.cuda.is_available(): {torch.cuda.is_available()}")
     logging.info(f"torch.cuda.device_count(): {torch.cuda.device_count()}")
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')

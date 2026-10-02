@@ -6,6 +6,7 @@ ATAC_QC plotting functions.
 """
 
 import os
+import logging
 import numpy as np
 import matplotlib as mpl
 mpl.rcParams['pdf.fonttype'] = 42
@@ -236,7 +237,7 @@ def plot_per_sample_umap_clusters(sample_ids, h5ad_dir, run_tag, suffix,
         for sample_id in sample_ids:
             h5ad_path = os.path.join(h5ad_dir, f'{sample_id}.final.{run_tag}.h5ad')
             if not os.path.exists(h5ad_path):
-                print(f"  [SKIP] Missing {h5ad_path}")
+                logging.warning(f"Missing {h5ad_path}")
                 continue
             adata = ad.read_h5ad(h5ad_path)
 
@@ -390,7 +391,7 @@ def plot_umap_single_tissue_sample_by_side(adata, tissue, suffix, runtag, outdir
     if show:
         plt.show()
     plt.close(fig)
-    print(f"Wrote: {outpng}")
+    logging.info(f"Wrote: {outpng}")
 
         
 def plot_umap_per_tissue_by_sample_all(adata, suffix, runtag, outdir, sample_colors=None,
@@ -420,7 +421,7 @@ def plot_umap_with_QC(adata, suffix, runtag, outdir, sample_colors=None,
     samplelist = sorted(set(samples))
     
     for fileID in samplelist:
-        print(f"Plotting for sample: {fileID}")
+        logging.info(f"Plotting for sample: {fileID}")
         plt.style.use("ggplot")
         fig, (ax1, ax2, ax3) = plt.subplots(1, 3, figsize=(18, 5))
         
@@ -516,7 +517,7 @@ def plot_cells_per_tissue_by_donor(adata, suffix, runtag, outdir, tissue_key="ti
     #outpdf = os.path.join(outdir, f'ATAC_cellCount_perTissueByDonor.{suffix}.{runtag}.pdf')
     #plt.savefig(outpdf)
     plt.close()
-    print(f"Figure saved as:\n  {outpng}")
+    logging.info(f"Figure saved as: {outpng}")
 
 def plot_cells_per_donor_per_tissue(adata, suffix, runtag, outdir, tissue_key="tissue", donor_key="donorID"):
     df = adata.obs.groupby([tissue_key, donor_key], observed=True).size().reset_index(name='n_cells')
@@ -559,4 +560,4 @@ def plot_cells_per_donor_per_tissue(adata, suffix, runtag, outdir, tissue_key="t
     #outpdf = os.path.join(outdir, f'ATAC_cellCount_perDonorPerTissue.{suffix}.{runtag}.pdf')
     #plt.savefig(outpdf)
     plt.close()
-    print(f"Figure saved as:\n  {outpng}")
+    logging.info(f"Figure saved as: {outpng}")
