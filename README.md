@@ -22,7 +22,7 @@ variant-effect models) lives in the companion repo:
 
 ---
 
-![Multi-omic workflow overview](multi-omic%20workflow.png)
+![Multi-omic workflow overview](docs/figures/multiome_workflow.png)
 
 ## Overview
 
