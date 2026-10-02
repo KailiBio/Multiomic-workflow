@@ -8,7 +8,7 @@ paths:
   input_dir: test_data/cellranger/
   scrinvex_dir: test_data/scrinvex/
   output_h5ad_dir: test_output/rna_h5ad/
-  sample_metadata: test_data/test_metatable.txt
+  sample_metadata: ../ATAC_QC/test_data/test_metatable.txt
 
 params:
   tissue: Muscle - Quadriceps

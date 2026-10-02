@@ -44,11 +44,23 @@ def print_elapsed_time(start_time, end_time):
     logging.info(f"Elapsed time: {hours}h {minutes}m {seconds}s")
 
 def load_config(config_path):
-    """Load YAML config file to Python dict."""
+    """Load YAML config file to Python dict.
+
+    Resolves every path under 'paths'/'references' to an absolute path
+    (relative to the current working directory at load time). Scripts
+    commonly os.chdir() into workdir later on, and since config paths are
+    themselves relative to that same workdir, leaving them unresolved would
+    make them silently re-interpreted against the new cwd after the chdir.
+    """
     if not os.path.exists(config_path):
         raise FileNotFoundError(f"Config file not found: {config_path}")
     with open(config_path, "r") as f:
-        return yaml.safe_load(f)
+        config = yaml.safe_load(f)
+    for section in ("paths", "references"):
+        for key, value in (config.get(section) or {}).items():
+            if isinstance(value, str):
+                config[section][key] = os.path.abspath(value)
+    return config
 
 def standardize_tissue_name(tissue):
     """
