@@ -162,7 +162,7 @@ Each module follows the same layout:
 
 ## Citation
 
-If you use this pipeline, please cite: [Fan *et al.*, An atlas-scale mapping of gene regulatory activity across 21 human tissues.].
+If you use this pipeline, please cite: [Fan *et al.*, Single-Nucleus Multi-Omic Atlas Maps Regulatory Architecture and Non-Coding Variant Effects across Adult Human Tissues. https://doi.org/10.64898/2026.09.25.754561].
 
 ## Contact
 
