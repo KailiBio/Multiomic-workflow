@@ -15,10 +15,10 @@ import scanpy as sc
 import anndata as ad
 import matplotlib as mpl
 import matplotlib.pyplot as plt
-import urllib.request
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 from cell_annotation.utils import load_config, standardize_tissue_name, move_figures_to_newdir, setup_logging, require_keys
+from cell_annotation.sctype_py import sctype_score, process_cluster
 
 def load_marker_genes(config):
     marker_gene_table = config['annotation']['marker_gene_file']
@@ -74,12 +74,6 @@ def Process_DEG(adata, tissue, tissue_std, valid_marker_genes, outdir):
             show=False,
             save=f'.topDEG_leiden{cluster}.{tissue_std}.png'
         )
-
-def load_sctype():
-    url = "https://raw.githubusercontent.com/kris-nader/sc-type-py/main/sctype_py.py"
-    response = urllib.request.urlopen(url)
-    script = response.read().decode()
-    exec(script, globals())
 
 def run_sctype_annotation(adata, marker_gene_list):
     # Build gs2 (empty/non-immune as in ScType)
@@ -154,7 +148,6 @@ def run_per_tissue(workdir, input_h5ad_file, tissue, marker_gene_list, out_h5ad_
 
     # 3. ScType annotation
     logging.info("Running scType for automatic cell annotation...")
-    load_sctype()
     run_sctype_annotation(adata, marker_gene_list)
 
     sc.pl.umap(adata, color='sctype_annotation', frameon=False, show=False, save=f'.ScType_Annotation.{tissue_std}.png')

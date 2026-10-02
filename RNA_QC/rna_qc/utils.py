@@ -66,12 +66,12 @@ def standardize_tissue_name(tissue):
     """
     Standardize tissue names:
     - Remove parentheses (but keep words inside)
-    - Replace hyphens and whitespace with underscores
+    - Replace hyphens, slashes, and whitespace with underscores
     - Collapse multiple underscores into one
     - Strip leading/trailing underscores
     """
-    tissue = re.sub(r'[()]', '', tissue)                # Remove ( and )
-    tissue = tissue.replace('-', '_')                   # Hyphens to underscores
-    tissue = re.sub(r'\s+', '_', tissue)                # Spaces to underscores
-    tissue = re.sub(r'_+', '_', tissue)                 # Remove double/multi underscores
-    return tissue.strip('_')
+    tissue = re.sub(r'[()]', '', tissue)          # Remove ( and )
+    tissue = re.sub(r'[-/]', '_', tissue)         # Hyphens and slashes to underscores
+    tissue = re.sub(r'\s+', '_', tissue)          # Spaces to underscores
+    tissue = re.sub(r'_+', '_', tissue)           # Collapse multiple underscores
+    return tissue.strip('_')                      # Remove leading/trailing underscores
