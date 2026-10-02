@@ -180,10 +180,19 @@ def filter_and_process_adata(adata, df, QC_cutoff_dict, tissue, tissue_std, log_
             if cutoff['Exon_ratio_cutoffs'] != '---':
                 adata_process = adata_process[adata_process.obs['pct_exon_reads'] < float(cutoff['Exon_ratio_cutoffs']), :]
         if cutoff['MALAT1_CPM_cutoffs'] != '---':
-            adata_process = adata_process[adata_process.obs['MALAT1_CPM'] > int(cutoff['MALAT1_CPM_cutoffs']), :]
+            if adata_process.obs['MALAT1_CPM'].notna().any():
+                adata_process = adata_process[adata_process.obs['MALAT1_CPM'] > int(cutoff['MALAT1_CPM_cutoffs']), :]
+            else:
+                logging.warning(f"Skipping MALAT1_CPM min filter for {ID}: all values are NaN (gene may not exist in reference)")
         if cutoff['MALAT1_CPM_max_cutoffs'] != '---':
-            adata_process = adata_process[adata_process.obs['MALAT1_CPM'] < int(cutoff['MALAT1_CPM_max_cutoffs']), :]
-        adata_process = adata_process[adata_process.obs['doublet_probabilities'] < float(cutoff['doublet_cutoffs']), :]
+            if adata_process.obs['MALAT1_CPM'].notna().any():
+                adata_process = adata_process[adata_process.obs['MALAT1_CPM'] < int(cutoff['MALAT1_CPM_max_cutoffs']), :]
+            else:
+                logging.warning(f"Skipping MALAT1_CPM max filter for {ID}: all values are NaN")
+        # Doublet filter: keep cells with NaN values (doublet detection may have failed)
+        doublet_mask = adata_process.obs['doublet_probabilities'] < float(cutoff['doublet_cutoffs'])
+        doublet_mask = doublet_mask | adata_process.obs['doublet_probabilities'].isna()
+        adata_process = adata_process[doublet_mask, :]
         log_lines.append(f'num of cellbarcodes after QC filtering in {ID}: {len(adata_process.obs_names)}\n\n')
         adata_filter = ad.concat([adata_process, adata_remain])
     log_lines.append(f'\nnum of cellbarcodes after QC filtering: {len(adata_filter.obs_names)}')

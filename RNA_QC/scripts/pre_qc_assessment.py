@@ -23,19 +23,30 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')
 from rna_qc.utils import load_config, standardize_tissue_name, setup_logging, require_keys
 from rna_qc.rna_plots import assign_colors, assign_donor_colors, move_figures_to_newdir, plot_qc_violin, plot_qc_jointplot, plot_qc_cumulative_distribution, plot_doublet_hist, clustering_umap
 
-def calculate_qc_metrics(adata):
+# Non-"MT-" mitochondrial gene IDs for species whose reference annotation
+# doesn't follow the human "MT-" naming convention, keyed by species
+# (case-insensitive match against the sample metadata table's 'species'
+# column). Add an entry here for any other non-"MT-" reference you use.
+_SPECIES_MITO_GENES = {
+    "macaque": ['COX1', 'KEG06_p08', 'KEG06_p13',
+                'KEG06_p05', 'COX3', 'ND1', 'KEG06_p10',
+                'KEG06_p02', 'ND6', 'KEG06_p07', 'ND4L',
+                'ND3', 'KEG06_p12', 'KEG06_p04', 'COX2',
+                'KEG06_p09', 'KEG06_p01', 'ND5', 'KEG06_p06',
+                'ATP8', 'CYTB', 'ND2', 'KEG06_p11', 'KEG06_p03'],
+    # marmoset follows human "MT-" convention so needs no extra entries here:
+    # ['MT-NAD3', 'MT-COX1', 'MT-COX3', 'MT-COB', 'MT-NAD2', 'MT-COX2', 'MT-NAD1', 'MT-NAD4L', 'MT-NAD6', 'MT-ATP8']
+}
+
+def calculate_qc_metrics(adata, species=None):
     # calculate mt, ribo, hb
-    macaque_mito_gene_list = ['COX1', 'KEG06_p08', 'KEG06_p13',
-                              'KEG06_p05', 'COX3', 'ND1', 'KEG06_p10',
-                              'KEG06_p02', 'ND6', 'KEG06_p07', 'ND4L',
-                              'ND3', 'KEG06_p12', 'KEG06_p04', 'COX2',
-                              'KEG06_p09', 'KEG06_p01', 'ND5', 'KEG06_p06',
-                              'ATP8', 'CYTB', 'ND2', 'KEG06_p11', 'KEG06_p03']
-    # listing here for completeness but follows human convention
-    #marmoset_mito_gene_list = ['MT-NAD3', 'MT-COX1', 'MT-COX3', 'MT-COB', 'MT-NAD2', 'MT-COX2', 'MT-NAD1', 'MT-NAD4L', 'MT-NAD6', 'MT-ATP8']
+    extra_mito_genes = _SPECIES_MITO_GENES.get(str(species).strip().lower(), [])
+    if extra_mito_genes:
+        logging.info(f"Species '{species}' matched — including {len(extra_mito_genes)} extra "
+                      f"non-'MT-' mitochondrial gene IDs for pct_counts_mt.")
     adata.var["mt"] = (
         adata.var_names.str.startswith("MT-") |
-        adata.var_names.isin(macaque_mito_gene_list)
+        adata.var_names.isin(extra_mito_genes)
     )
     adata.var["ribo"] = adata.var_names.str.startswith(("RPS", "RPL"))
     adata.var["hb"] = adata.var_names.str.contains("^HB[^(P)]")
@@ -149,7 +160,15 @@ def run_per_tissue(working_df, tissue, output_h5ad_dir, outdir, my_color_palette
     else:
         logging.warning("need to edit for colors")
 
-    calculate_qc_metrics(adata)
+    species_values = working_df['species'].dropna().unique() if 'species' in working_df else []
+    if len(species_values) == 1:
+        species = species_values[0]
+    else:
+        if len(species_values) > 1:
+            logging.warning(f"Multiple species values found for tissue {tissue}: {list(species_values)}. "
+                             f"Skipping species-specific mitochondrial gene list.")
+        species = None
+    calculate_qc_metrics(adata, species=species)
 
     # Highest expressed genes
     sc.pl.highest_expr_genes(adata, n_top=20, save=f'.{tissue_std}.png', show=False)
