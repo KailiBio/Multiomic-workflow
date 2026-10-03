@@ -166,8 +166,11 @@ Each module follows the same layout:
   supply.
 
 ## Citation
+If you use this code, please cite:
 
-If you use this pipeline, please cite: [Fan *et al.*, Single-Nucleus Multi-Omic Atlas Maps Regulatory Architecture and Non-Coding Variant Effects across Adult Human Tissues. https://doi.org/10.64898/2026.09.25.754561].
+> Fan et al. *Single-Nucleus Multi-Omic Atlas Maps Regulatory Architecture and
+> Non-Coding Variant Effects across Adult Human Tissues*.
+> bioRxiv https://doi.org/10.64898/2026.09.25.754561
 
 ## Contact
 
