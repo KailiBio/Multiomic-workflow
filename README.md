@@ -18,6 +18,7 @@ variant-effect models) lives in the companion repo:
 - [The Four Modules](#the-four-modules)
 - [Running the Demo](#running-the-demo)
 - [Setting Up Your Own Data](#setting-up-your-own-data)
+- [Working with the Output `.h5ad` Files](#working-with-the-output-h5ad-files)
 - [Directory Structure](#directory-structure)
 - [Troubleshooting](#troubleshooting)
 - [Citation](#citation)
@@ -137,6 +138,45 @@ steps interactively, with more explanation and intermediate inspection.
    Config paths are relative to that module's own directory by convention
    (see the comment at the top of each config file) — replace with your own
    paths, relative or absolute.
+
+## Working with the Output `.h5ad` Files
+
+Every module reads and writes `.h5ad` files — the on-disk format for an
+[AnnData](https://anndata.readthedocs.io/) object, the standard container
+for single-cell data in Python. If you're new to single-cell analysis,
+here's the short version:
+
+- An AnnData object bundles a cell x feature matrix (`.X`: cells x genes for
+  RNA, cells x peaks/bins for ATAC) together with per-cell metadata
+  (`.obs` — e.g. tissue, donor, cell-type annotation, QC metrics),
+  per-feature metadata (`.var`), and any embeddings/graphs (`.obsm`, `.obsp`,
+  `.uns`) computed along the way (e.g. PCA, UMAP, clustering).
+- **RNA `.h5ad` files** (`RNA_QC`, `cell_annotation` output): open and
+  explore with [scanpy](https://scanpy.readthedocs.io/):
+  ```python
+  import scanpy as sc
+  adata = sc.read_h5ad("path/to/file.h5ad")
+  adata                 # summary of shape + available obs/var/obsm keys
+  adata.obs.head()       # per-cell metadata, e.g. cell-type calls
+  sc.pl.umap(adata, color="celltype")  # if a UMAP was already computed
+  ```
+  Scanpy's [basic tutorial](https://scanpy.readthedocs.io/en/stable/tutorials/basics/clustering.html)
+  covers loading, QC, and visualizing an `.h5ad` from scratch.
+- **ATAC `.h5ad` files** (`ATAC_QC` output): these use
+  [snapatac2](https://kzhang.org/SnapATAC2/)'s on-disk-backed layout, so
+  open them with `snapatac2` rather than scanpy directly:
+  ```python
+  import snapatac2 as snap
+  adata = snap.read("path/to/file.h5ad")
+  ```
+  See snapATAC2's [getting-started guide](https://kzhang.org/SnapATAC2/tutorials/index.html)
+  for its data model (cell x bin/peak matrices, fragment-derived stats) and
+  common operations. A snapatac2-backed file can still be converted to a
+  regular in-memory AnnData for use with scanpy (`adata.to_memory()` on a
+  `snap.read` result).
+- **Joint multiome `.h5ad` files** (`multiome_integration` output) are
+  regular in-memory AnnData objects (RNA and ATAC-derived features combined)
+  and can be opened directly with `sc.read_h5ad`.
 
 ## Directory Structure
 
