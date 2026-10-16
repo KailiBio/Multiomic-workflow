@@ -24,6 +24,8 @@ def setup_logging(log_path=None, level=logging.INFO):
         handlers=handlers,
         force=True,
     )
+    # leiden labels are strings like "0","1"; matplotlib logs an INFO note per categorical plot
+    logging.getLogger("matplotlib.category").setLevel(logging.WARNING)
 
 
 def require_keys(config, dotted_keys, context="config"):
@@ -66,12 +68,12 @@ def standardize_tissue_name(tissue):
     """
     Standardize tissue names:
     - Remove parentheses (but keep words inside)
-    - Replace hyphens, slashes, and whitespace with underscores
+    - Replace hyphens and whitespace with underscores
     - Collapse multiple underscores into one
     - Strip leading/trailing underscores
     """
-    tissue = re.sub(r'[()]', '', tissue)          # Remove ( and )
-    tissue = re.sub(r'[-/]', '_', tissue)         # Hyphens and slashes to underscores
-    tissue = re.sub(r'\s+', '_', tissue)          # Spaces to underscores
-    tissue = re.sub(r'_+', '_', tissue)           # Collapse multiple underscores
-    return tissue.strip('_')                      # Remove leading/trailing underscores
+    tissue = re.sub(r'[()]', '', tissue)                # Remove ( and )
+    tissue = tissue.replace('-', '_')                   # Hyphens to underscores
+    tissue = re.sub(r'\s+', '_', tissue)                # Spaces to underscores
+    tissue = re.sub(r'_+', '_', tissue)                 # Remove double/multi underscores
+    return tissue.strip('_')

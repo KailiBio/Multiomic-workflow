@@ -420,6 +420,16 @@ def plot_umap_with_QC(adata, suffix, runtag, outdir, sample_colors=None,
     samples = adata.obs['sample']
     samplelist = sorted(set(samples))
     
+    # Lower color bound: use the data minimum if it is below the default first bound
+    tss_bounds = list(tss_bounds)
+    frag_bounds = list(frag_bounds)
+    tss_min = int(np.floor(adata.obs['tsse'].min()))
+    frag_min = int(np.floor(adata.obs['n_fragment'].min()))
+    if tss_min < tss_bounds[0]:
+        tss_bounds[0] = tss_min
+    if frag_min < frag_bounds[0]:
+        frag_bounds[0] = frag_min
+    
     for fileID in samplelist:
         logging.info(f"Plotting for sample: {fileID}")
         plt.style.use("ggplot")
@@ -476,88 +486,63 @@ def plot_umap_with_QC(adata, suffix, runtag, outdir, sample_colors=None,
         plt.savefig(outpng, bbox_inches='tight', dpi=800)
         plt.close(fig)
 
-def plot_cells_per_tissue_by_donor(adata, suffix, runtag, outdir, tissue_key="tissue", donor_key="donorID"):
+def _cell_count_pivot(adata, tissue_key, donor_key):
+    """Tissue x donor cell-count table, tissues ordered by total count (largest first)."""
     df = adata.obs.groupby([tissue_key, donor_key], observed=True).size().reset_index(name='n_cells')
     df_pivot = df.pivot(index=tissue_key, columns=donor_key, values='n_cells').fillna(0)
-    # Order tissues by total cell count
     df_pivot = df_pivot.loc[df_pivot.sum(axis=1).sort_values(ascending=False).index]
-
-    #n_tissue = df_pivot.shape[0]
-    #n_donor = df_pivot.shape[1]
-    #fig_height = max(3, min(0.5*n_tissue, 20))
-    #fig_width  = max(8, min(1.2 + 0.8*n_donor, 20))
-    fig_height = 5
-    fig_width = 8
-    
-    # Get color list for donors, matching the donorID column order in the pivot
     donor_ids = df_pivot.columns.tolist()
     donor_colors = adata.uns[donor_key + '_colors']
     if isinstance(donor_colors, dict):
         donor_colors = [donor_colors[did] for did in donor_ids]
+    return df_pivot, list(donor_colors)[:len(donor_ids)]
 
-    ax = df_pivot.plot(
-        kind='barh',
-        stacked=True,
-        figsize=(fig_width, fig_height),
-        color=donor_colors,
-        edgecolor='none'
-    )
-    plt.xlabel('Number of Cells')
-    plt.ylabel('')
-    plt.title('Number of Cells per Tissue (colored by Donor)')
-    plt.legend(
-        title="Donor",
-        bbox_to_anchor=(-.5, -0.15), #(1.05, 1),
-        loc='lower center', #'upper left',
-        labels=donor_ids
-    )
-    plt.tight_layout(rect=[0, 0, 0.85, 1])
-    outpng = os.path.join(outdir, f'ATAC_cellCount_perTissueByDonor.{suffix}.{runtag}.png')
-    plt.savefig(outpng, dpi=300)
-    #outpdf = os.path.join(outdir, f'ATAC_cellCount_perTissueByDonor.{suffix}.{runtag}.pdf')
-    #plt.savefig(outpdf)
-    plt.close()
+def _barh_cell_counts(df_pivot, colors, title, legend_title, outpng, stacked):
+    """Horizontal bar chart of cell counts (white background, count labels, legend on the right)."""
+    n_tissue, n_donor = df_pivot.shape
+    fig_height = max(3, 0.6 * n_tissue + (0.35 * n_donor if not stacked else 0) * n_tissue + 1.5)
+    fig_height = min(fig_height, 24)
+    with plt.style.context("default"):
+        fig, ax = plt.subplots(figsize=(9, fig_height))
+        df_pivot.plot(kind='barh', stacked=stacked, ax=ax, color=colors,
+                      edgecolor='none', width=0.8 if stacked else 0.85, legend=False)
+        ax.invert_yaxis()  # largest tissue on top
+        ax.set_xlabel('Number of cells', fontsize=11)
+        ax.set_ylabel('')
+        ax.set_title(title, fontsize=13, pad=12)
+        ax.tick_params(axis='y', length=0, labelsize=10)
+        ax.xaxis.set_major_formatter(mpl.ticker.FuncFormatter(lambda v, _: f"{int(v):,}"))
+        ax.grid(axis='x', color='#e0e0e0', linewidth=0.8)
+        ax.set_axisbelow(True)
+        for side in ('top', 'right', 'left'):
+            ax.spines[side].set_visible(False)
+
+        # count labels: bar totals if stacked, else per-bar values
+        if stacked:
+            totals = df_pivot.sum(axis=1).values
+            for y, t in enumerate(totals):
+                ax.text(t, y, f" {int(t):,}", va='center', ha='left', fontsize=9)
+        else:
+            for container in ax.containers:
+                ax.bar_label(container, labels=[f"{int(v):,}" if v > 0 else "" for v in container.datavalues],
+                             padding=2, fontsize=8)
+        ax.margins(x=0.12)
+
+        handles = [mpl.patches.Patch(facecolor=c, label=d) for c, d in zip(colors, df_pivot.columns)]
+        ax.legend(handles=handles, title=legend_title, loc='upper left', bbox_to_anchor=(1.02, 1),
+                  frameon=False, fontsize=9, title_fontsize=10)
+        fig.savefig(outpng, dpi=300, bbox_inches='tight', facecolor='white')
+        plt.close(fig)
     logging.info(f"Figure saved as: {outpng}")
+
+def plot_cells_per_tissue_by_donor(adata, suffix, runtag, outdir, tissue_key="tissue", donor_key="donorID"):
+    df_pivot, colors = _cell_count_pivot(adata, tissue_key, donor_key)
+    outpng = os.path.join(outdir, f'ATAC_cellCount_perTissueByDonor.{suffix}.{runtag}.png')
+    _barh_cell_counts(df_pivot, colors, 'Number of cells per tissue (colored by donor)',
+                      donor_key, outpng, stacked=True)
 
 def plot_cells_per_donor_per_tissue(adata, suffix, runtag, outdir, tissue_key="tissue", donor_key="donorID"):
-    df = adata.obs.groupby([tissue_key, donor_key], observed=True).size().reset_index(name='n_cells')
-    # Pivot so index is tissue, columns are donor, values are counts
-    df_pivot = df.pivot(index=tissue_key, columns=donor_key, values='n_cells').fillna(0)
-    df_pivot = df_pivot.loc[df_pivot.sum(axis=1).sort_values(ascending=False).index]
-
-    #n_tissue = df_pivot.shape[0]
-    #n_donor = df_pivot.shape[1]
-    #fig_height = max(3, min(0.5*n_tissue, 20))   # At least 3, at most 20
-    #fig_width  = max(8, min(1.2 + 0.8*n_donor, 20))  # At least 6, at most 20
-    fig_height = 5
-    fig_width = 8
-    
-    
-    donor_ids = df_pivot.columns.tolist()
-    donor_colors = adata.uns[donor_key + '_colors']
-    if isinstance(donor_colors, dict):
-        donor_colors = [donor_colors[did] for did in donor_ids]
-
-    ax = df_pivot.plot(
-        kind='barh', 
-        figsize=(fig_width, fig_height),
-        color=donor_colors,
-        edgecolor='none'
-    )
-    plt.xlabel('Number of Cells')
-    plt.ylabel('')
-    plt.title('Number of Cells per Donor in Each Tissue')
-    plt.legend(
-        title=donor_key,
-        bbox_to_anchor=(-.5, -0.15), #(1.05, 1),
-        loc='lower center', #'upper left',
-        labels=donor_ids
-    )
-    
-    plt.tight_layout(rect=[0, 0, 0.85, 1])
+    df_pivot, colors = _cell_count_pivot(adata, tissue_key, donor_key)
     outpng = os.path.join(outdir, f'ATAC_cellCount_perDonorPerTissue.{suffix}.{runtag}.png')
-    plt.savefig(outpng, dpi=300)
-    #outpdf = os.path.join(outdir, f'ATAC_cellCount_perDonorPerTissue.{suffix}.{runtag}.pdf')
-    #plt.savefig(outpdf)
-    plt.close()
-    logging.info(f"Figure saved as: {outpng}")
+    _barh_cell_counts(df_pivot, colors, 'Number of cells per donor in each tissue',
+                      donor_key, outpng, stacked=False)

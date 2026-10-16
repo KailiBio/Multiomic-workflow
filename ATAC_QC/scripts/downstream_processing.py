@@ -22,6 +22,11 @@ from matplotlib.backends.backend_pdf import PdfPages
 import anndata as ad
 import snapatac2 as snap
 
+# snapatac2 2.8.0 uses np.compat.unicode, which was removed in NumPy 2.0
+if not hasattr(np, "compat"):
+    import types
+    np.compat = types.SimpleNamespace(unicode=str)
+
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 from atac_qc.utils import load_config, standardize_tissue_name, setup_logging, require_keys
 from atac_qc.atac_plots import cell_count_post_filter_hist, plot_per_sample_umap_clusters

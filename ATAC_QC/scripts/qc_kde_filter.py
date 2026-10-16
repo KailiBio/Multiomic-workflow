@@ -123,7 +123,8 @@ def main(config_path, runtag):
 
                 out_path = os.path.join(output_h5ad_dir, f'{fileID}.filtered.{runtag}.h5ad')
                 adata.write(out_path)
-                logging.info(f"wrote {os.path.relpath(out_path)} with {adata.n_obs} cells")
+                #logging.info(f"wrote {os.path.relpath(out_path)} with {adata.n_obs} cells")
+                logging.info("wrote %s with %d cells",os.path.abspath(out_path),adata.n_obs)
 
             except Exception as e:
                 logging.error(f"Encountered error for {fileID}: {e}")

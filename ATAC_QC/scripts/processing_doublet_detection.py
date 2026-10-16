@@ -98,7 +98,7 @@ def main(config_path, runtag):
         # 4. get midpoint and plot
         logging.info("Calculate doublet midpoint and generate distribution plots...")
         doublet_probability = adata.obs['doublet_probability']
-        probability_midpoint = ((doublet_probability.max() + doublet_probability.min()) / 2).round(1)
+        probability_midpoint = round(float((doublet_probability.max() + doublet_probability.min()) / 2), 1)
         plot_doublet_score_probability(
             adata.obs['doublet_score'], doublet_probability, probability_midpoint,
             tissue_std, fileID, outdir=outdir, runtag=runtag, show=False
