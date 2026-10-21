@@ -35,6 +35,29 @@ def load_barcode_dicts(barcode_whitelist):
             barcode_dic_atac[rna_barcode] = atac_barcode
     return barcode_dic_rna, barcode_dic_atac
 
+def load_chrom_sizes(config):
+    """
+    Chromosome sizes for snap.pp.import_data.
+    Uses config['references']['chrom_sizes'] (two columns: chrom, length; e.g. a
+    chrom.sizes or STAR chrNameLength.txt) when set, so non-human genomes work;
+    otherwise the hg38 default.
+    """
+    chrom_sizes_file = config.get('references', {}).get('chrom_sizes')
+    if not chrom_sizes_file:
+        logging.info("Using default hg38 chrom sizes")
+        return snap.genome.hg38
+    if not os.path.isfile(chrom_sizes_file):
+        raise FileNotFoundError(f"Configured chrom_sizes file not found: {chrom_sizes_file}")
+    chrom_sizes = {}
+    with open(chrom_sizes_file) as f:
+        for line in f:
+            parts = line.strip().split('\t')
+            if len(parts) >= 2:
+                chrom_sizes[parts[0]] = int(parts[1])
+    logging.info(f"Loaded {len(chrom_sizes)} chrom sizes from {chrom_sizes_file}")
+    return chrom_sizes
+
+
 def process_fragments(row, config, barcode_dic_rna, overwrite=False):
     """Convert barcodes, generate QC, save h5ad for one sample."""
     
@@ -67,7 +90,7 @@ def process_fragments(row, config, barcode_dic_rna, overwrite=False):
 
     data = snap.pp.import_data(
         fragment_file,
-        chrom_sizes = snap.genome.hg38,
+        chrom_sizes = load_chrom_sizes(config),
         file = output_h5ad,
         min_num_fragments = min_fragments,
         sorted_by_barcode = False,
