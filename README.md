@@ -178,6 +178,52 @@ here's the short version:
   regular in-memory AnnData objects (RNA and ATAC-derived features combined)
   and can be opened directly with `sc.read_h5ad`.
 
+### Common next steps
+
+The pipeline already filters cells and computes embeddings and clusters, so
+you usually only need to look around, subset, and plot. Check what is stored
+first (`adata.obs.columns`, `adata.obsm.keys()`), since the exact names depend
+on the module and your config.
+
+**RNA / joint files (scanpy)**
+```python
+import scanpy as sc
+adata = sc.read_h5ad("path/to/file.h5ad")
+
+adata.obs["leiden"].value_counts()               # cells per cluster
+adata[adata.obs["tissue"] == "Muscle - Quadriceps"]   # subset cells (returns a view)
+sc.pl.umap(adata, color=["leiden", "donor"])     # color the UMAP by any obs column
+sc.pl.dotplot(adata, ["PAX7", "MYH1"], groupby="leiden")  # marker genes per cluster
+sc.tl.rank_genes_groups(adata, "leiden")         # differential expression per cluster
+sc.pl.rank_genes_groups(adata, n_genes=10)
+adata.write_h5ad("my_subset.h5ad")               # save your own copy
+```
+If you only have raw counts and no embedding yet, the standard order is
+`sc.pp.normalize_total` → `sc.pp.log1p` → `sc.pp.highly_variable_genes` →
+`sc.pp.pca` → `sc.pp.neighbors` → `sc.tl.umap` → `sc.tl.leiden`.
+
+**ATAC files (snapATAC2)**
+```python
+import snapatac2 as snap
+adata = snap.read("path/to/file.h5ad", backed=None)  # load fully into memory
+
+snap.pl.umap(adata, color="leiden")              # plot an existing UMAP
+adata.obs["n_fragment"].describe()               # QC metrics live in .obs, as in scanpy
+```
+Without a precomputed embedding, the usual order is
+`snap.pp.select_features` → `snap.tl.spectral` → `snap.pp.knn` →
+`snap.tl.leiden` → `snap.tl.umap` (this is what `ATAC_QC` runs). Note that
+ATAC uses spectral embedding (`adata.obsm["X_spectral"]`) instead of PCA.
+Use `snap.read(path)` with the default backed mode to avoid loading large
+files into memory, and `snap.read(path, backed=None)` when you want to edit
+or subset freely.
+
+**Tips for newcomers**
+- Subsetting with `adata[mask]` gives a *view*; call `.copy()` before modifying it.
+- Cells are rows and features are columns, the opposite of many R/Seurat conventions.
+- Column names (`leiden`, `tissue`, `donor`) and marker genes (`PAX7`, `MYH1`)
+  above are only examples; use the ones present in your file and tissue.
+
 ## Directory Structure
 
 Each module follows the same layout:
