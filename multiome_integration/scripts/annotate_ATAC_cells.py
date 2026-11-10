@@ -29,6 +29,19 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')
 from multiome_integration.utils import load_config, standardize_tissue_name, print_elapsed_time, setup_logging, require_keys
 from multiome_integration.integration_plots import plot_multiome_celltype_count_bar
 
+def standardize_obs_tissue(adata, label):
+    """Standardize adata.obs['tissue'] in place (same rules as standardize_tissue_name)."""
+    if 'tissue' not in adata.obs:
+        logging.warning(f"[{label}] obs['tissue'] not found; skipping tissue name standardization.")
+        return adata
+    original = adata.obs['tissue'].astype(str)
+    standardized = original.map(standardize_tissue_name)
+    changed = sorted(set(original[original != standardized]))
+    if changed:
+        logging.info(f"[{label}] Standardized obs['tissue']: {changed}")
+    adata.obs['tissue'] = standardized.astype('category')
+    return adata
+
 def prepare_rna(rna, gtf, output_h5ad_dir, suffix, celltype_obs):
     logging.info(f"Preparing RNA AnnData for '{suffix}' using cell type column '{celltype_obs}' ...")
     rna.obs['celltype_glue'] = rna.obs[celltype_obs]
@@ -36,6 +49,11 @@ def prepare_rna(rna, gtf, output_h5ad_dir, suffix, celltype_obs):
     logging.info(f"Computing highly variable genes (HVGs) ...")
     sc.pp.highly_variable_genes(rna, flavor='seurat')
     logging.info(f"Getting {rna.var['highly_variable'].value_counts()} highly variable genes")
+
+    if "X_pca" not in rna.obsm:
+        # GLUE (configure_dataset use_rep="X_pca") needs a PCA embedding; some inputs only have X_umap
+        logging.info("X_pca not found in RNA obsm; computing PCA (50 components) on HVGs ...")
+        sc.pp.pca(rna, n_comps=50, use_highly_variable=True)
     
     logging.info(f"Plotting RNA UMAP before GLUE integration ...")
     sc.pl.umap(rna, color="celltype_glue", save=f'_RNA.beforeGLUE.{suffix}.png')
@@ -383,6 +401,11 @@ def annotate_and_merge(rna, atac, glue, output_h5ad_dir, tissue_std):
 
     if "predicted_doublet" in adata_glue.obs: 
         del adata_glue.obs["predicted_doublet"]
+    # outer concat leaves NaN in RNA-only/ATAC-only columns; object columns mixing bool/str with NaN
+    # (e.g. immune_thyro_doublet) cannot be written to h5ad, so convert them to categorical strings
+    for col in adata_glue.obs.columns[adata_glue.obs.dtypes == object]:
+        s = adata_glue.obs[col]
+        adata_glue.obs[col] = s.where(s.isna(), s.astype(str)).astype("category")
     adata_glue.write(os.path.join(output_h5ad_dir, f'Multiome_merged.GLUE.{tissue_std}.h5ad'))
 
     logging.info(f"Annotation and merging completed for '{tissue_std}'.")
@@ -436,6 +459,8 @@ def main(config_path):
         rna = ad.read_h5ad(rna_path)
         atac_path = os.path.join(output_h5ad_dir, f'ATAC_removeDoublet.{suffix}.h5ad')
         atac = ad.read_h5ad(atac_path)
+        rna = standardize_obs_tissue(rna, 'RNA')
+        atac = standardize_obs_tissue(atac, 'ATAC')
     
         failed_tissues = []
         for idx, tissue_name in enumerate(tissues, 1):
@@ -463,6 +488,8 @@ def main(config_path):
             rna = ad.read_h5ad(rna_path)
             atac_path = os.path.join(output_h5ad_dir, f'ATAC_removeDoublet.{tissue_std}.h5ad')
             atac = ad.read_h5ad(atac_path)
+            rna = standardize_obs_tissue(rna, 'RNA')
+            atac = standardize_obs_tissue(atac, 'ATAC')
 
             run_per_tissue(
                 tissue_std, rna, atac, output_h5ad_dir, glue_output_dir, gtf, celltype_obs, n_features=n_features
