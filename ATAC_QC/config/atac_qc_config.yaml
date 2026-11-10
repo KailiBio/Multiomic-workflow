@@ -14,6 +14,10 @@ references:
   # Reference GTF, too large to ship in this repo (see .gitignore) — download
   # the matching GENCODE annotation yourself and place it at this path.
   gencode_gtf: ref/gencode.v47.primary_assembly.annotation.gtf
+  # Optional: chromosome sizes for non-human genomes (default: hg38). Two columns,
+  # chrom and length (a chrom.sizes file or STAR chrNameLength.txt). Contig names
+  # must match the fragment files. Raises an error if set but the file is missing.
+  # chrom_sizes: ref/chrNameLength.txt
 
 params:
   tissue: Muscle - Quadriceps

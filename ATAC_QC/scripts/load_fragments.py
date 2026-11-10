@@ -50,15 +50,23 @@ def load_chrom_sizes(config):
         raise FileNotFoundError(f"Configured chrom_sizes file not found: {chrom_sizes_file}")
     chrom_sizes = {}
     with open(chrom_sizes_file) as f:
-        for line in f:
-            parts = line.strip().split('\t')
-            if len(parts) >= 2:
+        for lineno, line in enumerate(f, 1):
+            line = line.strip()
+            if not line or line.startswith('#'):
+                continue
+            parts = line.split()  # tab- or space-separated
+            try:
                 chrom_sizes[parts[0]] = int(parts[1])
+            except (IndexError, ValueError):
+                raise ValueError(
+                    f"{chrom_sizes_file}:{lineno}: expected '<chrom> <length>', got {line!r}")
+    if not chrom_sizes:
+        raise ValueError(f"No chromosome sizes found in {chrom_sizes_file}")
     logging.info(f"Loaded {len(chrom_sizes)} chrom sizes from {chrom_sizes_file}")
     return chrom_sizes
 
 
-def process_fragments(row, config, barcode_dic_rna, overwrite=False):
+def process_fragments(row, config, barcode_dic_rna, chrom_sizes, overwrite=False):
     """Convert barcodes, generate QC, save h5ad for one sample."""
     
     atacID = row['atacID']
@@ -90,7 +98,7 @@ def process_fragments(row, config, barcode_dic_rna, overwrite=False):
 
     data = snap.pp.import_data(
         fragment_file,
-        chrom_sizes = load_chrom_sizes(config),
+        chrom_sizes = chrom_sizes,
         file = output_h5ad,
         min_num_fragments = min_fragments,
         sorted_by_barcode = False,
@@ -151,6 +159,7 @@ def main(config_path, overwrite=False):
     suffix = config['params']['suffix']
 
     barcode_dic_rna, _ = load_barcode_dicts(config['references']['barcode_whitelist'])
+    chrom_sizes = load_chrom_sizes(config)  # once, not per sample
 
     # Load sample info
     sample_metadata = config['paths']['sample_metadata']
@@ -172,7 +181,7 @@ def main(config_path, overwrite=False):
         logging.info(f"========== Processing {row['atacID']} ({i}/{len(working_df)}) ==========")
 
         try:
-            process_fragments(row, config, barcode_dic_rna, overwrite=overwrite)
+            process_fragments(row, config, barcode_dic_rna, chrom_sizes, overwrite=overwrite)
         except Exception as e:
             logging.error(f"Encountered error for {row['atacID']}: {e}")
             failed_samples.append(row['atacID'])
