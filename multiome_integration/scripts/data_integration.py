@@ -141,27 +141,58 @@ def propagate_layers_from_rna(adata, rna, rna_layer_names):
         adata.layers[layer_name] = sparse.csr_matrix(adata_layer)
 
 def add_imputed_signal(adata, rna_impute, atac_impute):
+    """
+    Add layer 'imputation_signal' (cells x features of `adata`) from the MultiVI
+    imputed RNA / ATAC matrices.
+
+    Features are matched by name. Genes come from adata.var['modality'] if present,
+    otherwise from the is_rna_feature / is_atac_feature flags that
+    annotate_ATAC_cells.py writes. Only features present in the imputed matrices
+    can be filled; the rest stay 0. The imputed ATAC matrix is defined on the
+    consensus peaks (cREs) from identify_regulatory_elements.py, so it only
+    contributes where adata's ATAC features use the same peak names.
+    """
     logging.info("Integrating imputed expression and accessibility signal into combined AnnData ...")
-    genes = adata.var_names[adata.var['modality'] == "Gene Expression"]
-    peaks = adata.var_names[adata.var['modality'] == "Peaks"]
+    if 'modality' in adata.var:
+        genes = adata.var_names[adata.var['modality'] == "Gene Expression"]
+        peaks = adata.var_names[adata.var['modality'] == "Peaks"]
+    else:
+        genes = adata.var_names[adata.var['is_rna_feature'] == 1]
+        peaks = adata.var_names[adata.var['is_atac_feature'] == 1]
+
+    genes_used = genes[genes.isin(rna_impute.var_names)]
+    peaks_used = peaks[peaks.isin(atac_impute.var_names)]
+    logging.info(f"Imputed expression matched for {len(genes_used)}/{len(genes)} genes; "
+                 f"imputed accessibility matched for {len(peaks_used)}/{len(peaks)} peaks.")
+    if len(peaks_used) < len(peaks):
+        logging.warning(
+            "Imputed accessibility is defined on a different peak set than the ATAC features "
+            "in the combined object; unmatched peaks are left at 0 in 'imputation_signal'. "
+            "The full imputed matrices are in MultiVI_impute_RNA/ATAC.<tissue>.h5ad.")
 
     imp = np.zeros(adata.shape, dtype=float)
 
     # Imputed genes
-    imp[:, adata.var_names.get_indexer(genes)] = (
-        rna_impute[:, genes].X.toarray()
-        if hasattr(rna_impute.X, "toarray")
-        else rna_impute[:, genes].X
-    )
+    if len(genes_used):
+        imp[:, adata.var_names.get_indexer(genes_used)] = (
+            rna_impute[:, genes_used].X.toarray()
+            if hasattr(rna_impute.X, "toarray")
+            else rna_impute[:, genes_used].X
+        )
 
     # Imputed peaks
-    imp[:, adata.var_names.get_indexer(peaks)] = (
-        atac_impute[:, peaks].X.toarray()
-        if hasattr(atac_impute.X, "toarray")
-        else atac_impute[:, peaks].X
-    )
+    if len(peaks_used):
+        imp[:, adata.var_names.get_indexer(peaks_used)] = (
+            atac_impute[:, peaks_used].X.toarray()
+            if hasattr(atac_impute.X, "toarray")
+            else atac_impute[:, peaks_used].X
+        )
 
     adata.layers['imputation_signal'] = sparse.csr_matrix(imp)
+    adata.uns['imputation_signal_features'] = {
+        'genes_filled': int(len(genes_used)), 'genes_total': int(len(genes)),
+        'peaks_filled': int(len(peaks_used)), 'peaks_total': int(len(peaks)),
+    }
     logging.info("Added layer: imputation_signal.")
 
     

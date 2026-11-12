@@ -8,7 +8,7 @@
 # (relative to multiome_integration/, or absolute).
 paths:
   workdir: test_output/
-  rna_post_qc_h5ad: ../cell_annotation/test_output/final/Muscle_Quadriceps.GEX.final.h5ad
+  rna_post_qc_h5ad: ../RNA_QC/test_output/rna_h5ad/Muscle_Quadriceps.GEX.final.h5ad
   atac_post_qc_h5ad: ../ATAC_QC/test_output/atac_h5ad/Muscle_Quadriceps.ATAC.demo_run.h5ad
   rna_doublet_dir: ../RNA_QC/test_output/filter_qc.demo_run/
   atac_doublet_dir: ../ATAC_QC/test_output/doublet_filter_processing.demo_run/
@@ -19,10 +19,10 @@ references:
   # Reference GTF, too large to ship in this repo (see .gitignore) — same
   # GENCODE annotation used by ATAC_QC (see ATAC_QC/ref/).
   gencode_gtf: ../ATAC_QC/ref/gencode.v47.primary_assembly.annotation.gtf
-  # Not provided in this repo: a <chrom><TAB><length> file for your reference
-  # genome (e.g. download hg38.chrom.sizes from the UCSC goldenPath). Replace
-  # with the path to your own copy.
-  chrom_size: /path/to/your/hg38.chrom.sizes
+  # Optional: a <chrom><TAB><length> file for your reference genome (e.g.
+  # hg38.chrom.sizes from the UCSC goldenPath, or STAR chrNameLength.txt).
+  # If unset, the built-in hg38 sizes are used. Set it for non-human genomes.
+  # chrom_size: ref/hg38.chrom.sizes
 
 params:
   tissue: Muscle - Quadriceps

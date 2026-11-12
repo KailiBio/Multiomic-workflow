@@ -125,7 +125,7 @@ def main(config_path):
     config = load_config(config_path)
     require_keys(config, [
         "paths.workdir", "paths.output_h5ad_dir", "params.tissue",
-        "my_color_palette", "references.chrom_size",
+        "my_color_palette",
     ], context=config_path)
 
     workdir = config['paths']['workdir']
@@ -142,8 +142,12 @@ def main(config_path):
     nthread = config['params'].get('threads', 16)
     half_width = config['params'].get('peak_half_width', 150)
 
-    chromsize_path = config['references']['chrom_size']
-    chrom_size = read_chrom_size(chromsize_path)
+    chromsize_path = (config.get('references') or {}).get('chrom_size')
+    if chromsize_path:
+        chrom_size = read_chrom_size(chromsize_path)
+    else:
+        logging.info("references.chrom_size not set; using the built-in hg38 chromosome sizes")
+        chrom_size = dict(snap.genome.hg38.chrom_sizes)
 
     if tissue == "---":
         sample_metadata = config['paths']['sample_metadata']

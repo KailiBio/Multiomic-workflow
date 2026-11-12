@@ -50,6 +50,9 @@ Under `paths.workdir` (default `test_output/`):
 - `cell_annotation_auto/`: DEG/marker dotplots, per-cluster top-DEG UMAPs,
   ScType annotation UMAP, `<tissue>_GEX.autoAnnotation.tsv`, and the
   intermediate annotated `.h5ad`.
-- `final/`: the final annotated `.h5ad` (consumed by
-  `multiome_integration`'s `paths.rna_post_qc_h5ad`) and summary UMAPs/cell
-  counts.
+- `cell_annotation_final/`: summary UMAPs and cell counts for the final
+  annotation.
+- The annotated `.h5ad` files are written to `paths.output_h5ad_dir` (the demo
+  uses `../RNA_QC/test_output/rna_h5ad/`), including the final
+  `<tissue>.GEX.final.h5ad` that `multiome_integration` consumes through its
+  `paths.rna_post_qc_h5ad`.

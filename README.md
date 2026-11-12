@@ -6,6 +6,10 @@ A pipeline for processing single-cell multiome data (paired snRNA-seq +
 snATAC-seq, e.g. 10x Multiome) from CellRanger/fragment-file output through
 per-modality QC, cell annotation, and joint RNA+ATAC integration.
 
+This workflow will be leveraged for processing the dGTEx multi-omic dataset.
+The demo data bundled here are small, anonymized subsets (donors are labelled
+`DonorA` / `DonorB`) used only to illustrate the steps.
+
 This repo covers data preprocessing only. Downstream analysis for the
 manuscript (cCRE calling, chromatin domain mapping, cancer remodelling,
 variant-effect models) lives in the companion repo:

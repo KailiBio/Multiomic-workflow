@@ -21,8 +21,9 @@ output.
 - **Reference files** under `references:` — the same GENCODE GTF used by
   `ATAC_QC` (`references.gencode_gtf`), and a `<chrom><TAB><length>`
   chromosome-sizes file for your reference genome (`references.chrom_size`,
-  e.g. `hg38.chrom.sizes` from the UCSC goldenPath) — neither is shipped in
-  this repo; supply your own.
+  e.g. `hg38.chrom.sizes` from the UCSC goldenPath). The GTF is not shipped in
+  this repo; supply your own. `references.chrom_size` is optional and defaults
+  to the built-in hg38 sizes; set it for non-human genomes.
 
 Config: `config/joint_multiomic_config.yaml`. Paths are relative to
 `multiome_integration/`; paths starting with `../` reach into sibling module
@@ -64,6 +65,15 @@ Under `paths.workdir` (default `test_output/`):
   integration stage (overlap-checked, annotated, imputed, GLUE-merged).
 - `glue/`, `multivi/`, `atac_peak/`, `overlap_figures/`: per-step figures,
   model checkpoints, and consensus-peak tables.
-- `final/`: the final joint `multiome_final.<tissue>.h5ad`, plus split
-  `multiome_final.RNA.<tissue>.h5ad` / `multiome_final.ATAC.<tissue>.h5ad`
-  and summary UMAPs.
+- `h5ad/` also holds the final joint `multiome_final.<tissue>.h5ad`, plus the
+  split `multiome_final.RNA.<tissue>.h5ad` / `multiome_final.ATAC.<tissue>.h5ad`.
+- `final/`: summary UMAPs of the final objects.
+
+**Note on `imputation_signal`.** The final object's `imputation_signal` layer
+is filled by matching feature names against the MultiVI imputed matrices.
+Imputed expression covers all genes. Imputed accessibility is defined on the
+consensus peaks (cREs) from step 3, so it only fills ATAC features that use
+the same peak names; in the demo the combined object uses genomic tiles, so
+those columns stay 0 (the script logs how many features matched, and the
+counts are stored in `adata.uns["imputation_signal_features"]`). The complete
+imputed matrices are in `MultiVI_impute_RNA/ATAC.<tissue>.h5ad`.
