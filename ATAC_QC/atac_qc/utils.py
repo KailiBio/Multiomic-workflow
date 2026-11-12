@@ -60,6 +60,11 @@ def load_config(config_path):
         for key, value in (config.get(section) or {}).items():
             if isinstance(value, str):
                 config[section][key] = os.path.abspath(value)
+    # The QC cutoff table is read after scripts os.chdir() into workdir, so it
+    # needs the same treatment as the paths above.
+    qc = config.get('qc') or {}
+    if isinstance(qc.get('atac_qc_cutoff_table'), str):
+        qc['atac_qc_cutoff_table'] = os.path.abspath(qc['atac_qc_cutoff_table'])
     return config
 
 def standardize_tissue_name(tissue):

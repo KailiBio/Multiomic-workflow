@@ -98,8 +98,10 @@ def run_per_tissue(workdir, output_h5ad_dir, qc_cutoff_tissue, tissue, my_color_
     adata = sc.read_h5ad(adata_path)
 
     logging.info("adding aliquot ID...")
-    aliquotID = [f"{parts[0]}_{parts[3]}-{parts[4]}"
-                 for parts in (id.split('-') for id in adata.obs['sampleID'])]
+    # Long GTEx-style IDs (donor-tissue-aliquot-SM-xxxxx-...) are shortened to
+    # <donor>_SM-xxxxx; any other ID format is used as-is.
+    aliquotID = [f"{parts[0]}_{parts[3]}-{parts[4]}" if len(parts) >= 5 else sid
+                 for sid, parts in ((sid, sid.split('-')) for sid in adata.obs['sampleID'])]
     adata.obs['aliquotID'] = aliquotID
 
     figdir = os.path.join(workdir, 'figures')

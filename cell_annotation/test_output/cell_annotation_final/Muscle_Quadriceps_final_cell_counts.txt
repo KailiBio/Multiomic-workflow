@@ -1,0 +1,12 @@
+celltype_broad	DonorA	DonorB
+Fast-Twitch Type II Myofiber	48	25
+Fibroblast	46	53
+Macrophage	86	58
+Neuromuscular Junction Myonuclei	30	4
+Pericyte	195	60
+Satellite Cell	12	13
+Schwann Cell	550	3
+Slow-Twitch Type I Myofiber	0	1744
+T Cell	29	35
+Vascular Endothelial Cell	25	56
+Vascular Smooth Muscle Cell	178	1114

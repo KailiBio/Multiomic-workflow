@@ -29,12 +29,8 @@ color:
         "Adrenal Gland": "#33DD33"
         "Adipose - Subcutaneous": "#1d8c46"
     donor_colors:
-        DGTEX002: "#E73A2F"
-        DGTEX031: "#65c4ff"
-        DGTEX008: "#FBB30B"
-        DGTEX047: "#2E9E49"
-        DGTEX001: "#397AF2"
-        DGTEX027: "#8e02da"
+        DonorA: "#FBB30B"
+        DonorB: "#8e02da"
 
 my_color_palette:
   - "#c50909"
