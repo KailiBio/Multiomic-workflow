@@ -40,10 +40,6 @@ Run in order (mirrors `notebooks/run_atac_qc_workflow.sh`):
 | 5 | `scripts/downstream_processing.py` | Doublet filtering, embedding, clustering per sample. |
 | 6 | `scripts/concatenate_and_cluster.py` | Merge samples for the tissue, joint UMAP/clustering. |
 
-`scripts/atacqc_presentation.py` is a standalone extra that regenerates a
-polished set of presentation-ready QC figures from already-processed output;
-it's not part of the sequential pipeline above.
-
 ## Running
 
 ```bash

@@ -43,10 +43,6 @@ Run in order (mirrors `notebooks/run_rna_qc_workflow.sh`):
 | 4 | `scripts/batch_correction.py` | (Optional) Harmony batch correction across samples/donors. |
 | 5 | `scripts/clustering_and_qc_reassessment.py` | Re-cluster post-filtering and re-check QC metrics by cluster. |
 
-`scripts/rnaqc_presentation.py` is a standalone extra that regenerates a
-polished set of presentation-ready QC figures from already-processed output;
-it's not part of the sequential pipeline above.
-
 ## Running
 
 ```bash
