@@ -116,7 +116,7 @@ def run_per_tissue(workdir, output_h5ad_dir, qc_cutoff_tissue, tissue, my_color_
         all_colors = assign_colors(sorted(set(adata.obs[key])), palette=my_color_palette)
         logging.info(f"use colors: {all_colors}")
     elif key == 'aliquotID':
-        all_colors = assign_donor_colors(adata.obs, my_color_palette, key = 'aliquotID')
+        all_colors = assign_colors(sorted(set(adata.obs[key])), palette=my_color_palette)
         logging.info(f"use colors: {all_colors}")
     else:
         logging.warning("need to edit for colors")

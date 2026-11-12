@@ -28,3 +28,6 @@ RNA_QC/test_data/scrinvex/DonorB-GEX-02/DonorB-GEX-02.scrinvex.tsv
 
 
 
+
+# Claude Code local settings/memory
+.claude/
